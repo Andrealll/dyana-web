@@ -1,0 +1,294 @@
+/* app/globals.css */
+
+/* RESET MOLTO LEGGERO / BASE */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+/* Scroll morbido */
+html {
+  scroll-behavior: smooth;
+}
+
+:root {
+  --dyana-bg: #15191c;
+  --dyana-gold: #bb9a63;
+  --dyana-blue: #2c4050;
+}
+
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--dyana-bg);
+  color: #f5f5ff;
+  min-height: 100vh;
+}
+
+/* ROOT */
+.page-root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* SPLASH */
+.splash-wrapper {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+.splash-inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.splash-inner::before {
+  content: "";
+  position: absolute;
+  width: 520px;
+  height: 520px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(44, 64, 80, 0.28), transparent 60%);
+  filter: blur(16px);
+  z-index: 0;
+  animation: halo-pulse 6s ease-in-out infinite alternate;
+}
+
+.splash-content {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  max-width: 720px;
+  animation: splash-fade-in 900ms ease-out 120ms both;
+}
+
+.splash-logo-img {
+  width: min(520px, 90vw);
+  height: auto;
+  display: block;
+  margin: 0 auto 20px;
+  animation: logo-pop 900ms ease-out;
+}
+
+@media (min-width: 1024px) {
+  .splash-logo-img {
+    width: 600px;
+  }
+}
+
+.splash-subtitle {
+  margin: 0 0 24px;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: #d6ddff;
+}
+
+/* BOTTONI */
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+
+.btn {
+  border-radius: 999px;
+  padding: 10px 20px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--dyana-blue), #3f5a70);
+  color: #f5f5ff;
+  box-shadow: 0 10px 30px rgba(44, 64, 80, 0.55);
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 36px rgba(44, 64, 80, 0.8);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: #f5f5ff;
+  border-color: rgba(187, 154, 99, 0.35);
+}
+
+.btn-secondary:hover {
+  background: rgba(44, 64, 80, 0.25);
+  border-color: rgba(187, 154, 99, 0.7);
+}
+
+/* LANDING */
+.landing-wrapper {
+  padding: 72px 20px 48px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* SEZIONI */
+.section {
+  margin-bottom: 64px;
+}
+
+.section-title {
+  font-size: 1.6rem;
+  margin: 0 0 8px;
+  text-align: center;
+  font-family: "Times New Roman", Georgia, "Palatino Linotype", "Book Antiqua",
+    serif;
+  color: var(--dyana-gold);
+}
+
+.section-subtitle {
+  max-width: 640px;
+  margin: 0 auto 32px;
+  text-align: center;
+  color: #c2c9ff;
+  font-size: 0.98rem;
+  line-height: 1.6;
+}
+
+/* CARDS */
+.cards-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+
+@media (min-width: 768px) {
+  .cards-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.card {
+  background: rgba(12, 16, 22, 0.95);
+  border-radius: 18px;
+  padding: 18px 18px 20px;
+  border: 1px solid rgba(44, 64, 80, 0.8);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(12px);
+}
+
+.card-title {
+  font-size: 1.05rem;
+  margin: 0 0 8px;
+}
+
+.card-text {
+  margin: 0;
+  font-size: 0.94rem;
+  line-height: 1.55;
+  color: #d0d7ff;
+}
+
+/* CHAT */
+.section-chat {
+  text-align: center;
+}
+
+.chat-placeholder {
+  margin: 24px auto 0;
+  max-width: 600px;
+  padding: 18px 20px;
+  border-radius: 16px;
+  border: 1px dashed rgba(44, 64, 80, 0.9);
+  background: rgba(9, 13, 18, 0.95);
+}
+
+.chat-placeholder-text {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #d6ddff;
+  line-height: 1.6;
+}
+
+/* FOOTER */
+.footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 20px;
+  margin-top: 16px;
+  text-align: center;
+}
+
+.footer-text {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #a8b0e0;
+}
+
+.footer-brand {
+  font-family: "Times New Roman", Georgia, "Palatino Linotype", "Book Antiqua",
+    serif;
+  color: var(--dyana-gold);
+}
+
+/* ANIMAZIONI */
+@keyframes splash-fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes logo-pop {
+  0% {
+    transform: scale(0.9);
+  }
+  60% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes halo-pulse {
+  0% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0.9;
+    transform: scale(1.06);
+  }
+}
+.form-input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(44, 64, 80, 0.7);
+  background: rgba(12, 16, 22, 0.8);
+  color: #f5f5ff;
+  font-size: 0.95rem;
+  
+}
+.form-input:focus {
+  outline: none;
+  border-color: var(--dyana-gold);
+  box-shadow: 0 0 8px rgba(187, 154, 99, 0.4);
+}
