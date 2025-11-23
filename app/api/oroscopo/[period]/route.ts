@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+const ASTROBOT_BASE = process.env.ASTROBOT_BASE_URL || "http://127.0.0.1:8001";
+
 // Periodi validi supportati dal backend
 const VALID_PERIODS = ["daily", "weekly", "monthly", "yearly"];
 
@@ -10,9 +12,9 @@ export async function POST(req: Request) {
     const segments = url.pathname.split("/").filter(Boolean); // ["api","oroscopo","daily"]
     const period = segments[segments.length - 1]; // "daily" | "weekly" | ...
 
-    console.log("[NEXT OROSCOPO DEBUG] pathname =", url.pathname);
-    console.log("[NEXT OROSCOPO DEBUG] segments =", segments);
-    console.log("[NEXT OROSCOPO DEBUG] period =", period);
+    console.log("[NEXT OROSCOPO] pathname =", url.pathname);
+    console.log("[NEXT OROSCOPO] segments =", segments);
+    console.log("[NEXT OROSCOPO] period =", period);
 
     // Validazione periodo
     if (!VALID_PERIODS.includes(period)) {
@@ -21,11 +23,7 @@ export async function POST(req: Request) {
           error: `Invalid period '${period}'. Must be one of ${VALID_PERIODS.join(
             ", "
           )}`,
-          debug: {
-            pathname: url.pathname,
-            segments,
-            period,
-          },
+          debug: { pathname: url.pathname, segments, period },
         },
         { status: 400 }
       );
@@ -33,20 +31,36 @@ export async function POST(req: Request) {
 
     // Body dal frontend
     const body = await req.json();
+    console.log("[NEXT OROSCOPO] body ricevuto =", body);
 
-    console.log("[NEXT OROSCOPO DEBUG] body =", body);
+    // URL backend AstroBot
+    const backendUrl = `${ASTROBOT_BASE}/oroscopo/${period}`;
+    console.log("[NEXT OROSCOPO] ASTROBOT_BASE =", ASTROBOT_BASE);
+    console.log("[NEXT OROSCOPO] backendUrl   =", backendUrl);
 
-    // ⚠️ PER ORA NON CHIAMIAMO IL BACKEND
-    // Torniamo solo un JSON di debug
-    return NextResponse.json(
-      {
-        debug: true,
-        message: "Next API /api/oroscopo/[period] raggiunta correttamente.",
-        period,
-        receivedBody: body,
+    // Proxy verso AstroBot
+    const res = await fetch(backendUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Engine": "new",
       },
-      { status: 200 }
-    );
+      body: JSON.stringify(body),
+    });
+
+    const text = await res.text();
+    let data: any = null;
+
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = { raw: text };
+    }
+
+    console.log("[NEXT OROSCOPO] backend status =", res.status);
+
+    // Propaghiamo così com'è la risposta
+    return NextResponse.json(data, { status: res.status });
   } catch (err: any) {
     console.error("[OROSCOPO NEXT API ERROR]", err);
 
