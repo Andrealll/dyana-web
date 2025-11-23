@@ -45,7 +45,6 @@ export default function OroscopoPage() {
         return "daily";
     }
   }
-
   async function generaOroscopo() {
     setLoading(true);
     setErrore("");
@@ -54,36 +53,63 @@ export default function OroscopoPage() {
     try {
       const slug = mapPeriodoToSlug(form.periodo);
 
-      const res = await fetch(`${API_BASE}/oroscopo/${slug}`, {
+      if (!slug) {
+        setErrore("Periodo non valido.");
+        setLoading(false);
+        return;
+      }
+
+      const payload = {
+        nome: form.nome || null,
+        citta: form.citta,
+        data: form.data, // "YYYY-MM-DD"
+        ora: form.ora,   // "HH:MM"
+        tier: form.tier, // "free" o "premium"
+      };
+
+      const res = await fetch(`/api/oroscopo/${slug}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          // 👇 Usa il motore nuovo già testato end-to-end
-          "X-Engine": "new",
         },
-        credentials: "include", // manda cookie se servono
-        body: JSON.stringify({
-          nome: form.nome || null,
-          citta: form.citta,
-          data: form.data, // "YYYY-MM-DD"
-          ora: form.ora,   // "HH:MM"
-          tier: form.tier, // "free" o "premium"
-        }),
+        body: JSON.stringify(payload),
       });
 
-      if (!res.ok) {
-        throw new Error("Errore nella generazione dell'oroscopo.");
+      let data = null;
+      const text = await res.text();
+
+      // Proviamo a interpretare la risposta come JSON (se lo è)
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = { raw: text };
       }
 
-      const data = await res.json();
+      if (!res.ok) {
+        console.log("[DYANA /oroscopo] status non OK:", res.status);
+        console.log("[DYANA /oroscopo] body errore:", data);
+
+        setErrore(
+          (data && data.error) ||
+            `Errore nella generazione dell'oroscopo (status ${res.status}).`
+        );
+        setLoading(false);
+        return;
+      }
+
+      // Se tutto ok
       setRisultato(data);
     } catch (err) {
-      console.error("[DYANA /oroscopo] errore:", err);
-      setErrore("Impossibile generare l'oroscopo. Riprova tra qualche istante.");
+      console.error("[DYANA /oroscopo] errore fetch:", err);
+      setErrore(
+        "Impossibile comunicare con il server. Controlla la connessione e riprova."
+      );
     } finally {
       setLoading(false);
     }
   }
+
+
 
   return (
     <main className="page-root">

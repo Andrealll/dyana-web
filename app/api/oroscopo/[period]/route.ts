@@ -5,17 +5,21 @@ const ASTROBOT_BASE = process.env.ASTROBOT_BASE_URL || "http://127.0.0.1:8001";
 // Periodi validi supportati dal backend
 const VALID_PERIODS = ["daily", "weekly", "monthly", "yearly"];
 
-export async function POST(
-  req: Request,
-  context: { params: { period: string } }
-) {
+export async function POST(req: Request) {
   try {
-    const { period } = context.params;
+    // Ricaviamo il "period" dall'URL, es: /api/oroscopo/daily
+    const url = new URL(req.url);
+    const segments = url.pathname.split("/").filter(Boolean); // toglie stringhe vuote
+    const period = segments[segments.length - 1]; // ultimo segmento: "daily", "weekly", ecc.
 
     // Validazione periodo
     if (!VALID_PERIODS.includes(period)) {
       return NextResponse.json(
-        { error: `Invalid period '${period}'. Must be one of ${VALID_PERIODS.join(", ")}` },
+        {
+          error: `Invalid period '${period}'. Must be one of ${VALID_PERIODS.join(
+            ", "
+          )}`,
+        },
         { status: 400 }
       );
     }
@@ -30,6 +34,8 @@ export async function POST(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        // Usa il motore nuovo di AstroBot
+        "X-Engine": "new",
       },
       body: JSON.stringify(body),
     });
