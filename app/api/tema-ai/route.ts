@@ -1,8 +1,14 @@
 // app/api/tema-ai/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
+// Ordine di priorità:
+// 1) ASTROBOT_BASE_URL      (quella che hai su Vercel)
+// 2) ASTROBOT_BACKEND_URL   (eventuale alias futuro)
+// 3) fallback locale        (sviluppo)
 const BACKEND_BASE_URL =
-  process.env.ASTROBOT_BACKEND_URL ?? "http://127.0.0.1:8001";
+  process.env.ASTROBOT_BASE_URL ??
+  process.env.ASTROBOT_BACKEND_URL ??
+  "http://127.0.0.1:8001";
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,6 +26,78 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Normalizzo la base URL ed aggiungo il path /tema_ai
+    const backendUrl = `${BACKEND_BASE_URL.replace(/\/$/, "")}/tema_ai`;
+
+    const resp = await fetch(backendUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        citta,
+        data,
+        ora,
+        nome: nome || null,
+        tier,
+      }),
+    });
+
+    let dataJson: any = null;
+    try {
+      dataJson = await resp.json();
+    } catch (e) {
+      console.error("[/api/tema-ai] Errore nel parse JSON dal backend:", e);
+      return NextResponse.json(
+        {
+          status: "error",
+          message: `Il backend /tema_ai ha risposto con un contenuto non JSON (HTTP ${resp.status}).`,
+        },
+        { status: 500 }
+      );
+    }
+
+    console.log("[/api/tema-ai] backend status:", resp.status);
+    console.log("[/api/tema-ai] backend payload:", dataJson);
+
+    if (!resp.ok) {
+      return NextResponse.json(
+        {
+          status: "error",
+          message:
+            dataJson?.message ||
+            `Backend /tema_ai ha risposto con HTTP ${resp.status}.`,
+          backend: dataJson,
+        },
+        { status: resp.status }
+      );
+    }
+
+    if (!dataJson || dataJson.status !== "ok" || !dataJson.result) {
+      return NextResponse.json(
+        {
+          status: "error",
+          message:
+            dataJson?.message ||
+            "Il backend non ha restituito un risultato valido per il tema natale.",
+          backend: dataJson,
+        },
+        { status: 500 }
+      );
+    }
+
+    // OK
+    return NextResponse.json(dataJson);
+  } catch (error: any) {
+    console.error("[/api/tema-ai] Errore di rete o runtime:", error);
+    return NextResponse.json(
+      {
+        status: "error",
+        message: "Errore di rete o server non raggiungibile.",
+      },
+      { status: 500 }
+    );
+  }
+}
 
     const backendUrl = `${BACKEND_BASE_URL.replace(/\/$/, "")}/tema_ai`;
 

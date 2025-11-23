@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 
-const ASTROBOT_BASE = process.env.ASTROBOT_BASE_URL || "http://127.0.0.1:8001";
-
 // Periodi validi supportati dal backend
 const VALID_PERIODS = ["daily", "weekly", "monthly", "yearly"];
 
@@ -9,8 +7,12 @@ export async function POST(req: Request) {
   try {
     // Ricaviamo il "period" dall'URL, es: /api/oroscopo/daily
     const url = new URL(req.url);
-    const segments = url.pathname.split("/").filter(Boolean); // toglie stringhe vuote
-    const period = segments[segments.length - 1]; // ultimo segmento: "daily", "weekly", ecc.
+    const segments = url.pathname.split("/").filter(Boolean); // ["api","oroscopo","daily"]
+    const period = segments[segments.length - 1]; // "daily" | "weekly" | ...
+
+    console.log("[NEXT OROSCOPO DEBUG] pathname =", url.pathname);
+    console.log("[NEXT OROSCOPO DEBUG] segments =", segments);
+    console.log("[NEXT OROSCOPO DEBUG] period =", period);
 
     // Validazione periodo
     if (!VALID_PERIODS.includes(period)) {
@@ -19,6 +21,11 @@ export async function POST(req: Request) {
           error: `Invalid period '${period}'. Must be one of ${VALID_PERIODS.join(
             ", "
           )}`,
+          debug: {
+            pathname: url.pathname,
+            segments,
+            period,
+          },
         },
         { status: 400 }
       );
@@ -27,22 +34,19 @@ export async function POST(req: Request) {
     // Body dal frontend
     const body = await req.json();
 
-    // Proxy verso AstroBot
-    const backendUrl = `${ASTROBOT_BASE}/oroscopo/${period}`;
+    console.log("[NEXT OROSCOPO DEBUG] body =", body);
 
-    const res = await fetch(backendUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        // Usa il motore nuovo di AstroBot
-        "X-Engine": "new",
+    // ⚠️ PER ORA NON CHIAMIAMO IL BACKEND
+    // Torniamo solo un JSON di debug
+    return NextResponse.json(
+      {
+        debug: true,
+        message: "Next API /api/oroscopo/[period] raggiunta correttamente.",
+        period,
+        receivedBody: body,
       },
-      body: JSON.stringify(body),
-    });
-
-    const data = await res.json();
-
-    return NextResponse.json(data, { status: res.status });
+      { status: 200 }
+    );
   } catch (err: any) {
     console.error("[OROSCOPO NEXT API ERROR]", err);
 
