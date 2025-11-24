@@ -1,65 +1,76 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 const ASTROBOT_BASE_URL =
   process.env.NEXT_PUBLIC_ASTROBOT_API_BASE_URL ||
   process.env.ASTROBOT_API_BASE_URL ||
   "http://127.0.0.1:8001";
 
-const ALLOWED_PERIODS = ["daily", "weekly", "monthly", "yearly"] as const;
-type PeriodCode = (typeof ALLOWED_PERIODS)[number];
+const ALLOWED_PERIODS = ["daily", "weekly", "monthly", "yearly"];
 
-// ------------------------------------------------------
-// Helper: estrai il periodo dalla URL / contesto Next
-// ------------------------------------------------------
-function getPeriodFromRequest(
-  req: NextRequest,
-  context?: { params?: { period?: string } }
-): PeriodCode | null {
-  const fromParams = context?.params?.period;
-
-  let fromPath: string | undefined;
+/**
+ * Risolve il periodo dai params, gestendo sia:
+ * - params: { period: string }
+ * - params: Promise<{ period: string }>
+ */
+async function resolvePeriod(context) {
   try {
-    const url = new URL(req.url);
-    const segments = url.pathname.split("/").filter(Boolean);
-    // es: ["api", "oroscopo_ai", "weekly"] → "weekly"
-    fromPath = segments[segments.length - 1];
-  } catch {
-    fromPath = undefined;
-  }
+    const paramsMaybePromise = context?.params;
 
-  const candidate = (fromParams || fromPath || "").toLowerCase();
-  if (ALLOWED_PERIODS.includes(candidate as PeriodCode)) {
-    return candidate as PeriodCode;
+    let params = paramsMaybePromise || {};
+    if (typeof paramsMaybePromise?.then === "function") {
+      // è una Promise<{ period: string }>
+      params = (await paramsMaybePromise) || {};
+    }
+
+    const raw = params.period || "";
+    const candidate = String(raw).toLowerCase();
+
+    if (ALLOWED_PERIODS.includes(candidate)) {
+      return candidate;
+    }
+    return null;
+  } catch (e) {
+    return null;
   }
-  return null;
 }
 
-// ------------------------------------------------------
-// Handler POST /api/oroscopo_ai/[period]
-// ------------------------------------------------------
-export async function POST(
-  req: NextRequest,
-  context: { params?: { period?: string } }
-) {
-  const period = getPeriodFromRequest(req, context);
+export async function POST(req, context) {
+  // ⚠️ Qui rispettiamo la firma che vuole Next:
+  // (req: NextRequest, context: { params: Promise<{ period: string }> })
+  const period = await resolvePeriod(context);
 
   if (!period) {
+    let rawPeriod = "undefined";
+
+    try {
+      const paramsMaybePromise = context?.params;
+      let params = paramsMaybePromise || {};
+      if (typeof paramsMaybePromise?.then === "function") {
+        params = (await paramsMaybePromise) || {};
+      }
+      if (params && params.period) {
+        rawPeriod = params.period;
+      }
+    } catch (e) {
+      // ignore
+    }
+
     return NextResponse.json(
       {
         status: "error",
-        error: `Periodo non valido: ${
-          context?.params?.period ?? "undefined"
-        }. Usa uno tra: ${ALLOWED_PERIODS.join(", ")}.`,
+        error: `Periodo non valido: ${rawPeriod}. Usa uno tra: ${ALLOWED_PERIODS.join(
+          ", "
+        )}.`,
       },
       { status: 400 }
     );
   }
 
-  // Body JSON in ingresso da DYANA
-  let body: any;
+  // Body JSON dalla richiesta
+  let body;
   try {
     body = await req.json();
-  } catch {
+  } catch (err) {
     return NextResponse.json(
       {
         status: "error",
@@ -80,8 +91,19 @@ export async function POST(
       body: JSON.stringify(body),
     });
 
-    // Proviamo sempre a parsare il JSON del backend (anche in errore)
-    const data = await backendResp.json().catch(() => null);
+    let data = null;
+    try {
+      data = await backendResp.json();
+    } catch (e) {
+      return NextResponse.json(
+        {
+          status: "error",
+          error: "Risposta non valida dal backend AstroBot (non JSON).",
+          backend_status: backendResp.status,
+        },
+        { status: 502 }
+      );
+    }
 
     if (!backendResp.ok) {
       return NextResponse.json(
@@ -95,15 +117,15 @@ export async function POST(
       );
     }
 
-    // Pass-through della risposta di AstroBot
+    // Tutto ok: inoltro la risposta dell'engine
     return NextResponse.json(data);
-  } catch (err: any) {
+  } catch (err) {
     console.error("[DYANA] Errore oroscopo_ai:", err);
     return NextResponse.json(
       {
         status: "error",
         error: "Impossibile contattare il backend AstroBot.",
-        details: err?.message ?? String(err),
+        details: err?.message || String(err),
       },
       { status: 502 }
     );
