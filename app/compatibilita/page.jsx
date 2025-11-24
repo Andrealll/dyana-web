@@ -1,15 +1,10 @@
+// app/compatibilita/page.jsx
+
 "use client";
 
 import { useState } from "react";
 
-interface PersonaForm {
-  nome: string;
-  citta: string;
-  data: string; // YYYY-MM-DD
-  ora: string;  // HH:MM
-}
-
-const initialPersona: PersonaForm = {
+const initialPersona = {
   nome: "",
   citta: "",
   data: "",
@@ -17,51 +12,58 @@ const initialPersona: PersonaForm = {
 };
 
 export default function CompatibilitaPage() {
-  const [personaA, setPersonaA] = useState<PersonaForm>(initialPersona);
-  const [personaB, setPersonaB] = useState<PersonaForm>(initialPersona);
+  const [personaA, setPersonaA] = useState(initialPersona);
+  const [personaB, setPersonaB] = useState(initialPersona);
   const [loading, setLoading] = useState(false);
-  const [errore, setErrore] = useState<string | null>(null);
-  const [risultato, setRisultato] = useState<any | null>(null);
+  const [errore, setErrore] = useState(null);
+  const [risultato, setRisultato] = useState(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setLoading(true);
     setErrore(null);
     setRisultato(null);
 
     try {
+      const payload = {
+        A: {
+          citta: personaA.citta,
+          data: personaA.data,
+          ora: personaA.ora,
+          nome: personaA.nome || null,
+        },
+        B: {
+          citta: personaB.citta,
+          data: personaB.data,
+          ora: personaB.ora,
+          nome: personaB.nome || null,
+        },
+        tier: "free",
+      };
+
+      console.log("[DYANA] Submit compatibilità payload:", payload);
+
       const res = await fetch("/api/sinastria_ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          A: {
-            nome: personaA.nome,
-            citta: personaA.citta,
-            data: personaA.data,
-            ora: personaA.ora,
-          },
-          B: {
-            nome: personaB.nome,
-            citta: personaB.citta,
-            data: personaB.data,
-            ora: personaB.ora,
-          },
-          tier: "free",
-        }),
+        body: JSON.stringify(payload),
       });
 
+      const data = await res.json().catch(() => null);
+
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
+        let msg =
+          (data && (data.error || data.backend || JSON.stringify(data))) ||
+          `Errore chiamando l'API (status ${res.status})`;
+
         throw new Error(
-          errorData?.error ||
-            `Errore chiamando l'API (status ${res.status})`
+          typeof msg === "string" ? msg : JSON.stringify(msg, null, 2)
         );
       }
 
-      const data = await res.json();
       setRisultato(data);
-    } catch (err: any) {
-      setErrore(err?.message ?? "Errore sconosciuto");
+    } catch (err) {
+      setErrore(err?.message || "Errore sconosciuto");
     } finally {
       setLoading(false);
     }
@@ -82,8 +84,8 @@ export default function CompatibilitaPage() {
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Due colonne: Persona A / Persona B */}
-        <div className="grid gap-6 md:grid-cols-2">
+        {/* Due card: Persona A / Persona B */}
+        <div className="grid gap-6 lg:grid-cols-2">
           {/* Persona A */}
           <div className="rounded-xl border p-4 space-y-4">
             <h2 className="text-lg font-medium">Persona A</h2>
@@ -92,7 +94,7 @@ export default function CompatibilitaPage() {
               <label className="text-sm font-medium">Nome</label>
               <input
                 type="text"
-                className="w-full rounded-md border px-3 py-2 text-sm"
+                className="w-full rounded-md border px-3 py-2 text-sm bg-transparent"
                 value={personaA.nome}
                 onChange={(e) =>
                   setPersonaA((old) => ({ ...old, nome: e.target.value }))
@@ -104,11 +106,12 @@ export default function CompatibilitaPage() {
               <label className="text-sm font-medium">Città</label>
               <input
                 type="text"
-                className="w-full rounded-md border px-3 py-2 text-sm"
+                className="w-full rounded-md border px-3 py-2 text-sm bg-transparent"
                 value={personaA.citta}
                 onChange={(e) =>
                   setPersonaA((old) => ({ ...old, citta: e.target.value }))
                 }
+                required
               />
             </div>
 
@@ -116,11 +119,12 @@ export default function CompatibilitaPage() {
               <label className="text-sm font-medium">Data di nascita</label>
               <input
                 type="date"
-                className="w-full rounded-md border px-3 py-2 text-sm"
+                className="w-full rounded-md border px-3 py-2 text-sm bg-transparent"
                 value={personaA.data}
                 onChange={(e) =>
                   setPersonaA((old) => ({ ...old, data: e.target.value }))
                 }
+                required
               />
             </div>
 
@@ -128,11 +132,12 @@ export default function CompatibilitaPage() {
               <label className="text-sm font-medium">Ora di nascita</label>
               <input
                 type="time"
-                className="w-full rounded-md border px-3 py-2 text-sm"
+                className="w-full rounded-md border px-3 py-2 text-sm bg-transparent"
                 value={personaA.ora}
                 onChange={(e) =>
                   setPersonaA((old) => ({ ...old, ora: e.target.value }))
                 }
+                required
               />
             </div>
           </div>
@@ -145,7 +150,7 @@ export default function CompatibilitaPage() {
               <label className="text-sm font-medium">Nome</label>
               <input
                 type="text"
-                className="w-full rounded-md border px-3 py-2 text-sm"
+                className="w-full rounded-md border px-3 py-2 text-sm bg-transparent"
                 value={personaB.nome}
                 onChange={(e) =>
                   setPersonaB((old) => ({ ...old, nome: e.target.value }))
@@ -157,11 +162,12 @@ export default function CompatibilitaPage() {
               <label className="text-sm font-medium">Città</label>
               <input
                 type="text"
-                className="w-full rounded-md border px-3 py-2 text-sm"
+                className="w-full rounded-md border px-3 py-2 text-sm bg-transparent"
                 value={personaB.citta}
                 onChange={(e) =>
                   setPersonaB((old) => ({ ...old, citta: e.target.value }))
                 }
+                required
               />
             </div>
 
@@ -169,11 +175,12 @@ export default function CompatibilitaPage() {
               <label className="text-sm font-medium">Data di nascita</label>
               <input
                 type="date"
-                className="w-full rounded-md border px-3 py-2 text-sm"
+                className="w-full rounded-md border px-3 py-2 text-sm bg-transparent"
                 value={personaB.data}
                 onChange={(e) =>
                   setPersonaB((old) => ({ ...old, data: e.target.value }))
                 }
+                required
               />
             </div>
 
@@ -181,11 +188,12 @@ export default function CompatibilitaPage() {
               <label className="text-sm font-medium">Ora di nascita</label>
               <input
                 type="time"
-                className="w-full rounded-md border px-3 py-2 text-sm"
+                className="w-full rounded-md border px-3 py-2 text-sm bg-transparent"
                 value={personaB.ora}
                 onChange={(e) =>
                   setPersonaB((old) => ({ ...old, ora: e.target.value }))
                 }
+                required
               />
             </div>
           </div>
@@ -205,7 +213,7 @@ export default function CompatibilitaPage() {
 
       {/* Messaggi / risultato */}
       {errore && (
-        <div className="rounded-md border border-red-400/60 bg-red-50/60 px-4 py-3 text-sm text-red-800">
+        <div className="rounded-md border border-red-400/60 bg-red-50/10 px-4 py-3 text-sm text-red-300">
           Errore: {errore}
         </div>
       )}
@@ -218,7 +226,7 @@ export default function CompatibilitaPage() {
             momento potremo formattarla meglio (titoli, blocchi, paragrafi).
           </p>
           <pre className="max-h-[500px] overflow-auto rounded-lg border px-4 py-3 text-xs">
-{JSON.stringify(risultato, null, 2)}
+            {JSON.stringify(risultato, null, 2)}
           </pre>
         </div>
       )}

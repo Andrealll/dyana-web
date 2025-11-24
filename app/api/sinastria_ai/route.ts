@@ -1,42 +1,53 @@
-import { NextRequest, NextResponse } from "next/server";
+// app/api/sinastria_ai/route.js
+
+import { NextResponse } from "next/server";
 
 const ASTROBOT_BASE_URL =
   process.env.ASTROBOT_BASE_URL || "http://127.0.0.1:8001";
 
-export async function POST(req: NextRequest) {
+export async function POST(request) {
   try {
-    const body = await req.json();
+    const payload = await request.json();
 
-    // Qui chiamiamo il backend AstroBot
-    const res = await fetch(`${ASTROBOT_BASE_URL}/sinastria_ai`, {
+    // LOG per sicurezza: vediamo cosa parte dal frontend
+    console.log("[DYANA] /api/sinastria_ai payload:", JSON.stringify(payload));
+
+    const url = `${ASTROBOT_BASE_URL}/sinastria_ai/`; // NOTA: slash finale
+
+    const backendResponse = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload), // Mando ESATTAMENTE {A,B,tier}
     });
 
-    if (!res.ok) {
-      const text = await res.text();
-      console.error("[DYANA] Errore sinastria_ai backend:", res.status, text);
+    const data = await backendResponse.json().catch(() => null);
+
+    if (!backendResponse.ok) {
+      console.error(
+        "[DYANA] Errore sinastria_ai backend:",
+        backendResponse.status,
+        data
+      );
+
       return NextResponse.json(
         {
           error: "Errore dal motore AstroBot",
-          status: res.status,
-          details: text,
+          status: backendResponse.status,
+          backend: data,
         },
         { status: 500 }
       );
     }
 
-    const data = await res.json();
     return NextResponse.json(data);
-  } catch (err: any) {
+  } catch (err) {
     console.error("[DYANA] Errore sinastria_ai API route:", err);
     return NextResponse.json(
       {
         error: "Errore interno nella route sinastria_ai",
-        details: err?.message ?? String(err),
+        details: err?.message || String(err),
       },
       { status: 500 }
     );
