@@ -1,20 +1,25 @@
-// app/tema/page.jsx
-
 "use client";
 import { useState } from "react";
 
-export default function TemaNatalePage() {
+export default function TemaPage() {
   const [form, setForm] = useState({
     nome: "",
     data: "",
     ora: "",
     citta: "",
-    tier: "free",
+    tier: "free", // per testare free/premium
   });
 
   const [loading, setLoading] = useState(false);
-  const [risultato, setRisultato] = useState(null);
+  const [interpretazione, setInterpretazione] = useState("");
+  const [contenuto, setContenuto] = useState(null); // contiene data.result.content
+  const [risultato, setRisultato] = useState(null); // JSON completo per debug
   const [errore, setErrore] = useState("");
+
+  // Stessa logica che avevi su tema prima (Render come fallback)
+  const API_BASE =
+    process.env.NEXT_PUBLIC_API_BASE ||
+    "https://chatbot-test-0h4o.onrender.com";
 
   function handleChange(e) {
     const { name, value } = e.target;
@@ -24,63 +29,104 @@ export default function TemaNatalePage() {
     }));
   }
 
-  function renderText(value) {
-    if (Array.isArray(value)) {
-      return value.join(" ");
-    }
-    return value || "";
-  }
-
-  async function generaTemaNatale() {
+  async function generaTema() {
     setLoading(true);
     setErrore("");
+    setInterpretazione("");
+    setContenuto(null);
     setRisultato(null);
 
     try {
-      const res = await fetch("/api/tema-ai", {
+      const payload = {
+        citta: form.citta,
+        data: form.data, // "YYYY-MM-DD"
+        ora: form.ora,   // "HH:MM"
+        nome: form.nome || null,
+        email: null,
+        domanda: null,
+        tier: form.tier, // "free" o "premium"
+      };
+
+      const res = await fetch(`${API_BASE}/tema_ai`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          nome: form.nome || null,
-          citta: form.citta,
-          data: form.data, // "YYYY-MM-DD"
-          ora: form.ora,   // "HH:MM"
-          tier: form.tier, // "free" | "premium"
-        }),
+        body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      let data = null;
+      const text = await res.text();
 
-      if (!res.ok || data.status !== "ok" || !data.result) {
-        throw new Error(
-          data?.message || "Impossibile calcolare il tema natale in questo momento."
-        );
+      // Proviamo a interpretare la risposta come JSON
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = { raw: text };
       }
 
-      setRisultato(data.result);
+      if (!res.ok) {
+        console.log("[DYANA /tema_ai] status non OK:", res.status);
+        console.log("[DYANA /tema_ai] body errore:", data);
+
+        setErrore(
+          (data && data.error) ||
+            `Errore nella generazione del tema (status ${res.status}).`
+        );
+        setLoading(false);
+        return;
+      }
+
+      // Salviamo tutto per debug
+      setRisultato(data);
+
+      const content = data?.result?.content || null;
+      setContenuto(content);
+
+      // Interpretazione principale = profilo_generale
+      const profiloGenerale = content?.profilo_generale || "";
+
+      if (!profiloGenerale) {
+        setInterpretazione(
+          "Interpretazione non disponibile (profilo_generale vuoto)."
+        );
+      } else {
+        setInterpretazione(profiloGenerale);
+      }
     } catch (err) {
-      console.error("[DYANA /tema] errore:", err);
+      console.error("[DYANA /tema_ai] errore fetch:", err);
       setErrore(
-        "Impossibile calcolare il tema natale. Riprova tra qualche istante."
+        "Impossibile comunicare con il server. Controlla la connessione e riprova."
       );
     } finally {
       setLoading(false);
     }
   }
 
-  const isFree = form.tier === "free";
+  // Mappa chiave -> etichetta umana
+  const sectionLabels = {
+    psicologia_profonda: "Psicologia profonda",
+    amore_relazioni: "Amore e relazioni",
+    lavoro_carriera: "Lavoro e carriera",
+    fortuna_crescita: "Fortuna e crescita",
+    talenti: "Talenti",
+    sfide: "Sfide",
+    consigli: "Consigli",
+  };
+
+  const isPremium = form.tier === "premium";
 
   return (
     <main className="page-root">
       <section className="landing-wrapper">
         {/* INTESTAZIONE */}
         <header className="section">
-          <h1 className="section-title">Genera il tuo Tema natale</h1>
+          <h1 className="section-title">Calcola il tuo Tema Natale</h1>
           <p className="section-subtitle">
-            Inserisci i tuoi dati di nascita: DYANA userà il motore di AstroBot già
-            testato end-to-end per calcolare e interpretare il tuo tema natale.
+            Inserisci i tuoi dati di nascita: DYANA userà il motore AI di
+            AstroBot (<code>/tema_ai</code>) per generare il tuo profilo
+            astrologico. Usa il campo Livello per testare le versioni free e
+            premium.
           </p>
         </header>
 
@@ -159,12 +205,12 @@ export default function TemaNatalePage() {
 
               {/* Invio */}
               <button
-                onClick={generaTemaNatale}
+                onClick={generaTema}
                 className="btn btn-primary"
                 disabled={loading}
                 style={{ marginTop: "14px" }}
               >
-                {loading ? "Sto interpretando..." : "Genera Tema natale"}
+                {loading ? "Generazione..." : "Calcola Tema"}
               </button>
 
               {/* Errore */}
@@ -177,124 +223,70 @@ export default function TemaNatalePage() {
           </div>
         </section>
 
-        {/* RISULTATO */}
+        {/* INTERPRETAZIONE PRINCIPALE */}
+        {interpretazione && (
+          <section className="section">
+            <div
+              className="card"
+              style={{ maxWidth: "850px", margin: "0 auto" }}
+            >
+              <h3 className="card-title">Interpretazione principale</h3>
+              <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
+                {interpretazione}
+              </p>
+            </div>
+          </section>
+        )}
+
+        {/* SEZIONI DETTAGLIATE (solo premium) */}
+        {isPremium && contenuto && (
+          <section className="section">
+            <div
+              className="card"
+              style={{ maxWidth: "850px", margin: "0 auto" }}
+            >
+              <h3 className="card-title">Sezioni dettagliate</h3>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {Object.entries(sectionLabels).map(([key, label]) => {
+                  const text = contenuto?.[key];
+                  if (!text) return null;
+                  return (
+                    <div key={key}>
+                      <h4
+                        className="card-text"
+                        style={{ fontWeight: 600, marginBottom: 4 }}
+                      >
+                        {label}
+                      </h4>
+                      <p
+                        className="card-text"
+                        style={{ whiteSpace: "pre-wrap", marginBottom: 8 }}
+                      >
+                        {text}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* RISULTATO - DEBUG COMPLETO */}
         {risultato && (
           <section className="section">
             <div
               className="card"
-              style={{ maxWidth: "900px", margin: "0 auto" }}
+              style={{ maxWidth: "850px", margin: "0 auto" }}
             >
-              <h3 className="card-title">Interpretazione</h3>
-
-              {isFree ? (
-                <>
-                  {risultato.profilo_generale && (
-                    <p
-                      className="card-text"
-                      style={{ marginTop: "16px", whiteSpace: "pre-wrap" }}
-                    >
-                      {renderText(risultato.profilo_generale)}
-                    </p>
-                  )}
-                </>
-              ) : (
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "18px",
-                    marginTop: "16px",
-                  }}
-                >
-                  {risultato.profilo_generale && (
-                    <>
-                      <h4 className="card-title" style={{ fontSize: "1rem" }}>
-                        Profilo generale
-                      </h4>
-                      <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
-                        {renderText(risultato.profilo_generale)}
-                      </p>
-                    </>
-                  )}
-
-                  {risultato.psicologia_profonda && (
-                    <>
-                      <h4 className="card-title" style={{ fontSize: "1rem" }}>
-                        Psicologia profonda
-                      </h4>
-                      <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
-                        {renderText(risultato.psicologia_profonda)}
-                      </p>
-                    </>
-                  )}
-
-                  {risultato.amore_relazioni && (
-                    <>
-                      <h4 className="card-title" style={{ fontSize: "1rem" }}>
-                        Amore e relazioni
-                      </h4>
-                      <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
-                        {renderText(risultato.amore_relazioni)}
-                      </p>
-                    </>
-                  )}
-
-                  {risultato.lavoro_carriera && (
-                    <>
-                      <h4 className="card-title" style={{ fontSize: "1rem" }}>
-                        Lavoro e carriera
-                      </h4>
-                      <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
-                        {renderText(risultato.lavoro_carriera)}
-                      </p>
-                    </>
-                  )}
-
-                  {risultato.fortuna_crescita && (
-                    <>
-                      <h4 className="card-title" style={{ fontSize: "1rem" }}>
-                        Fortuna e crescita
-                      </h4>
-                      <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
-                        {renderText(risultato.fortuna_crescita)}
-                      </p>
-                    </>
-                  )}
-
-                  {risultato.talenti && (
-                    <>
-                      <h4 className="card-title" style={{ fontSize: "1rem" }}>
-                        Talenti
-                      </h4>
-                      <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
-                        {renderText(risultato.talenti)}
-                      </p>
-                    </>
-                  )}
-
-                  {risultato.sfide && (
-                    <>
-                      <h4 className="card-title" style={{ fontSize: "1rem" }}>
-                        Sfide
-                      </h4>
-                      <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
-                        {renderText(risultato.sfide)}
-                      </p>
-                    </>
-                  )}
-
-                  {risultato.consigli && (
-                    <>
-                      <h4 className="card-title" style={{ fontSize: "1rem" }}>
-                        Consigli
-                      </h4>
-                      <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
-                        {renderText(risultato.consigli)}
-                      </p>
-                    </>
-                  )}
-                </div>
-              )}
+              <h3 className="card-title">Dettagli Tema (debug)</h3>
+              <pre
+                className="card-text"
+                style={{ whiteSpace: "pre-wrap", fontSize: "0.9rem" }}
+              >
+                {JSON.stringify(risultato, null, 2)}
+              </pre>
             </div>
           </section>
         )}
