@@ -19,7 +19,7 @@ function getAstrobotBaseUrl() {
   }
 
   // In dev, se non hai impostato niente, usa il backend locale
-  if (process.env.NODE_ENV === "development") {
+  if (process.env.NODE_ENV !== "production") {
     return "http://127.0.0.1:8001";
   }
 
@@ -30,8 +30,15 @@ function getAstrobotBaseUrl() {
   );
 }
 
-export async function POST(req, { params }) {
-  const period = params?.period;
+export async function POST(req, context) {
+  // ⚠️ In questa versione di Next, context.params è una Promise
+  let period;
+  try {
+    const params = await context.params;
+    period = params?.period;
+  } catch {
+    period = undefined;
+  }
 
   // Validazione periodo dalla URL: /api/oroscopo_ai/[period]
   if (!period || !ALLOWED_PERIODS.has(period)) {
@@ -46,7 +53,7 @@ export async function POST(req, { params }) {
     );
   }
 
-  // Legge il body JSON in ingresso (città, data, ora, nome, tier, ecc.)
+  // Body JSON in ingresso (citta, data, ora, nome, tier, ecc.)
   let body;
   try {
     body = await req.json();
@@ -72,7 +79,6 @@ export async function POST(req, { params }) {
       body: JSON.stringify(body),
     });
 
-    // Provo a leggere il JSON di risposta dal backend
     const data = await upstreamRes.json().catch(() => null);
 
     if (!upstreamRes.ok) {
@@ -87,7 +93,7 @@ export async function POST(req, { params }) {
       );
     }
 
-    // Pass-through trasparente verso il frontend DYANA
+    // Pass-through verso il frontend DYANA
     return NextResponse.json(data, { status: 200 });
   } catch (err) {
     console.error("[DYANA] Errore oroscopo_ai:", err);
