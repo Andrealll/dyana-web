@@ -1,41 +1,54 @@
 // app/api/sinastria_ai/route.ts
-import { NextResponse } from "next/server";
+export const runtime = "nodejs"; // opzionale ma consigliato
 
 const BACKEND_BASE =
-  process.env.ASTROBOT_API_BASE ?? "http://127.0.0.1:8001"; 
-// In produzione imposta ASTROBOT_API_BASE = https://chatbot-test-0h4o.onrender.com
+  process.env.DYANA_API_BASE ||
+  process.env.NEXT_PUBLIC_API_BASE ||
+  "http://127.0.0.1:8001"; // fallback solo per locale
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    // Chiamata al backend FastAPI
-    const res = await fetch(`${BACKEND_BASE}/sinastria_ai/`, {
+    const backendRes = await fetch(`${BACKEND_BASE}/sinastria_ai/`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
 
-    const text = await res.text();
+    const data = await backendRes.json().catch(() => null);
 
-    if (!res.ok) {
-      console.error("Backend /sinastria_ai NON OK:", res.status, text);
-      return NextResponse.json(
-        { error: "Errore dal backend sinastria_ai", detail: text },
-        { status: 500 }
+    if (!backendRes.ok) {
+      console.error("sinastria_ai backend error", backendRes.status, data);
+      return new Response(
+        JSON.stringify({
+          status: "error",
+          message: "backend_error",
+          httpStatus: backendRes.status,
+          backend: data,
+        }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        },
       );
     }
 
-    // Se OK, ritrasmetti il JSON al client
-    const data = JSON.parse(text);
-    return NextResponse.json(data);
-  } catch (err: any) {
-    console.error("Errore route /api/sinastria_ai:", err);
-    return NextResponse.json(
-      { error: "Errore interno API sinastria_ai", detail: String(err) },
-      { status: 500 }
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    console.error("sinastria_ai API route error", err);
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message: "api_route_error",
+      }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
     );
   }
 }
