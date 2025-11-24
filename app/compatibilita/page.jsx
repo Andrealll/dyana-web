@@ -58,7 +58,7 @@ export default function CompatibilitaPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          // Qui in futuro potrai aggiungere Authorization: Bearer <token>
+          // In futuro: Authorization: Bearer <token>
         },
         body: JSON.stringify(payload),
       });
@@ -80,6 +80,21 @@ export default function CompatibilitaPage() {
       setLoading(false);
     }
   }
+
+  // --------------------------------------------------
+  // Helper per estrarre la parte AI già interpretata
+  // --------------------------------------------------
+  const sinastriaAi = result?.sinastria_ai || null;
+  const metaAi = sinastriaAi?.meta || {};
+  const areeRelazione = sinastriaAi?.aree_relazione || [];
+  const puntiForza = sinastriaAi?.punti_forza || [];
+  const puntiCriticita = sinastriaAi?.punti_criticita || [];
+  const consigliFinali = sinastriaAi?.consigli_finali || [];
+
+  const nomeA =
+    metaAi?.nome_A || result?.input?.A?.nome || form.nomeA || "Persona A";
+  const nomeB =
+    metaAi?.nome_B || result?.input?.B?.nome || form.nomeB || "Persona B";
 
   return (
     <main className="page-root">
@@ -107,7 +122,7 @@ export default function CompatibilitaPage() {
                 className="form-input"
                 value={form.nomeA}
                 onChange={handleChange}
-                placeholder="Es. Junior"
+                placeholder="Es. Andrea"
               />
             </div>
 
@@ -172,7 +187,7 @@ export default function CompatibilitaPage() {
                 className="form-input"
                 value={form.nomeB}
                 onChange={handleChange}
-                placeholder="Es. Partner"
+                placeholder="Es. Muo"
               />
             </div>
 
@@ -218,7 +233,7 @@ export default function CompatibilitaPage() {
                 value={form.cittaB}
                 onChange={handleChange}
                 required
-                placeholder="Es. Roma"
+                placeholder="Es. Napoli"
               />
             </div>
           </div>
@@ -265,17 +280,130 @@ export default function CompatibilitaPage() {
           </p>
         )}
 
-        {/* RISULTATO: PER ORA JSON GREGGIO */}
-        {result && (
+        {/* RISULTATO FORMATTATO */}
+        {sinastriaAi && (
           <section className="section" style={{ marginTop: "2rem" }}>
-            <h2 className="section-title">Risultato della sinastria</h2>
+            <h2 className="section-title">
+              Lettura di compatibilità tra {nomeA} e {nomeB}
+            </h2>
             <p className="section-subtitle">
-              Questa è la risposta completa del motore AstroBot. In un secondo
-              momento potremo formattarla meglio (titoli, blocchi, paragrafi).
+              Sintesi generale · tono: {sinastriaAi?.meta?.riassunto_tono}
             </p>
-            <pre className="result-json">
-              {JSON.stringify(result, null, 2)}
-            </pre>
+
+            {/* SINTESI GENERALE */}
+            <article className="card">
+              <h3 className="card-title">Sintesi generale</h3>
+              <p className="card-text">{sinastriaAi.sintesi_generale}</p>
+            </article>
+
+            {/* AREE DI RELAZIONE */}
+            {areeRelazione.length > 0 && (
+              <section style={{ marginTop: "1.5rem" }}>
+                <h3 className="section-title">Aree principali della relazione</h3>
+                <div className="cards-grid">
+                  {areeRelazione.map((area) => (
+                    <article key={area.id} className="card">
+                      <h4 className="card-title">{area.titolo}</h4>
+                      <p className="card-text">{area.sintesi}</p>
+                      <p className="card-text">
+                        <strong>Intensità:</strong> {area.forza} ·{" "}
+                        <strong>Dinamica:</strong> {area.dinamica}
+                      </p>
+
+                      {area.aspetti_principali &&
+                        area.aspetti_principali.length > 0 && (
+                          <div style={{ marginTop: "0.5rem" }}>
+                            <p className="card-text">
+                              <strong>Aspetti chiave:</strong>
+                            </p>
+                            <ul>
+                              {area.aspetti_principali.map(
+                                (asp, idx) =>
+                                  asp?.descrizione && (
+                                    <li key={idx}>{asp.descrizione}</li>
+                                  )
+                              )}
+                            </ul>
+                          </div>
+                        )}
+
+                      {area.consigli_pratici &&
+                        area.consigli_pratici.length > 0 && (
+                          <div style={{ marginTop: "0.5rem" }}>
+                            <p className="card-text">
+                              <strong>Consigli pratici:</strong>
+                            </p>
+                            <ul>
+                              {area.consigli_pratici.map((c, idx) => (
+                                <li key={idx}>{c}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* PUNTI DI FORZA / CRITICITÀ */}
+            {(puntiForza.length > 0 || puntiCriticita.length > 0) && (
+              <section
+                className="section"
+                style={{ marginTop: "1.5rem", paddingTop: 0 }}
+              >
+                <div className="cards-grid">
+                  {puntiForza.length > 0 && (
+                    <article className="card">
+                      <h3 className="card-title">Punti di forza</h3>
+                      <ul>
+                        {puntiForza.map((p, idx) => (
+                          <li key={idx}>{p}</li>
+                        ))}
+                      </ul>
+                    </article>
+                  )}
+
+                  {puntiCriticita.length > 0 && (
+                    <article className="card">
+                      <h3 className="card-title">Punti di criticità</h3>
+                      <ul>
+                        {puntiCriticita.map((p, idx) => (
+                          <li key={idx}>{p}</li>
+                        ))}
+                      </ul>
+                    </article>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* CONSIGLI FINALI */}
+            {consigliFinali.length > 0 && (
+              <article
+                className="card"
+                style={{ marginTop: "1.5rem", marginBottom: "1rem" }}
+              >
+                <h3 className="card-title">Consigli finali</h3>
+                <ul>
+                  {consigliFinali.map((c, idx) => (
+                    <li key={idx}>{c}</li>
+                  ))}
+                </ul>
+                <p className="card-text" style={{ marginTop: "0.75rem" }}>
+                  🐈‍⬛ DYANA ti ricorda: la sinastria non è una sentenza, ma una
+                  mappa. Siete voi a scegliere come attraversarla.
+                </p>
+              </article>
+            )}
+
+            {/* DEBUG: JSON COMPLETO (OPZIONALE) */}
+            <details style={{ marginTop: "1rem" }}>
+              <summary>Mostra il JSON completo (debug)</summary>
+              <pre className="result-json" style={{ marginTop: "0.5rem" }}>
+                {JSON.stringify(result, null, 2)}
+              </pre>
+            </details>
           </section>
         )}
       </section>

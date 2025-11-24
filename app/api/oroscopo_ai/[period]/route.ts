@@ -14,7 +14,6 @@ const ASTROBOT_BASE_URL = (() => {
 
   if (!fromEnv && isProd) {
     // In produzione NON voglio fallback a localhost
-    // Così se ti dimentichi la variabile su Vercel lo vedi subito nei log
     throw new Error(
       "ASTROBOT_BASE_URL non configurata in produzione (Vercel)."
     );
@@ -24,12 +23,20 @@ const ASTROBOT_BASE_URL = (() => {
   return fromEnv || "http://127.0.0.1:8001";
 })();
 
-export async function POST(request, { params }) {
+export async function POST(request, context) {
   try {
-    // 1. Estraggo il periodo dalla rotta dinamica [period]
-    const period = params?.period;
+    // ================================
+    // 1) Ricavo il periodo dalla URL
+    // ================================
+    const url = new URL(request.url);
+    const segments = url.pathname.split("/").filter(Boolean);
+    // Esempio: /api/oroscopo_ai/daily  -> ["api","oroscopo_ai","daily"]
+    const period = segments[segments.length - 1];
 
-    // 2. Validazione periodo
+    console.log("[DYANA] Request URL:", url.toString());
+    console.log("[DYANA] Period ricavato da URL:", period);
+
+    // 2) Validazione periodo
     if (!VALID_PERIODS.includes(period)) {
       console.error("[DYANA] Periodo non valido:", period);
 
@@ -43,7 +50,9 @@ export async function POST(request, { params }) {
       );
     }
 
-    // 3. Leggo il body della richiesta in arrivo dal frontend DYANA
+    // ================================
+    // 3) Body JSON in arrivo dal frontend
+    // ================================
     let payload;
     try {
       payload = await request.json();
@@ -57,25 +66,23 @@ export async function POST(request, { params }) {
       );
     }
 
-    // 4. Costruisco l'URL del backend AstroBot
+    // ================================
+    // 4) Chiamata al backend AstroBot
+    // ================================
     const backendUrl = `${ASTROBOT_BASE_URL}/oroscopo_ai/${period}`;
     console.log("[DYANA] Chiamo AstroBot:", backendUrl);
 
-    // 5. Chiamo il backend AstroBot
     const res = await fetch(backendUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        // qui puoi aggiungere header extra se servono:
-        // "X-Engine": "new",
-        // "Authorization": `Bearer ${token}`,
+        // "X-Engine": "new", // se ti serve
       },
       body: JSON.stringify(payload),
-      // di solito per API conviene non cache-are
       cache: "no-store",
     });
 
-    // 6. Gestione errori HTTP dal backend (4xx / 5xx)
+    // 5) Gestione errori HTTP dal backend (4xx / 5xx)
     if (!res.ok) {
       const text = await res.text();
       console.error(
@@ -94,11 +101,11 @@ export async function POST(request, { params }) {
       );
     }
 
-    // 7. Tutto ok: giro la risposta JSON così com’è al frontend
+    // 6) Tutto ok: giro la risposta JSON al frontend
     const data = await res.json();
     return NextResponse.json(data);
   } catch (err) {
-    // 8. Errori di rete, DNS, ECONNREFUSED, variabili mancanti, ecc.
+    // 7) Errori di rete, DNS, ECONNREFUSED, variabili mancanti, ecc.
     console.error("[DYANA] Impossibile comunicare con AstroBot:", err);
 
     return NextResponse.json(
