@@ -1,76 +1,56 @@
+// app/api/oroscopo_ai/[period]/route.js
 import { NextResponse } from "next/server";
 
-const ASTROBOT_BASE_URL =
-  process.env.NEXT_PUBLIC_ASTROBOT_API_BASE_URL ||
-  process.env.ASTROBOT_API_BASE_URL ||
-  "http://127.0.0.1:8001";
-
-const ALLOWED_PERIODS = ["daily", "weekly", "monthly", "yearly"];
+const ALLOWED_PERIODS = new Set(["daily", "weekly", "monthly", "yearly"]);
 
 /**
- * Risolve il periodo dai params, gestendo sia:
- * - params: { period: string }
- * - params: Promise<{ period: string }>
+ * Restituisce la base URL del backend AstroBot.
+ * - In produzione: richiede ASTROBOT_API_BASE_URL o NEXT_PUBLIC_ASTROBOT_API_BASE_URL
+ * - In sviluppo: fallback su http://127.0.0.1:8001
  */
-async function resolvePeriod(context) {
-  try {
-    const paramsMaybePromise = context?.params;
+function getAstrobotBaseUrl() {
+  const fromEnv =
+    process.env.ASTROBOT_API_BASE_URL ||
+    process.env.NEXT_PUBLIC_ASTROBOT_API_BASE_URL;
 
-    let params = paramsMaybePromise || {};
-    if (typeof paramsMaybePromise?.then === "function") {
-      // è una Promise<{ period: string }>
-      params = (await paramsMaybePromise) || {};
-    }
-
-    const raw = params.period || "";
-    const candidate = String(raw).toLowerCase();
-
-    if (ALLOWED_PERIODS.includes(candidate)) {
-      return candidate;
-    }
-    return null;
-  } catch (e) {
-    return null;
+  if (fromEnv) {
+    // tolgo eventuale "/" finale
+    return fromEnv.replace(/\/+$/, "");
   }
+
+  // In dev, se non hai impostato niente, usa il backend locale
+  if (process.env.NODE_ENV === "development") {
+    return "http://127.0.0.1:8001";
+  }
+
+  // In produzione senza env: errore esplicito (così sai cosa manca)
+  throw new Error(
+    "[DYANA] ASTROBOT_API_BASE_URL non impostata in produzione. " +
+      "Configura la variabile d'ambiente su Vercel."
+  );
 }
 
-export async function POST(req, context) {
-  // ⚠️ Qui rispettiamo la firma che vuole Next:
-  // (req: NextRequest, context: { params: Promise<{ period: string }> })
-  const period = await resolvePeriod(context);
+export async function POST(req, { params }) {
+  const period = params?.period;
 
-  if (!period) {
-    let rawPeriod = "undefined";
-
-    try {
-      const paramsMaybePromise = context?.params;
-      let params = paramsMaybePromise || {};
-      if (typeof paramsMaybePromise?.then === "function") {
-        params = (await paramsMaybePromise) || {};
-      }
-      if (params && params.period) {
-        rawPeriod = params.period;
-      }
-    } catch (e) {
-      // ignore
-    }
-
+  // Validazione periodo dalla URL: /api/oroscopo_ai/[period]
+  if (!period || !ALLOWED_PERIODS.has(period)) {
     return NextResponse.json(
       {
         status: "error",
-        error: `Periodo non valido: ${rawPeriod}. Usa uno tra: ${ALLOWED_PERIODS.join(
-          ", "
-        )}.`,
+        error:
+          `Periodo non valido: ${period ?? "undefined"}. ` +
+          "Usa uno tra: daily, weekly, monthly, yearly.",
       },
       { status: 400 }
     );
   }
 
-  // Body JSON dalla richiesta
+  // Legge il body JSON in ingresso (città, data, ora, nome, tier, ecc.)
   let body;
   try {
     body = await req.json();
-  } catch (err) {
+  } catch {
     return NextResponse.json(
       {
         status: "error",
@@ -80,10 +60,11 @@ export async function POST(req, context) {
     );
   }
 
-  const astrobotUrl = `${ASTROBOT_BASE_URL}/oroscopo_ai/${period}`;
-
   try {
-    const backendResp = await fetch(astrobotUrl, {
+    const baseUrl = getAstrobotBaseUrl();
+    const upstreamUrl = `${baseUrl}/oroscopo_ai/${period}`;
+
+    const upstreamRes = await fetch(upstreamUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -91,43 +72,33 @@ export async function POST(req, context) {
       body: JSON.stringify(body),
     });
 
-    let data = null;
-    try {
-      data = await backendResp.json();
-    } catch (e) {
+    // Provo a leggere il JSON di risposta dal backend
+    const data = await upstreamRes.json().catch(() => null);
+
+    if (!upstreamRes.ok) {
       return NextResponse.json(
         {
           status: "error",
-          error: "Risposta non valida dal backend AstroBot (non JSON).",
-          backend_status: backendResp.status,
+          error:
+            data?.error ||
+            `Errore dal backend AstroBot (${upstreamRes.status})`,
         },
-        { status: 502 }
+        { status: upstreamRes.status }
       );
     }
 
-    if (!backendResp.ok) {
-      return NextResponse.json(
-        {
-          status: "error",
-          error: "Errore dalla API AstroBot.",
-          backend_status: backendResp.status,
-          backend_data: data,
-        },
-        { status: backendResp.status }
-      );
-    }
-
-    // Tutto ok: inoltro la risposta dell'engine
-    return NextResponse.json(data);
+    // Pass-through trasparente verso il frontend DYANA
+    return NextResponse.json(data, { status: 200 });
   } catch (err) {
     console.error("[DYANA] Errore oroscopo_ai:", err);
     return NextResponse.json(
       {
         status: "error",
-        error: "Impossibile contattare il backend AstroBot.",
-        details: err?.message || String(err),
+        error:
+          "Impossibile comunicare con il server AstroBot. " +
+          "Riprova più tardi.",
       },
-      { status: 502 }
+      { status: 500 }
     );
   }
 }
