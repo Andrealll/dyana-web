@@ -1,54 +1,44 @@
-// app/api/sinastria_ai/route.ts
-export const runtime = "nodejs"; // opzionale ma consigliato
+import { NextRequest, NextResponse } from "next/server";
 
-const BACKEND_BASE =
-  process.env.DYANA_API_BASE ||
-  process.env.NEXT_PUBLIC_API_BASE ||
-  "http://127.0.0.1:8001"; // fallback solo per locale
+const ASTROBOT_BASE_URL =
+  process.env.ASTROBOT_BASE_URL || "http://127.0.0.1:8001";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    const backendRes = await fetch(`${BACKEND_BASE}/sinastria_ai/`, {
+    // Qui chiamiamo il backend AstroBot
+    const res = await fetch(`${ASTROBOT_BASE_URL}/sinastria_ai`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(body),
     });
 
-    const data = await backendRes.json().catch(() => null);
-
-    if (!backendRes.ok) {
-      console.error("sinastria_ai backend error", backendRes.status, data);
-      return new Response(
-        JSON.stringify({
-          status: "error",
-          message: "backend_error",
-          httpStatus: backendRes.status,
-          backend: data,
-        }),
+    if (!res.ok) {
+      const text = await res.text();
+      console.error("[DYANA] Errore sinastria_ai backend:", res.status, text);
+      return NextResponse.json(
         {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
+          error: "Errore dal motore AstroBot",
+          status: res.status,
+          details: text,
         },
+        { status: 500 }
       );
     }
 
-    return new Response(JSON.stringify(data), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch (err) {
-    console.error("sinastria_ai API route error", err);
-    return new Response(
-      JSON.stringify({
-        status: "error",
-        message: "api_route_error",
-      }),
+    const data = await res.json();
+    return NextResponse.json(data);
+  } catch (err: any) {
+    console.error("[DYANA] Errore sinastria_ai API route:", err);
+    return NextResponse.json(
       {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
+        error: "Errore interno nella route sinastria_ai",
+        details: err?.message ?? String(err),
       },
+      { status: 500 }
     );
   }
 }
