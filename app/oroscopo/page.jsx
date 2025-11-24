@@ -1,4 +1,5 @@
 "use client";
+
 import { useState } from "react";
 
 export default function OroscopoPage() {
@@ -15,11 +16,6 @@ export default function OroscopoPage() {
   const [risultato, setRisultato] = useState(null);
   const [errore, setErrore] = useState("");
 
-  // Base URL del backend AstroBot:
-  // puoi sovrascriverlo con NEXT_PUBLIC_ASTROBOT_API_BASE nel .env.local
-  const API_BASE =
-    process.env.NEXT_PUBLIC_ASTROBOT_API_BASE || "http://127.0.0.1:8001";
-
   function handleChange(e) {
     const { name, value } = e.target;
     setForm((prev) => ({
@@ -28,7 +24,7 @@ export default function OroscopoPage() {
     }));
   }
 
-  // Mappatura periodo italiano -> slug API esistenti
+  // Mappa "giornaliero" -> "daily", ecc.
   function mapPeriodoToSlug(periodo) {
     switch (periodo) {
       case "giornaliero":
@@ -62,23 +58,24 @@ export default function OroscopoPage() {
         nome: form.nome || null,
         citta: form.citta,
         data: form.data, // "YYYY-MM-DD"
-        ora: form.ora,   // "HH:MM"
+        ora: form.ora, // "HH:MM"
+        email: null,
+        domanda: null,
         tier: form.tier, // "free" o "premium"
       };
 
-      const res = await fetch(`${API_BASE}/oroscopo_ai/${slug}`, {
+      // Chiamata alla API interna Next
+      const res = await fetch(`/api/oroscopo_ai/${slug}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Engine": "ai",
         },
         body: JSON.stringify(payload),
       });
 
-      let data = null;
       const text = await res.text();
+      let data = null;
 
-      // Proviamo a interpretare la risposta come JSON (se lo è)
       try {
         data = text ? JSON.parse(text) : null;
       } catch {
@@ -97,7 +94,6 @@ export default function OroscopoPage() {
         return;
       }
 
-      // Se tutto ok
       setRisultato(data);
     } catch (err) {
       console.error("[DYANA /oroscopo] errore fetch:", err);
@@ -109,81 +105,50 @@ export default function OroscopoPage() {
     }
   }
 
-  // ==========================
-  // Helpers per visualizzazione
-  // ==========================
+  // Helpers UI per intensità
+  function formatIntensity(value) {
+    if (typeof value !== "number" || isNaN(value)) return 0;
+    return Math.round(value * 100);
+  }
 
-  function getIntensities(engineResult) {
+  function estraiIntensita(engineResult) {
     try {
-      const samples =
-        engineResult?.pipe?.metriche_grafico?.samples ||
-        engineResult?.metriche_grafico?.samples;
-      if (!samples || !samples.length) return null;
+      const intensities =
+        engineResult?.pipe?.metriche_grafico?.samples?.[0]?.metrics
+          ?.intensities;
 
-      const metrics = samples[0]?.metrics;
-      if (!metrics?.intensities) return null;
+      if (!intensities) return null;
 
-      const intensities = metrics.intensities;
       return {
-        energy: Math.round((intensities.energy ?? 0) * 100),
-        emotions: Math.round((intensities.emotions ?? 0) * 100),
-        relationships: Math.round((intensities.relationships ?? 0) * 100),
-        work: Math.round((intensities.work ?? 0) * 100),
-        luck: Math.round((intensities.luck ?? 0) * 100),
+        energy: formatIntensity(intensities.energy),
+        emotions: formatIntensity(intensities.emotions),
+        relationships: formatIntensity(intensities.relationships),
+        work: formatIntensity(intensities.work),
+        luck: formatIntensity(intensities.luck),
       };
     } catch {
       return null;
     }
   }
 
-  function buildViewModel(data) {
-    if (!data) return null;
+  function estraiInterpretazione(oroscopo_ai) {
+    if (!oroscopo_ai) return null;
 
-    const engineResult = data.engine_result || null;
-    const oroscopoAi = data.oroscopo_ai || null;
+    const sintesi = oroscopo_ai.sintesi_periodo;
+    const capitoli = Array.isArray(oroscopo_ai.capitoli)
+      ? oroscopo_ai.capitoli
+      : [];
 
-    // Interpretazione principale
-    const interpretazione =
-      oroscopoAi?.sintesi_periodo ||
-      oroscopoAi?.sintesi ||
-      "Nessuna interpretazione testuale disponibile.";
-
-    // Capitoli: usiamo SOLO struttura, NON i titoli generati da Claude
-    let capitoli = [];
-    if (oroscopoAi && Array.isArray(oroscopoAi.capitoli)) {
-      capitoli = oroscopoAi.capitoli.map((cap, idx) => ({
-        id: cap.id ?? `cap-${idx}`,
-        // NON usiamo cap.titolo perché i titoli attuali non ti piacciono:
-        titolo: `Capitolo ${idx + 1}`,
-        sintesi: cap.sintesi || null,
-      }));
-    }
-
-    // Intensità 0–100
-    const intensities = engineResult ? getIntensities(engineResult) : null;
-
-    // Periodo ITA (fallback a "giornaliero")
-    const periodoIta =
-      engineResult?.periodo_ita ||
-      (data.scope === "daily"
-        ? "giornaliero"
-        : data.scope === "weekly"
-        ? "settimanale"
-        : data.scope === "monthly"
-        ? "mensile"
-        : data.scope === "yearly"
-        ? "annuale"
-        : "giornaliero");
-
-    return {
-      interpretazione,
-      capitoli,
-      intensities,
-      periodoIta,
-    };
+    return { sintesi, capitoli };
   }
 
-  const viewModel = buildViewModel(risultato);
+  const intensita = risultato ? estraiIntensita(risultato.engine_result) : null;
+  const interpretazione = risultato
+    ? estraiInterpretazione(risultato.oroscopo_ai)
+    : null;
+
+  const periodoLabel =
+    risultato?.engine_result?.periodo_ita || form.periodo || "giornaliero";
 
   return (
     <main className="page-root">
@@ -193,7 +158,7 @@ export default function OroscopoPage() {
           <h1 className="section-title">Genera il tuo Oroscopo</h1>
           <p className="section-subtitle">
             Seleziona il periodo e inserisci i tuoi dati: DYANA userà il motore
-            di AstroBot già testato end-to-end per calcolare il tuo oroscopo.
+            AstroBot per calcolare il tuo oroscopo, con interpretazione AI.
           </p>
         </header>
 
@@ -313,82 +278,102 @@ export default function OroscopoPage() {
               className="card"
               style={{ maxWidth: "850px", margin: "0 auto" }}
             >
-              <h2 className="card-title">Il tuo Oroscopo</h2>
+              <h3 className="card-title">Il tuo Oroscopo</h3>
 
               {/* INTERPRETAZIONE */}
-              <div style={{ marginTop: "12px" }}>
-                <h3 className="card-subtitle">Interpretazione</h3>
-                <p className="card-text" style={{ marginTop: "8px" }}>
-                  {viewModel?.interpretazione ??
-                    "Nessuna interpretazione disponibile."}
-                </p>
+              <div style={{ marginBottom: "16px" }}>
+                <h4 className="card-subtitle">Interpretazione</h4>
+                {interpretazione?.sintesi ? (
+                  <p className="card-text">{interpretazione.sintesi}</p>
+                ) : (
+                  <p className="card-text">
+                    Nessuna interpretazione testuale disponibile (campo
+                    oroscopo_ai assente nella risposta).
+                  </p>
+                )}
+
+                {/* Capitoli sintetici, se presenti */}
+                {interpretazione?.capitoli &&
+                  interpretazione.capitoli.length > 0 && (
+                    <div style={{ marginTop: "12px" }}>
+                      <h5 className="card-subtitle">Capitoli principali</h5>
+                      <ul
+                        style={{
+                          listStyle: "disc",
+                          paddingLeft: "20px",
+                        }}
+                      >
+                        {interpretazione.capitoli.map((cap, idx) => (
+                          <li key={cap.id || idx} className="card-text">
+                            <strong>
+                              {cap.titolo || `Capitolo ${idx + 1}`} —{" "}
+                            </strong>
+                            {cap.sintesi ||
+                              cap.riassunto ||
+                              "Capitolo senza sintesi breve disponibile."}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
               </div>
 
-              {/* CAPITOLI PRINCIPALI (con titoli neutri) */}
-              {viewModel?.capitoli && viewModel.capitoli.length > 0 && (
-                <div style={{ marginTop: "24px" }}>
-                  <h3 className="card-subtitle">Capitoli principali</h3>
-                  <ul
-                    className="card-text"
-                    style={{
-                      marginTop: "8px",
-                      paddingLeft: "18px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "10px",
-                    }}
-                  >
-                    {viewModel.capitoli.map((cap) => (
-                      <li key={cap.id}>
-                        <strong>{cap.titolo}</strong>
-                        {cap.sintesi && <> — {cap.sintesi}</>}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* PANORAMICA TECNICA */}
-              <div style={{ marginTop: "24px" }}>
-                <h3 className="card-subtitle">Panoramica tecnica</h3>
-                <p className="card-text" style={{ marginTop: "6px" }}>
-                  Periodo: {viewModel?.periodoIta || "giornaliero"}
+              {/* METRICHE TECNICHE */}
+              <div style={{ marginTop: "16px" }}>
+                <h4 className="card-subtitle">Panoramica tecnica</h4>
+                <p className="card-text">
+                  Periodo: {periodoLabel || "giornaliero"}
                 </p>
 
-                {viewModel?.intensities && (
+                {intensita && (
                   <>
-                    <p className="card-text" style={{ marginTop: "10px" }}>
-                      <strong>Intensità (0–100):</strong>
-                    </p>
+                    <p className="card-text">Intensità (0–100):</p>
                     <ul
-                      className="card-text"
-                      style={{ paddingLeft: "18px", marginTop: "4px" }}
+                      style={{
+                        listStyle: "none",
+                        paddingLeft: 0,
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                        gap: "4px 12px",
+                      }}
                     >
-                      <li>Energia: {viewModel.intensities.energy}</li>
-                      <li>Emozioni: {viewModel.intensities.emotions}</li>
-                      <li>Relazioni: {viewModel.intensities.relationships}</li>
-                      <li>Lavoro: {viewModel.intensities.work}</li>
-                      <li>Fortuna: {viewModel.intensities.luck}</li>
+                      <li className="card-text">
+                        Energia: {intensita.energy}
+                      </li>
+                      <li className="card-text">
+                        Emozioni: {intensita.emotions}
+                      </li>
+                      <li className="card-text">
+                        Relazioni: {intensita.relationships}
+                      </li>
+                      <li className="card-text">Lavoro: {intensita.work}</li>
+                      <li className="card-text">Fortuna: {intensita.luck}</li>
                     </ul>
                   </>
                 )}
               </div>
 
-              {/* RAW JSON PER DEBUG */}
-              <div style={{ marginTop: "24px" }}>
-                <h3 className="card-subtitle">Dettaglio completo (raw JSON)</h3>
+              {/* RAW JSON */}
+              <div style={{ marginTop: "18px" }}>
+                <h4 className="card-subtitle">Dettaglio completo (raw JSON)</h4>
                 <pre
                   className="card-text"
                   style={{
                     whiteSpace: "pre-wrap",
                     fontSize: "0.8rem",
-                    marginTop: "8px",
-                    maxHeight: "400px",
+                    maxHeight: "360px",
                     overflow: "auto",
+                    marginTop: "8px",
                   }}
                 >
                   {JSON.stringify(risultato, null, 2)}
                 </pre>
+              </div>
+
+              <div style={{ marginTop: "16px", textAlign: "center" }}>
+                <a href="/chat" className="btn btn-secondary">
+                  Chiedi a DYANA di approfondirlo
+                </a>
               </div>
             </div>
           </section>
