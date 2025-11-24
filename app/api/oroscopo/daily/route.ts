@@ -1,40 +1,20 @@
-// app/api/oroscopo_ai/[periodo]/route.js
+// app/api/oroscopo_ai/daily/route.js
 
 import { NextResponse } from "next/server";
 
-// Base URL del backend AstroBot (chatbot-test su Render o locale)
-// In dev userai di fatto http://127.0.0.1:8001 se non setti variabili.
+// URL del backend AstroBot (chatbot-test)
 const API_BASE =
   process.env.NEXT_PUBLIC_ASTROBOT_API_BASE ||
   process.env.ASTROBOT_API_BASE ||
   "http://127.0.0.1:8001";
 
-// opzionale, ma utile per evitare caching strano
 export const dynamic = "force-dynamic";
 
 /**
- * Handler POST per:
- *   POST /api/oroscopo_ai/daily
- *   POST /api/oroscopo_ai/weekly
- *   POST /api/oroscopo_ai/monthly
- *   POST /api/oroscopo_ai/yearly
+ * POST /api/oroscopo_ai/daily
+ * Proxy verso: {API_BASE}/oroscopo_ai/daily
  */
-export async function POST(request, { params }) {
-  const { periodo } = params;
-
-  // Periodi ammessi lato frontend
-  const allowedPeriods = ["daily", "weekly", "monthly", "yearly"];
-  if (!allowedPeriods.includes(periodo)) {
-    return NextResponse.json(
-      {
-        error: `Periodo non valido: ${periodo}. Usa uno tra: ${allowedPeriods.join(
-          ", "
-        )}.`,
-      },
-      { status: 400 }
-    );
-  }
-
+export async function POST(request) {
   let body;
   try {
     body = await request.json();
@@ -46,18 +26,16 @@ export async function POST(request, { params }) {
   }
 
   try {
-    const backendRes = await fetch(`${API_BASE}/oroscopo_ai/${periodo}`, {
+    const backendRes = await fetch(`${API_BASE}/oroscopo_ai/daily`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      // Passiamo il body così com'è al backend AstroBot
       body: JSON.stringify(body),
     });
 
     const data = await backendRes.json().catch(() => null);
 
-    // Se il backend risponde ma non con JSON leggibile
     if (!data) {
       return NextResponse.json(
         {
@@ -81,7 +59,6 @@ export async function POST(request, { params }) {
   }
 }
 
-// (opzionale) se qualcuno fa GET, rispondiamo 405
 export function GET() {
   return NextResponse.json(
     { error: "Usa POST su questa route." },
