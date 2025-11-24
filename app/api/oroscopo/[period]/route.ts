@@ -1,55 +1,69 @@
+// app/api/oroscopo_ai/[periodo]/route.js
+
 import { NextResponse } from "next/server";
 
-const ASTROBOT_BASE = process.env.ASTROBOT_BASE_URL || "http://127.0.0.1:8001";
+/**
+ * Base URL del backend AstroBot.
+ * Priorità:
+ * - ASTROBOT_API_BASE (server-side)
+ * - NEXT_PUBLIC_ASTROBOT_API_BASE (se usato anche lato client/dev)
+ * - fallback: URL di Render
+ */
+const ASTROBOT_API_BASE =
+  process.env.ASTROBOT_API_BASE ||
+  process.env.NEXT_PUBLIC_ASTROBOT_API_BASE ||
+  "https://chatbot-test-0h4o.onrender.com";
 
-// Periodi validi supportati dal backend
-const VALID_PERIODS = ["daily", "weekly", "monthly", "yearly"];
+/**
+ * POST /api/oroscopo_ai/[periodo]
+ * Esempi:
+ * - /api/oroscopo_ai/daily
+ * - /api/oroscopo_ai/weekly
+ * - /api/oroscopo_ai/monthly
+ * - /api/oroscopo_ai/yearly
+ *
+ * Proxy verso il backend AstroBot:
+ * - /oroscopo_ai/{periodo}
+ */
+export async function POST(req, { params }) {
+  const { periodo } = params;
 
-export async function POST(req: Request) {
+  // ci aspettiamo già uno slug valido: daily, weekly, monthly, yearly
+  const slug = periodo;
+
+  if (!slug) {
+    return NextResponse.json(
+      { error: "Periodo mancante o non valido." },
+      { status: 400 }
+    );
+  }
+
+  let body;
   try {
-    // Ricaviamo il "period" dall'URL, es: /api/oroscopo/daily
-    const url = new URL(req.url);
-    const segments = url.pathname.split("/").filter(Boolean); // ["api","oroscopo","daily"]
-    const period = segments[segments.length - 1]; // "daily" | "weekly" | ...
+    body = await req.json();
+  } catch (e) {
+    return NextResponse.json(
+      { error: "Body JSON non valido nella richiesta." },
+      { status: 400 }
+    );
+  }
 
-    console.log("[NEXT OROSCOPO] pathname =", url.pathname);
-    console.log("[NEXT OROSCOPO] segments =", segments);
-    console.log("[NEXT OROSCOPO] period =", period);
+  // Costruisco URL backend
+  const backendUrl = `${ASTROBOT_API_BASE}/oroscopo_ai/${slug}`;
 
-    // Validazione periodo
-    if (!VALID_PERIODS.includes(period)) {
-      return NextResponse.json(
-        {
-          error: `Invalid period '${period}'. Must be one of ${VALID_PERIODS.join(
-            ", "
-          )}`,
-          debug: { pathname: url.pathname, segments, period },
-        },
-        { status: 400 }
-      );
-    }
-
-    // Body dal frontend
-    const body = await req.json();
-    console.log("[NEXT OROSCOPO] body ricevuto =", body);
-
-    // URL backend AstroBot
-    const backendUrl = `${ASTROBOT_BASE}/oroscopo/${period}`;
-    console.log("[NEXT OROSCOPO] ASTROBOT_BASE =", ASTROBOT_BASE);
-    console.log("[NEXT OROSCOPO] backendUrl   =", backendUrl);
-
-    // Proxy verso AstroBot
+  try {
     const res = await fetch(backendUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Engine": "new",
+        // Se in futuro vuoi usare X-Engine:
+        // "X-Engine": "new",
       },
       body: JSON.stringify(body),
     });
 
     const text = await res.text();
-    let data: any = null;
+    let data = null;
 
     try {
       data = text ? JSON.parse(text) : null;
@@ -57,15 +71,29 @@ export async function POST(req: Request) {
       data = { raw: text };
     }
 
-    console.log("[NEXT OROSCOPO] backend status =", res.status);
+    if (!res.ok) {
+      console.error("[DYANA /api/oroscopo_ai] backend non OK:", res.status, data);
+      return NextResponse.json(
+        {
+          error:
+            (data && data.error) ||
+            `Errore dal backend AstroBot (status ${res.status}).`,
+          raw: data,
+        },
+        { status: res.status }
+      );
+    }
 
-    // Propaghiamo così com'è la risposta
-    return NextResponse.json(data, { status: res.status });
-  } catch (err: any) {
-    console.error("[OROSCOPO NEXT API ERROR]", err);
-
+    return NextResponse.json(data ?? {});
+  } catch (err) {
+    console.error("[DYANA /api/oroscopo_ai] ERRORE di rete/fetch:", err);
     return NextResponse.json(
-      { error: "Internal Next.js proxy error", details: err?.message },
+      {
+        error:
+          "Impossibile contattare il backend AstroBot. Verifica ASTROBOT_API_BASE e la raggiungibilità di Render.",
+        detail: String(err),
+        backendUrl,
+      },
       { status: 500 }
     );
   }
