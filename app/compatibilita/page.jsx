@@ -1,64 +1,81 @@
 // app/compatibilita/page.jsx
-
 "use client";
+
 import { useState } from "react";
+
+const API_BASE =
+  process.env.NEXT_PUBLIC_ASTROBOT_API_BASE || "http://localhost:8001";
 
 export default function CompatibilitaPage() {
   const [form, setForm] = useState({
-    p1_nome: "",
-    p1_data: "",
-    p1_ora: "",
-    p1_citta: "",
-    p2_nome: "",
-    p2_data: "",
-    p2_ora: "",
-    p2_citta: ""
+    nomeA: "",
+    dataA: "",
+    oraA: "",
+    cittaA: "",
+    nomeB: "",
+    dataB: "",
+    oraB: "",
+    cittaB: "",
+    tier: "free",
   });
 
   const [loading, setLoading] = useState(false);
-  const [risultato, setRisultato] = useState(null);
-  const [errore, setErrore] = useState("");
+  const [error, setError] = useState("");
+  const [result, setResult] = useState(null);
 
   function handleChange(e) {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   }
 
-  async function calcolaCompatibilita() {
+  async function handleSubmit(e) {
+    e.preventDefault();
     setLoading(true);
-    setErrore("");
-    setRisultato(null);
+    setError("");
+    setResult(null);
 
     try {
-      const res = await fetch("https://TUO_BACKEND_ASTROBOT/sinastria", {
+      const payload = {
+        A: {
+          nome: form.nomeA || "Persona A",
+          data: form.dataA,
+          ora: form.oraA,
+          citta: form.cittaA,
+        },
+        B: {
+          nome: form.nomeB || "Persona B",
+          data: form.dataB,
+          ora: form.oraB,
+          citta: form.cittaB,
+        },
+        tier: form.tier || "free",
+      };
+
+      const res = await fetch(`${API_BASE}/sinastria_ai/`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          // Qui in futuro potrai aggiungere Authorization: Bearer <token>
         },
-        credentials: "include", // invia token premium nel cookie HttpOnly
-        body: JSON.stringify({
-          persona1: {
-            nome: form.p1_nome,
-            data: form.p1_data,
-            ora: form.p1_ora,
-            citta: form.p1_citta
-          },
-          persona2: {
-            nome: form.p2_nome,
-            data: form.p2_data,
-            ora: form.p2_ora,
-            citta: form.p2_citta
-          },
-          scope: "sinastria"
-        })
+        body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error("Errore durante il calcolo della compatibilità.");
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Errore ${res.status}: ${text}`);
+      }
 
       const data = await res.json();
-      setRisultato(data);
-
+      setResult(data);
     } catch (err) {
-      setErrore("Impossibile calcolare la compatibilità. Riprova.");
+      console.error(err);
+      setError(
+        "Si è verificato un errore durante il calcolo della compatibilità. " +
+          "Verifica i dati inseriti o riprova tra poco."
+      );
     } finally {
       setLoading(false);
     }
@@ -66,161 +83,201 @@ export default function CompatibilitaPage() {
 
   return (
     <main className="page-root">
-      <section className="landing-wrapper">
+      <section className="section">
+        <h1 className="section-title">Compatibilità di coppia</h1>
+        <p className="section-subtitle">
+          DYANA, il tuo piccolo gatto nero digitale, confronta due temi natali
+          per offrirti una lettura delle dinamiche di relazione: punti di forza,
+          attrazioni e zone sensibili da gestire con cura.
+        </p>
 
-        {/* HEADER */}
-        <header className="section">
-          <h1 className="section-title">Compatibilità & Sinastria</h1>
-          <p className="section-subtitle">
-            Confronta due profili astrologici e scopri l'armonia, le sfide e le 
-            dinamiche profonde della relazione.
-          </p>
-        </header>
-
-        {/* FORM */}
-        <section className="section">
-          <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
-            
-            <h3 className="card-title">Persona 1</h3>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginBottom: "24px" }}>
-
-              <div>
-                <label className="card-text">Nome</label>
-                <input
-                  type="text"
-                  name="p1_nome"
-                  value={form.p1_nome}
-                  onChange={handleChange}
-                  className="form-input"
-                />
-              </div>
-
-              <div>
-                <label className="card-text">Data di nascita</label>
-                <input
-                  type="date"
-                  name="p1_data"
-                  value={form.p1_data}
-                  onChange={handleChange}
-                  className="form-input"
-                />
-              </div>
-
-              <div>
-                <label className="card-text">Ora di nascita</label>
-                <input
-                  type="time"
-                  name="p1_ora"
-                  value={form.p1_ora}
-                  onChange={handleChange}
-                  className="form-input"
-                />
-              </div>
-
-              <div>
-                <label className="card-text">Luogo di nascita</label>
-                <input
-                  type="text"
-                  name="p1_citta"
-                  placeholder="es. Milano, IT"
-                  value={form.p1_citta}
-                  onChange={handleChange}
-                  className="form-input"
-                />
-              </div>
+        {/* FORM SINASTRIA */}
+        <form onSubmit={handleSubmit} className="form-grid">
+          {/* BLOCCO PERSONA A */}
+          <div className="card">
+            <h2 className="card-title">Persona A</h2>
+            <div className="form-field">
+              <label className="form-label" htmlFor="nomeA">
+                Nome (opzionale)
+              </label>
+              <input
+                id="nomeA"
+                name="nomeA"
+                type="text"
+                className="form-input"
+                value={form.nomeA}
+                onChange={handleChange}
+                placeholder="Es. Junior"
+              />
             </div>
 
-            {/* PERSONA 2 */}
-            <h3 className="card-title">Persona 2</h3>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              
-              <div>
-                <label className="card-text">Nome</label>
-                <input
-                  type="text"
-                  name="p2_nome"
-                  value={form.p2_nome}
-                  onChange={handleChange}
-                  className="form-input"
-                />
-              </div>
-
-              <div>
-                <label className="card-text">Data di nascita</label>
-                <input
-                  type="date"
-                  name="p2_data"
-                  value={form.p2_data}
-                  onChange={handleChange}
-                  className="form-input"
-                />
-              </div>
-
-              <div>
-                <label className="card-text">Ora di nascita</label>
-                <input
-                  type="time"
-                  name="p2_ora"
-                  value={form.p2_ora}
-                  onChange={handleChange}
-                  className="form-input"
-                />
-              </div>
-
-              <div>
-                <label className="card-text">Luogo di nascita</label>
-                <input
-                  type="text"
-                  name="p2_citta"
-                  placeholder="es. Roma, IT"
-                  value={form.p2_citta}
-                  onChange={handleChange}
-                  className="form-input"
-                />
-              </div>
+            <div className="form-field">
+              <label className="form-label" htmlFor="dataA">
+                Data di nascita
+              </label>
+              <input
+                id="dataA"
+                name="dataA"
+                type="date"
+                className="form-input"
+                value={form.dataA}
+                onChange={handleChange}
+                required
+              />
             </div>
 
-            {/* Invio */}
+            <div className="form-field">
+              <label className="form-label" htmlFor="oraA">
+                Ora di nascita
+              </label>
+              <input
+                id="oraA"
+                name="oraA"
+                type="time"
+                className="form-input"
+                value={form.oraA}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            <div className="form-field">
+              <label className="form-label" htmlFor="cittaA">
+                Luogo di nascita
+              </label>
+              <input
+                id="cittaA"
+                name="cittaA"
+                type="text"
+                className="form-input"
+                value={form.cittaA}
+                onChange={handleChange}
+                required
+                placeholder="Es. Napoli"
+              />
+            </div>
+          </div>
+
+          {/* BLOCCO PERSONA B */}
+          <div className="card">
+            <h2 className="card-title">Persona B</h2>
+            <div className="form-field">
+              <label className="form-label" htmlFor="nomeB">
+                Nome (opzionale)
+              </label>
+              <input
+                id="nomeB"
+                name="nomeB"
+                type="text"
+                className="form-input"
+                value={form.nomeB}
+                onChange={handleChange}
+                placeholder="Es. Partner"
+              />
+            </div>
+
+            <div className="form-field">
+              <label className="form-label" htmlFor="dataB">
+                Data di nascita
+              </label>
+              <input
+                id="dataB"
+                name="dataB"
+                type="date"
+                className="form-input"
+                value={form.dataB}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            <div className="form-field">
+              <label className="form-label" htmlFor="oraB">
+                Ora di nascita
+              </label>
+              <input
+                id="oraB"
+                name="oraB"
+                type="time"
+                className="form-input"
+                value={form.oraB}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            <div className="form-field">
+              <label className="form-label" htmlFor="cittaB">
+                Luogo di nascita
+              </label>
+              <input
+                id="cittaB"
+                name="cittaB"
+                type="text"
+                className="form-input"
+                value={form.cittaB}
+                onChange={handleChange}
+                required
+                placeholder="Es. Roma"
+              />
+            </div>
+          </div>
+
+          {/* BLOCCO OPZIONI / TIER + SUBMIT */}
+          <div className="card">
+            <h2 className="card-title">Opzioni</h2>
+
+            <div className="form-field">
+              <label className="form-label" htmlFor="tier">
+                Tipo di lettura
+              </label>
+              <select
+                id="tier"
+                name="tier"
+                className="form-input"
+                value={form.tier}
+                onChange={handleChange}
+              >
+                <option value="free">Free</option>
+                <option value="premium">Premium</option>
+              </select>
+            </div>
+
             <button
-              onClick={calcolaCompatibilita}
+              type="submit"
               className="btn btn-primary"
               disabled={loading}
-              style={{ marginTop: "24px" }}
             >
-              {loading ? "Calcolo in corso..." : "Calcola Compatibilità"}
+              {loading ? "Calcolo in corso..." : "Calcola compatibilità"}
             </button>
 
-            {/* Errore */}
-            {errore && (
-              <p className="card-text" style={{ color: "#ff9a9a", marginTop: "12px" }}>
-                {errore}
-              </p>
-            )}
-
+            <p className="section-subtitle" style={{ marginTop: "0.75rem" }}>
+              DYANA non decide per te, ma ti aiuta a leggere il quadro
+              astrologico della relazione in modo più lucido.
+            </p>
           </div>
-        </section>
+        </form>
 
-        {/* RISULTATO */}
-        {risultato && (
-          <section className="section">
-            <div className="card" style={{ maxWidth: "900px", margin: "0 auto" }}>
-              <h3 className="card-title">Risultato della Compatibilità</h3>
-
-              <pre className="card-text" style={{ whiteSpace: "pre-wrap" }}>
-                {JSON.stringify(risultato, null, 2)}
-              </pre>
-
-              <div style={{ marginTop: "20px", textAlign: "center" }}>
-                <a href="/chat" className="btn btn-secondary">
-                  Chiedi a DYANA di interpretare la relazione
-                </a>
-              </div>
-            </div>
-          </section>
+        {/* STATO: ERRORE */}
+        {error && (
+          <p className="error-text" style={{ marginTop: "1.5rem" }}>
+            {error}
+          </p>
         )}
 
+        {/* RISULTATO: PER ORA JSON GREGGIO */}
+        {result && (
+          <section className="section" style={{ marginTop: "2rem" }}>
+            <h2 className="section-title">Risultato della sinastria</h2>
+            <p className="section-subtitle">
+              Questa è la risposta completa del motore AstroBot. In un secondo
+              momento potremo formattarla meglio (titoli, blocchi, paragrafi).
+            </p>
+            <pre className="result-json">
+              {JSON.stringify(result, null, 2)}
+            </pre>
+          </section>
+        )}
       </section>
     </main>
   );
