@@ -1,432 +1,369 @@
-// app/compatibilita/page.jsx
 "use client";
 
 import { useState } from "react";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_ASTROBOT_API_BASE || "http://localhost:8001";
+type PersonaForm = {
+  nome: string;
+  citta: string;
+  data: string; // YYYY-MM-DD
+  ora: string;  // HH:MM
+};
 
-export default function CompatibilitaPage() {
-  const [form, setForm] = useState({
-    nomeA: "",
-    dataA: "",
-    oraA: "",
-    cittaA: "",
-    nomeB: "",
-    dataB: "",
-    oraB: "",
-    cittaB: "",
-    tier: "free",
+type Tier = "free" | "premium";
+
+type SinastriaAI = {
+  sintesi_generale?: string;
+  meta?: {
+    tier?: Tier;
+    lingua?: string;
+    nome_A?: string | null;
+    nome_B?: string | null;
+    riassunto_tono?: string;
+  };
+  aree_relazione?: {
+    id: string;
+    titolo: string;
+    sintesi: string;
+    forza?: string;
+    dinamica?: string;
+    aspetti_principali?: { descrizione: string; nota?: string | null }[];
+    consigli_pratici?: string[];
+  }[];
+  punti_forza?: string[];
+  punti_criticita?: string[];
+  consigli_finali?: string[];
+};
+
+export default function SinastriaPage() {
+  const [A, setA] = useState<PersonaForm>({
+    nome: "",
+    citta: "",
+    data: "",
+    ora: "",
   });
 
+  const [B, setB] = useState<PersonaForm>({
+    nome: "",
+    citta: "",
+    data: "",
+    ora: "",
+  });
+
+  const [tier, setTier] = useState<Tier>("free");
+
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [result, setResult] = useState(null);
+  const [errore, setErrore] = useState<string | null>(null);
+  const [result, setResult] = useState<SinastriaAI | null>(null);
 
-  function handleChange(e) {
-    const { name, value } = e.target;
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  }
-
-  async function handleSubmit(e) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-    setError("");
+    setErrore(null);
     setResult(null);
+    setLoading(true);
 
     try {
-      const payload = {
+      const body = {
         A: {
-          nome: form.nomeA || "Persona A",
-          data: form.dataA,
-          ora: form.oraA,
-          citta: form.cittaA,
+          nome: A.nome || null,
+          citta: A.citta,
+          data: A.data,
+          ora: A.ora,
         },
         B: {
-          nome: form.nomeB || "Persona B",
-          data: form.dataB,
-          ora: form.oraB,
-          citta: form.cittaB,
+          nome: B.nome || null,
+          citta: B.citta,
+          data: B.data,
+          ora: B.ora,
         },
-        tier: form.tier || "free",
+        tier,
       };
 
-      const res = await fetch(`${API_BASE}/sinastria_ai/`, {
+      const res = await fetch("/api/sinastria_ai", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Errore ${res.status}: ${text}`);
+        console.error("Errore HTTP /api/sinastria_ai:", res.status);
+        throw new Error(`HTTP ${res.status}`);
       }
 
       const data = await res.json();
-      setResult(data);
+
+      const sinastria_ai: SinastriaAI | null = data?.sinastria_ai ?? null;
+
+      if (!sinastria_ai) {
+        setErrore(
+          "Si è verificato un errore durante il calcolo della compatibilità. Verifica i dati inseriti o riprova tra poco."
+        );
+      } else {
+        setResult(sinastria_ai);
+      }
     } catch (err) {
-      console.error(err);
-      setError(
-        "Si è verificato un errore durante il calcolo della compatibilità. " +
-          "Verifica i dati inseriti o riprova tra poco."
+      console.error("Errore sinastria_ai:", err);
+      setErrore(
+        "Si è verificato un errore durante il calcolo della compatibilità. Verifica i dati inseriti o riprova tra poco."
       );
     } finally {
       setLoading(false);
     }
   }
 
-  // --------------------------------------------------
-  // Helper per estrarre la parte AI già interpretata
-  // --------------------------------------------------
-  const sinastriaAi = result?.sinastria_ai || null;
-  const metaAi = sinastriaAi?.meta || {};
-  const areeRelazione = sinastriaAi?.aree_relazione || [];
-  const puntiForza = sinastriaAi?.punti_forza || [];
-  const puntiCriticita = sinastriaAi?.punti_criticita || [];
-  const consigliFinali = sinastriaAi?.consigli_finali || [];
-
-  const nomeA =
-    metaAi?.nome_A || result?.input?.A?.nome || form.nomeA || "Persona A";
-  const nomeB =
-    metaAi?.nome_B || result?.input?.B?.nome || form.nomeB || "Persona B";
-
   return (
-    <main className="page-root">
-      <section className="section">
-        {/* CONTENITORE CENTRATO E PIÙ STRETTO */}
-        <div
-          style={{
-            maxWidth: "1100px",
-            margin: "0 auto",
-          }}
+    <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+      <h1 className="text-2xl font-semibold mb-4">
+        Compatibilità di coppia DYANA (sinastria_ai)
+      </h1>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Persona A */}
+        <fieldset className="border rounded-lg p-4 space-y-4">
+          <legend className="px-2 font-medium">Persona A</legend>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <label className="flex flex-col gap-1 text-sm">
+              Nome (facoltativo)
+              <input
+                type="text"
+                value={A.nome}
+                onChange={(e) => setA((f) => ({ ...f, nome: e.target.value }))}
+                className="border rounded px-2 py-1"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              Città
+              <input
+                type="text"
+                value={A.citta}
+                onChange={(e) =>
+                  setA((f) => ({ ...f, citta: e.target.value }))
+                }
+                className="border rounded px-2 py-1"
+                required
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              Data di nascita
+              <input
+                type="date"
+                value={A.data}
+                onChange={(e) =>
+                  setA((f) => ({ ...f, data: e.target.value }))
+                }
+                className="border rounded px-2 py-1"
+                required
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              Ora di nascita
+              <input
+                type="time"
+                value={A.ora}
+                onChange={(e) => setA((f) => ({ ...f, ora: e.target.value }))}
+                className="border rounded px-2 py-1"
+                required
+              />
+            </label>
+          </div>
+        </fieldset>
+
+        {/* Persona B */}
+        <fieldset className="border rounded-lg p-4 space-y-4">
+          <legend className="px-2 font-medium">Persona B</legend>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <label className="flex flex-col gap-1 text-sm">
+              Nome (facoltativo)
+              <input
+                type="text"
+                value={B.nome}
+                onChange={(e) => setB((f) => ({ ...f, nome: e.target.value }))}
+                className="border rounded px-2 py-1"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              Città
+              <input
+                type="text"
+                value={B.citta}
+                onChange={(e) =>
+                  setB((f) => ({ ...f, citta: e.target.value }))
+                }
+                className="border rounded px-2 py-1"
+                required
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              Data di nascita
+              <input
+                type="date"
+                value={B.data}
+                onChange={(e) =>
+                  setB((f) => ({ ...f, data: e.target.value }))
+                }
+                className="border rounded px-2 py-1"
+                required
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              Ora di nascita
+              <input
+                type="time"
+                value={B.ora}
+                onChange={(e) => setB((f) => ({ ...f, ora: e.target.value }))}
+                className="border rounded px-2 py-1"
+                required
+              />
+            </label>
+          </div>
+        </fieldset>
+
+        {/* Tier */}
+        <fieldset className="border rounded-lg p-4 space-y-2">
+          <legend className="px-2 font-medium">Livello</legend>
+          <div className="flex gap-4 text-sm">
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                value="free"
+                checked={tier === "free"}
+                onChange={() => setTier("free")}
+              />
+              Free
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                value="premium"
+                checked={tier === "premium"}
+                onChange={() => setTier("premium")}
+              />
+              Premium
+            </label>
+          </div>
+        </fieldset>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="px-4 py-2 rounded bg-black text-white text-sm disabled:opacity-60"
         >
-          <h1
-            className="section-title"
-            style={{ marginTop: "2rem", textAlign: "center" }}
-          >
-            Compatibilità di coppia
-          </h1>
-          <p
-            className="section-subtitle"
-            style={{ textAlign: "center", marginBottom: "2rem" }}
-          >
-            DYANA, il tuo piccolo gatto nero digitale, confronta due temi
-            natali per offrirti una lettura delle dinamiche di relazione:
-            punti di forza, attrazioni e zone sensibili da gestire con cura.
-          </p>
+          {loading ? "Calcolo in corso..." : "Calcola compatibilità"}
+        </button>
+      </form>
 
-          {/* FORM SINASTRIA */}
-          <form onSubmit={handleSubmit} className="form-grid">
-            {/* BLOCCO PERSONA A */}
-            <div className="card">
-              <h2 className="card-title">Persona A</h2>
-              <div className="form-field">
-                <label className="form-label" htmlFor="nomeA">
-                  Nome (opzionale)
-                </label>
-                <input
-                  id="nomeA"
-                  name="nomeA"
-                  type="text"
-                  className="form-input"
-                  value={form.nomeA}
-                  onChange={handleChange}
-                  placeholder="Es. Andrea"
-                />
-              </div>
+      {errore && <p className="text-sm text-red-600">{errore}</p>}
 
-              <div className="form-field">
-                <label className="form-label" htmlFor="dataA">
-                  Data di nascita
-                </label>
-                <input
-                  id="dataA"
-                  name="dataA"
-                  type="date"
-                  className="form-input"
-                  value={form.dataA}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="form-field">
-                <label className="form-label" htmlFor="oraA">
-                  Ora di nascita
-                </label>
-                <input
-                  id="oraA"
-                  name="oraA"
-                  type="time"
-                  className="form-input"
-                  value={form.oraA}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="form-field">
-                <label className="form-label" htmlFor="cittaA">
-                  Luogo di nascita
-                </label>
-                <input
-                  id="cittaA"
-                  name="cittaA"
-                  type="text"
-                  className="form-input"
-                  value={form.cittaA}
-                  onChange={handleChange}
-                  required
-                  placeholder="Es. Napoli"
-                />
-              </div>
+      {result && (
+        <section className="mt-6 space-y-4">
+          {result.sintesi_generale && (
+            <div>
+              <h2 className="text-lg font-semibold mb-1">Sintesi generale</h2>
+              <p className="text-sm">{result.sintesi_generale}</p>
             </div>
-
-            {/* BLOCCO PERSONA B */}
-            <div className="card">
-              <h2 className="card-title">Persona B</h2>
-              <div className="form-field">
-                <label className="form-label" htmlFor="nomeB">
-                  Nome (opzionale)
-                </label>
-                <input
-                  id="nomeB"
-                  name="nomeB"
-                  type="text"
-                  className="form-input"
-                  value={form.nomeB}
-                  onChange={handleChange}
-                  placeholder="Es. Muo"
-                />
-              </div>
-
-              <div className="form-field">
-                <label className="form-label" htmlFor="dataB">
-                  Data di nascita
-                </label>
-                <input
-                  id="dataB"
-                  name="dataB"
-                  type="date"
-                  className="form-input"
-                  value={form.dataB}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="form-field">
-                <label className="form-label" htmlFor="oraB">
-                  Ora di nascita
-                </label>
-                <input
-                  id="oraB"
-                  name="oraB"
-                  type="time"
-                  className="form-input"
-                  value={form.oraB}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="form-field">
-                <label className="form-label" htmlFor="cittaB">
-                  Luogo di nascita
-                </label>
-                <input
-                  id="cittaB"
-                  name="cittaB"
-                  type="text"
-                  className="form-input"
-                  value={form.cittaB}
-                  onChange={handleChange}
-                  required
-                  placeholder="Es. Napoli"
-                />
-              </div>
-            </div>
-
-            {/* BLOCCO OPZIONI / TIER + SUBMIT */}
-            <div className="card">
-              <h2 className="card-title">Opzioni</h2>
-
-              <div className="form-field">
-                <label className="form-label" htmlFor="tier">
-                  Tipo di lettura
-                </label>
-                <select
-                  id="tier"
-                  name="tier"
-                  className="form-input"
-                  value={form.tier}
-                  onChange={handleChange}
-                >
-                  <option value="free">Free</option>
-                  <option value="premium">Premium</option>
-                </select>
-              </div>
-
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={loading}
-              >
-                {loading ? "Calcolo in corso..." : "Calcola compatibilità"}
-              </button>
-
-              <p className="section-subtitle" style={{ marginTop: "0.75rem" }}>
-                DYANA non decide per te, ma ti aiuta a leggere il quadro
-                astrologico della relazione in modo più lucido.
-              </p>
-            </div>
-          </form>
-
-          {/* STATO: ERRORE */}
-          {error && (
-            <p className="error-text" style={{ marginTop: "1.5rem" }}>
-              {error}
-            </p>
           )}
 
-          {/* RISULTATO FORMATTATO */}
-          {sinastriaAi && (
-            <section className="section" style={{ marginTop: "2rem" }}>
-              <h2 className="section-title">
-                Lettura di compatibilità tra {nomeA} e {nomeB}
-              </h2>
-              <p className="section-subtitle">
-                Sintesi generale · tono: {sinastriaAi?.meta?.riassunto_tono}
-              </p>
-
-              {/* SINTESI GENERALE */}
-              <article className="card">
-                <h3 className="card-title">Sintesi generale</h3>
-                <p className="card-text">{sinastriaAi.sintesi_generale}</p>
-              </article>
-
-              {/* AREE DI RELAZIONE */}
-              {areeRelazione.length > 0 && (
-                <section style={{ marginTop: "1.5rem" }}>
-                  <h3 className="section-title">
-                    Aree principali della relazione
-                  </h3>
-                  <div className="cards-grid">
-                    {areeRelazione.map((area) => (
-                      <article key={area.id} className="card">
-                        <h4 className="card-title">{area.titolo}</h4>
-                        <p className="card-text">{area.sintesi}</p>
-                        <p className="card-text">
-                          <strong>Intensità:</strong> {area.forza} ·{" "}
-                          <strong>Dinamica:</strong> {area.dinamica}
-                        </p>
-
-                        {area.aspetti_principali &&
-                          area.aspetti_principali.length > 0 && (
-                            <div style={{ marginTop: "0.5rem" }}>
-                              <p className="card-text">
-                                <strong>Aspetti chiave:</strong>
-                              </p>
-                              <ul>
-                                {area.aspetti_principali.map(
-                                  (asp, idx) =>
-                                    asp?.descrizione && (
-                                      <li key={idx}>{asp.descrizione}</li>
-                                    )
-                                )}
-                              </ul>
-                            </div>
-                          )}
-
-                        {area.consigli_pratici &&
-                          area.consigli_pratici.length > 0 && (
-                            <div style={{ marginTop: "0.5rem" }}>
-                              <p className="card-text">
-                                <strong>Consigli pratici:</strong>
-                              </p>
-                              <ul>
-                                {area.consigli_pratici.map((c, idx) => (
-                                  <li key={idx}>{c}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                      </article>
-                    ))}
-                  </div>
-                </section>
+          {result.meta && (
+            <div className="text-xs text-gray-600">
+              <span>
+                Tier: <strong>{result.meta.tier}</strong>
+              </span>
+              {result.meta.riassunto_tono && (
+                <>
+                  {" • "}
+                  <span>{result.meta.riassunto_tono}</span>
+                </>
               )}
+            </div>
+          )}
 
-              {/* PUNTI DI FORZA / CRITICITÀ */}
-              {(puntiForza.length > 0 || puntiCriticita.length > 0) && (
-                <section
-                  className="section"
-                  style={{ marginTop: "1.5rem", paddingTop: 0 }}
-                >
-                  <div className="cards-grid">
-                    {puntiForza.length > 0 && (
-                      <article className="card">
-                        <h3 className="card-title">Punti di forza</h3>
-                        <ul>
-                          {puntiForza.map((p, idx) => (
-                            <li key={idx}>{p}</li>
-                          ))}
-                        </ul>
-                      </article>
-                    )}
-
-                    {puntiCriticita.length > 0 && (
-                      <article className="card">
-                        <h3 className="card-title">Punti di criticità</h3>
-                        <ul>
-                          {puntiCriticita.map((p, idx) => (
-                            <li key={idx}>{p}</li>
-                          ))}
-                        </ul>
-                      </article>
-                    )}
-                  </div>
-                </section>
-              )}
-
-              {/* CONSIGLI FINALI */}
-              {consigliFinali.length > 0 && (
+          {result.aree_relazione && result.aree_relazione.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-base font-semibold">Aree della relazione</h3>
+              {result.aree_relazione.map((area) => (
                 <article
-                  className="card"
-                  style={{ marginTop: "1.5rem", marginBottom: "1rem" }}
+                  key={area.id}
+                  className="border rounded-lg p-3 space-y-2 text-sm"
                 >
-                  <h3 className="card-title">Consigli finali</h3>
-                  <ul>
-                    {consigliFinali.map((c, idx) => (
-                      <li key={idx}>{c}</li>
+                  <h4 className="font-medium">{area.titolo}</h4>
+                  <p>{area.sintesi}</p>
+
+                  {area.aspetti_principali &&
+                    area.aspetti_principali.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="font-semibold text-xs">
+                          Aspetti principali:
+                        </p>
+                        <ul className="list-disc list-inside text-xs space-y-1">
+                          {area.aspetti_principali.map((asp, idx) => (
+                            <li key={idx}>
+                              {asp.descrizione}
+                              {asp.nota && (
+                                <span className="text-gray-500">
+                                  {" "}
+                                  — {asp.nota}
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                  {area.consigli_pratici &&
+                    area.consigli_pratici.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="font-semibold text-xs">
+                          Consigli pratici:
+                        </p>
+                        <ul className="list-disc list-inside text-xs space-y-1">
+                          {area.consigli_pratici.map((c, idx) => (
+                            <li key={idx}>{c}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                </article>
+              ))}
+            </div>
+          )}
+
+          {(result.punti_forza || result.punti_criticita) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              {result.punti_forza && result.punti_forza.length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-1">Punti di forza</h3>
+                  <ul className="list-disc list-inside space-y-1">
+                    {result.punti_forza.map((p, idx) => (
+                      <li key={idx}>{p}</li>
                     ))}
                   </ul>
-                  <p className="card-text" style={{ marginTop: "0.75rem" }}>
-                    🐈‍⬛ DYANA ti ricorda: la sinastria non è una sentenza, ma
-                    una mappa. Siete voi a scegliere come attraversarla.
-                  </p>
-                </article>
+                </div>
               )}
-
-              {/* DEBUG: JSON COMPLETO (OPZIONALE) */}
-              <details style={{ marginTop: "1rem" }}>
-                <summary>Mostra il JSON completo (debug)</summary>
-                <pre
-                  className="result-json"
-                  style={{ marginTop: "0.5rem", overflowX: "auto" }}
-                >
-                  {JSON.stringify(result, null, 2)}
-                </pre>
-              </details>
-            </section>
+              {result.punti_criticita && result.punti_criticita.length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-1">Punti di criticità</h3>
+                  <ul className="list-disc list-inside space-y-1">
+                    {result.punti_criticita.map((p, idx) => (
+                      <li key={idx}>{p}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           )}
-        </div>
-      </section>
-    </main>
+
+          {result.consigli_finali && result.consigli_finali.length > 0 && (
+            <div className="text-sm">
+              <h3 className="font-semibold mb-1">Consigli finali</h3>
+              <ul className="list-disc list-inside space-y-1">
+                {result.consigli_finali.map((c, idx) => (
+                  <li key={idx}>{c}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
+    </div>
   );
 }
