@@ -322,7 +322,7 @@ export default function TemaPage() {
         )}
 
         {/* BLOCCO DYANA - SOLO PREMIUM E SE ESISTE UNA LETTURA */}
-        {isPremium && hasReading && readingTextForDyana && (
+        {hasReading && readingTextForDyana && (
           <section className="section">
             <div
               className="card"
