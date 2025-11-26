@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { DyanaPopup } from "../../components/DyanaPopup";
 
-const TYPEBOT_DYANA_ID = "https://typebot.co/dyana-ai"; // TODO: sostituisci con lo slug reale del tuo Typebot
+const TYPEBOT_DYANA_ID = "dyana-ai"; // TODO: sostituisci con lo slug reale del tuo Typebot
 
 export default function TemaPage() {
   const [form, setForm] = useState({
