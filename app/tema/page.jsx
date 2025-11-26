@@ -1,8 +1,18 @@
 "use client";
+
 import { useState } from "react";
 import { DyanaPopup } from "../../components/DyanaPopup";
 
-const TYPEBOT_DYANA_ID = "dyana-ai"; // TODO: sostituisci con lo slug reale del tuo Typebot
+// ID che al momento non usiamo più, ma lo lascio se serve in futuro
+const TYPEBOT_DYANA_ID = "diyana-ai";
+
+// Base URL del backend AstroBot (usa .env se presente, altrimenti localhost)
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8001";
+
+// JWT per chiamare /tema_ai (deve essere settato in .env.local)
+const ASTROBOT_JWT_TEMA =
+  process.env.NEXT_PUBLIC_ASTROBOT_JWT_TEMA || "";
 
 export default function TemaPage() {
   const [form, setForm] = useState({
@@ -19,7 +29,7 @@ export default function TemaPage() {
   const [risultato, setRisultato] = useState(null); // JSON completo per debug
   const [errore, setErrore] = useState("");
 
-  // Nuovi stati per DYANA
+  // Stati per DYANA (per ora non usati dall'iframe, ma li teniamo per dopo)
   const [readingId, setReadingId] = useState("");
   const [readingPayload, setReadingPayload] = useState(null);
   const [kbTags, setKbTags] = useState([]);
@@ -27,13 +37,8 @@ export default function TemaPage() {
   // Sessione DYANA per questa pagina (generata una volta)
   const [sessionId] = useState(() => `tema_session_${Date.now()}`);
 
-  // TODO: integra con il tuo sistema di login
+  // TODO: integra con il tuo sistema di login reale
   const userId = "user_tema_demo";
-
-  // Stessa logica che avevi su tema prima (Render come fallback)
-  const API_BASE =
-    process.env.NEXT_PUBLIC_API_BASE ||
-    "https://chatbot-test-0h4o.onrender.com";
 
   function handleChange(e) {
     const { name, value } = e.target;
@@ -51,21 +56,26 @@ export default function TemaPage() {
     setRisultato(null);
 
     try {
+      // Payload allineato al curl che funziona con /tema_ai
       const payload = {
         citta: form.citta,
         data: form.data, // "YYYY-MM-DD"
-        ora: form.ora, // "HH:MM"
+        ora: form.ora,   // "HH:MM"
         nome: form.nome || null,
-        email: null,
-        domanda: null,
         tier: form.tier, // "free" o "premium"
       };
 
+      const headers = {
+        "Content-Type": "application/json",
+      };
+
+      if (ASTROBOT_JWT_TEMA) {
+        headers["Authorization"] = `Bearer ${ASTROBOT_JWT_TEMA}`;
+      }
+
       const res = await fetch(`${API_BASE}/tema_ai`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify(payload),
       });
 
@@ -108,18 +118,15 @@ export default function TemaPage() {
         setInterpretazione(profiloGenerale);
       }
 
-      // ====== Aggancio variabili per DYANA ======
+      // ====== Aggancio variabili per DYANA (serve dopo) ======
 
-      // reading_id (se esiste in meta, altrimenti uno generato)
       const meta = data?.result?.meta || {};
       const readingIdFromBackend =
         meta.reading_id || meta.id || `tema_${Date.now()}`;
       setReadingId(readingIdFromBackend);
 
-      // payload completo: per DYANA lo consideriamo l'intero JSON di risposta
       setReadingPayload(data);
 
-      // kb_tags: se esistono in meta, altrimenti fallback generico
       const kbFromBackend = meta.kb_tags || ["tema_natale"];
       setKbTags(kbFromBackend);
     } catch (err) {
@@ -146,8 +153,6 @@ export default function TemaPage() {
   const isPremium = form.tier === "premium";
 
   // Costruiamo il reading_text che DYANA deve vedere:
-  // - sempre il profilo generale
-  // - se premium, aggiungiamo le sezioni dettagliate disponibili
   let readingTextForDyana = interpretazione || "";
   if (isPremium && contenuto) {
     const extraParts = [];
@@ -321,30 +326,90 @@ export default function TemaPage() {
           </section>
         )}
 
-        {/* BLOCCO DYANA - SOLO PREMIUM E SE ESISTE UNA LETTURA */}
+        {/* BLOCCO DYANA */}
         {hasReading && readingTextForDyana && (
           <section className="section">
             <div
-              className="card"
-              style={{ maxWidth: "850px", margin: "0 auto" }}
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                marginTop: 32,
+              }}
             >
-              <h3 className="card-title">Hai domande sul tuo Tema Natale?</h3>
-              <p className="card-text">
-                Puoi fare 2 domande di chiarimento a DYANA a partire da questa
-                lettura.
-              </p>
+              <div
+                className="card"
+                style={{
+                  width: "100%",
+                  maxWidth: "960px",
+                  padding: "22px 24px",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  boxShadow: "0 18px 40px rgba(0,0,0,0.75)",
+                }}
+              >
+                <p
+                  className="card-text"
+                  style={{
+                    fontSize: "0.8rem",
+                    opacity: 0.8,
+                    marginBottom: 4,
+                  }}
+                >
+                  DYANA • Q&amp;A sul tuo Tema Natale
+                </p>
 
-              <DyanaPopup
-                typebotId={TYPEBOT_DYANA_ID}
-                userId={userId}
-                sessionId={sessionId}
-                readingId={readingId || "tema_inline"}
-                readingType="tema_natale"
-                readingLabel="Il tuo Tema Natale"
-                readingText={readingTextForDyana}
-                readingPayload={readingPayload}
-                kbTags={kbTags}
-              />
+                <h3
+                  className="card-title"
+                  style={{ marginBottom: 6 }}
+                >
+                  Hai domande su questa lettura?
+                </h3>
+
+                <p
+                  className="card-text"
+                  style={{ marginBottom: 4, opacity: 0.9 }}
+                >
+                  DYANA conosce già il Tema che hai appena generato e può
+                  aiutarti a capire meglio cosa sta emergendo nel tuo cielo
+                  personale.
+                </p>
+
+                <p
+                  className="card-text"
+                  style={{ fontSize: "0.9rem", opacity: 0.8 }}
+                >
+                  Hai a disposizione <strong>2 domande di chiarimento</strong>{" "}
+                  incluse con questo Tema. In seguito potrai usare i tuoi
+                  crediti per sbloccare ulteriori domande extra.
+                </p>
+
+                {/* Bottone + finestra DYANA sotto */}
+<div style={{ marginTop: 14 }}>
+  <DyanaPopup
+    typebotId={TYPEBOT_DYANA_ID}
+    userId={userId}
+    sessionId={sessionId}
+    readingId={readingId || "tema_inline"}
+    readingType="tema_natale"
+    readingLabel="Il tuo Tema Natale"
+    readingText={readingTextForDyana}
+    readingPayload={readingPayload}
+    kbTags={kbTags}
+  />
+</div>
+
+                <p
+                  className="card-text"
+                  style={{
+                    marginTop: 8,
+                    fontSize: "0.75rem",
+                    opacity: 0.65,
+                    textAlign: "right",
+                  }}
+                >
+                  DYANA risponde solo su questo Tema, non su altri argomenti
+                  generici.
+                </p>
+              </div>
             </div>
           </section>
         )}
