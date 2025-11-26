@@ -1,5 +1,8 @@
 "use client";
 import { useState } from "react";
+import { DyanaPopup } from "../../components/DyanaPopup";
+
+const TYPEBOT_DYANA_ID = "https://typebot.co/dyana-ai"; // TODO: sostituisci con lo slug reale del tuo Typebot
 
 export default function TemaPage() {
   const [form, setForm] = useState({
@@ -15,6 +18,17 @@ export default function TemaPage() {
   const [contenuto, setContenuto] = useState(null); // contiene data.result.content
   const [risultato, setRisultato] = useState(null); // JSON completo per debug
   const [errore, setErrore] = useState("");
+
+  // Nuovi stati per DYANA
+  const [readingId, setReadingId] = useState("");
+  const [readingPayload, setReadingPayload] = useState(null);
+  const [kbTags, setKbTags] = useState([]);
+
+  // Sessione DYANA per questa pagina (generata una volta)
+  const [sessionId] = useState(() => `tema_session_${Date.now()}`);
+
+  // TODO: integra con il tuo sistema di login
+  const userId = "user_tema_demo";
 
   // Stessa logica che avevi su tema prima (Render come fallback)
   const API_BASE =
@@ -40,7 +54,7 @@ export default function TemaPage() {
       const payload = {
         citta: form.citta,
         data: form.data, // "YYYY-MM-DD"
-        ora: form.ora,   // "HH:MM"
+        ora: form.ora, // "HH:MM"
         nome: form.nome || null,
         email: null,
         domanda: null,
@@ -93,6 +107,21 @@ export default function TemaPage() {
       } else {
         setInterpretazione(profiloGenerale);
       }
+
+      // ====== Aggancio variabili per DYANA ======
+
+      // reading_id (se esiste in meta, altrimenti uno generato)
+      const meta = data?.result?.meta || {};
+      const readingIdFromBackend =
+        meta.reading_id || meta.id || `tema_${Date.now()}`;
+      setReadingId(readingIdFromBackend);
+
+      // payload completo: per DYANA lo consideriamo l'intero JSON di risposta
+      setReadingPayload(data);
+
+      // kb_tags: se esistono in meta, altrimenti fallback generico
+      const kbFromBackend = meta.kb_tags || ["tema_natale"];
+      setKbTags(kbFromBackend);
     } catch (err) {
       console.error("[DYANA /tema_ai] errore fetch:", err);
       setErrore(
@@ -115,6 +144,25 @@ export default function TemaPage() {
   };
 
   const isPremium = form.tier === "premium";
+
+  // Costruiamo il reading_text che DYANA deve vedere:
+  // - sempre il profilo generale
+  // - se premium, aggiungiamo le sezioni dettagliate disponibili
+  let readingTextForDyana = interpretazione || "";
+  if (isPremium && contenuto) {
+    const extraParts = [];
+    Object.entries(sectionLabels).forEach(([key, label]) => {
+      const text = contenuto?.[key];
+      if (text) {
+        extraParts.push(`${label}:\n${text}`);
+      }
+    });
+    if (extraParts.length > 0) {
+      readingTextForDyana += "\n\n" + extraParts.join("\n\n");
+    }
+  }
+
+  const hasReading = !!interpretazione;
 
   return (
     <main className="page-root">
@@ -269,6 +317,34 @@ export default function TemaPage() {
                   );
                 })}
               </div>
+            </div>
+          </section>
+        )}
+
+        {/* BLOCCO DYANA - SOLO PREMIUM E SE ESISTE UNA LETTURA */}
+        {isPremium && hasReading && readingTextForDyana && (
+          <section className="section">
+            <div
+              className="card"
+              style={{ maxWidth: "850px", margin: "0 auto" }}
+            >
+              <h3 className="card-title">Hai domande sul tuo Tema Natale?</h3>
+              <p className="card-text">
+                Puoi fare 2 domande di chiarimento a DYANA a partire da questa
+                lettura.
+              </p>
+
+              <DyanaPopup
+                typebotId={TYPEBOT_DYANA_ID}
+                userId={userId}
+                sessionId={sessionId}
+                readingId={readingId || "tema_inline"}
+                readingType="tema_natale"
+                readingLabel="Il tuo Tema Natale"
+                readingText={readingTextForDyana}
+                readingPayload={readingPayload}
+                kbTags={kbTags}
+              />
             </div>
           </section>
         )}
