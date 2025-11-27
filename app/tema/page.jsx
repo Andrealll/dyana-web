@@ -14,7 +14,9 @@ const TYPEBOT_DYANA_ID = "diyana-ai";
 // Base URL del backend AstroBot (usa .env se presente, altrimenti localhost)
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8001";
-
+if (typeof window !== "undefined") {
+  console.log("[DYANA] API_BASE runtime:", API_BASE);
+}
 // JWT per chiamare /tema_ai (fallback da .env.local)
 const ASTROBOT_JWT_TEMA =
   process.env.NEXT_PUBLIC_ASTROBOT_JWT_TEMA || "";
