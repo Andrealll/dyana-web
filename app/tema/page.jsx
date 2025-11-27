@@ -104,18 +104,42 @@ export default function TemaPage() {
   const [userRole, setUserRole] = useState("guest"); // "guest" | "free" | "premium" ...
   const [userCredits, setUserCredits] = useState(2); // guest parte con 2 crediti demo
 
-  // Funzione che legge il token (se c'è) e aggiorna ruolo + crediti
+  // NEW: user_id da passare a DYANA Q&A (guest o sub del JWT)
+  const [userIdForDyana, setUserIdForDyana] = useState("guest_tema");
+
+  // NEW: blocco billing restituito dal backend /tema_ai (quando ci sarà)
+  const [billing, setBilling] = useState(null);
+
+  // Stati per DYANA (per ora non usati dall'iframe, ma li teniamo per dopo)
+  const [readingId, setReadingId] = useState("");
+  const [readingPayload, setReadingPayload] = useState(null);
+  const [kbTags, setKbTags] = useState([]);
+
+  // Sessione DYANA per questa pagina (generata una volta)
+  const [sessionId] = useState(() => `tema_session_${Date.now()}`);
+
+  // Funzione che legge il token (se c'è) e aggiorna ruolo + crediti + userId per DYANA
   function refreshUserFromToken() {
     const token = getToken();
     if (!token) {
       setUserRole("guest");
       setUserCredits(2); // guest = 2 crediti demo
+      setUserIdForDyana("guest_tema");
       return;
     }
 
     const payload = decodeJwtPayload(token);
     const role = payload?.role || "free"; // nel tuo JWT: "role": "free"
     setUserRole(role);
+
+    // NEW: user_id per DYANA Q&A
+    // se il token ha un sub usiamo quello, altrimenti fallback guest
+    const sub = payload?.sub;
+    if (sub) {
+      setUserIdForDyana(sub);
+    } else {
+      setUserIdForDyana("guest_tema");
+    }
 
     // Mappa semplice di crediti per ora (mock lato frontend)
     // Poi la sostituiremo con una chiamata al backend /credits/state
@@ -128,17 +152,6 @@ export default function TemaPage() {
       setUserCredits(2);
     }
   }
-
-  // Stati per DYANA (per ora non usati dall'iframe, ma li teniamo per dopo)
-  const [readingId, setReadingId] = useState("");
-  const [readingPayload, setReadingPayload] = useState(null);
-  const [kbTags, setKbTags] = useState([]);
-
-  // Sessione DYANA per questa pagina (generata una volta)
-  const [sessionId] = useState(() => `tema_session_${Date.now()}`);
-
-  // TODO: integra con il tuo sistema di login reale
-  const userId = "user_tema_demo";
 
   useEffect(() => {
     refreshUserFromToken();
@@ -170,7 +183,7 @@ export default function TemaPage() {
       await loginWithCredentials(loginEmail, loginPassword);
       setLoginSuccess("Login effettuato con successo ✅");
 
-      // Aggiorna ruolo + crediti leggendo il nuovo token
+      // Aggiorna ruolo + crediti + userId leggendo il nuovo token
       refreshUserFromToken();
 
       const newToken = getToken();
@@ -192,6 +205,8 @@ export default function TemaPage() {
     setUserRole("guest");
     setUserCredits(2);
     setTokenPreview(null);
+    // NEW: reset userId per DYANA
+    setUserIdForDyana("guest_tema");
     alert("Logout effettuato");
   }
 
@@ -201,6 +216,8 @@ export default function TemaPage() {
     setInterpretazione("");
     setContenuto(null);
     setRisultato(null);
+    // NEW: reset billing ad ogni nuova richiesta
+    setBilling(null);
 
     try {
       // Payload allineato al curl che funziona con /tema_ai
@@ -254,6 +271,13 @@ export default function TemaPage() {
       // Salviamo tutto per debug
       setRisultato(data);
 
+      // NEW: estraiamo blocco billing se il backend lo espone
+      if (data && data.billing) {
+        setBilling(data.billing);
+      } else {
+        setBilling(null);
+      }
+
       const content = data?.result?.content || null;
       setContenuto(content);
 
@@ -269,7 +293,6 @@ export default function TemaPage() {
       }
 
       // ====== Aggancio variabili per DYANA (serve dopo) ======
-
       const meta = data?.result?.meta || {};
       const readingIdFromBackend =
         meta.reading_id || meta.id || `tema_${Date.now()}`;
@@ -662,7 +685,8 @@ export default function TemaPage() {
                 <div style={{ marginTop: 14 }}>
                   <DyanaPopup
                     typebotId={TYPEBOT_DYANA_ID}
-                    userId={userId}
+                    // NEW: id coerente col JWT/guest
+                    userId={userIdForDyana}
                     sessionId={sessionId}
                     readingId={readingId || "tema_inline"}
                     readingType="tema_natale"
@@ -686,6 +710,24 @@ export default function TemaPage() {
                   generici.
                 </p>
               </div>
+            </div>
+          </section>
+        )}
+
+        {/* BLOCCO BILLING (se il backend lo restituisce) */}
+        {billing && (
+          <section className="section">
+            <div
+              className="card"
+              style={{ maxWidth: "850px", margin: "0 auto" }}
+            >
+              <h3 className="card-title">Billing (debug)</h3>
+              <pre
+                className="card-text"
+                style={{ whiteSpace: "pre-wrap", fontSize: "0.85rem" }}
+              >
+                {JSON.stringify(billing, null, 2)}
+              </pre>
             </div>
           </section>
         )}
