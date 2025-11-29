@@ -1,10 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { DyanaPopup } from "../../components/DyanaPopup";
-import { getToken, clearToken } from "../../lib/authClient";
-import DyanaNavbar from "../../components/DyanaNavbar";
+import {
+  loginWithCredentials,
+  getToken,
+  clearToken,
+} from "../../lib/authClient";
+
 // ==========================
 // COSTANTI GLOBALI
 // ==========================
@@ -13,28 +16,30 @@ import DyanaNavbar from "../../components/DyanaNavbar";
 const TYPEBOT_DYANA_ID = "diyana-ai";
 
 // Base URL del backend AstroBot (Render → fallback locale)
+// FIX: niente più "stringa" || "stringa" || "stringa"
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE
   ? process.env.NEXT_PUBLIC_API_BASE
   : (typeof window !== "undefined" &&
       (window.location.hostname === "localhost" ||
-        window.location.hostname === "127.0.0.1"))
-  ? "http://127.0.0.1:8001"
-  : "https://chatbot-test-0h4o.onrender.com";
+       window.location.hostname === "127.0.0.1"))
+    ? "http://127.0.0.1:8001"
+    : "https://chatbot-test-0h4o.onrender.com";
 
 // Base URL del servizio auth (astrobot_auth_pub, Render → fallback locale)
 const AUTH_BASE = process.env.NEXT_PUBLIC_AUTH_BASE
   ? process.env.NEXT_PUBLIC_AUTH_BASE
   : (typeof window !== "undefined" &&
       (window.location.hostname === "localhost" ||
-        window.location.hostname === "127.0.0.1"))
-  ? "http://127.0.0.1:8002"
-  : "https://astrobot-auth-pub.onrender.com";
+       window.location.hostname === "127.0.0.1"))
+    ? "http://127.0.0.1:8002"
+    : "https://astrobot-auth-pub.onrender.com";
 
 // Storage key per il JWT guest
 const GUEST_TOKEN_STORAGE_KEY = "diyana_guest_jwt";
 
 // JWT di fallback (non dovrebbe servire, ma lo lasciamo come ultima spiaggia)
-const ASTROBOT_JWT_TEMA = process.env.NEXT_PUBLIC_ASTROBOT_JWT_TEMA || "";
+const ASTROBOT_JWT_TEMA =
+  process.env.NEXT_PUBLIC_ASTROBOT_JWT_TEMA || "";
 
 // Singleton per evitare più chiamate parallele a /auth/anonymous
 let guestTokenPromise = null;
@@ -51,7 +56,9 @@ function decodeJwtPayload(token) {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
-    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = parts[1]
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
     const decoded = atob(payload);
     return JSON.parse(decoded);
   } catch (e) {
@@ -60,10 +67,54 @@ function decodeJwtPayload(token) {
   }
 }
 
+// ==========================
+// Navbar
+// ==========================
+function DyanaNavbar({ userRole, credits, onLogout }) {
+  const isGuest = userRole === "guest";
+
+  return (
+    <header
+      style={{
+        width: "100%",
+        padding: "10px 20px",
+        borderBottom: "1px solid rgba(255,255,255,0.08)",
+        background: "rgba(5, 8, 22, 0.9)",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 16,
+      }}
+    >
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        <span style={{ fontSize: "0.85rem", opacity: 0.9 }}>
+          {isGuest ? "Ospite" : `Utente DYANA (${userRole})`}
+        </span>
+        <span style={{ fontSize: "0.8rem", opacity: 0.75 }}>
+          Crediti disponibili: <strong>{credits}</strong>
+        </span>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {!isGuest && (
+          <button
+            type="button"
+            onClick={onLogout}
+            className="btn"
+            style={{ fontSize: "0.8rem" }}
+          >
+            Logout
+          </button>
+        )}
+      </div>
+    </header>
+  );
+}
 
 // ==========================
 // FUNZIONE GUEST TOKEN SINGLETON
 // ==========================
+
 async function getGuestTokenSingleton() {
   if (typeof window === "undefined") return null;
 
@@ -132,6 +183,15 @@ export default function TemaPage() {
   const [risultato, setRisultato] = useState(null);
   const [errore, setErrore] = useState("");
 
+  // Stati login
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginErrore, setLoginErrore] = useState("");
+  const [loginSuccess, setLoginSuccess] = useState("");
+
+  const [tokenPreview, setTokenPreview] = useState(null);
+
   // Stato utente "globale"
   const [userRole, setUserRole] = useState("guest");
   const [userCredits, setUserCredits] = useState(2);
@@ -186,14 +246,59 @@ export default function TemaPage() {
     // 1) Token login, se c'è
     refreshUserFromToken();
 
+    const token = getToken();
+    if (token) {
+      setTokenPreview(token.slice(0, 20));
+    } else {
+      setTokenPreview(null);
+    }
+
     // 2) Inizializza guest token in background (ma in modo singleton)
     getGuestTokenSingleton();
   }, []);
 
+  // ======================================================
+  // Handlers UI
+  // ======================================================
+  function handleChange(e) {
+    const { name, value } = e.target;
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  }
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    setLoginErrore("");
+    setLoginSuccess("");
+    setLoginLoading(true);
+
+    try {
+      await loginWithCredentials(loginEmail, loginPassword);
+      setLoginSuccess("Login effettuato con successo ✅");
+
+      refreshUserFromToken();
+
+      const newToken = getToken();
+      if (newToken) {
+        setTokenPreview(newToken.slice(0, 20));
+      }
+    } catch (err) {
+      console.error("[DYANA] Errore login:", err);
+      setLoginErrore(err.message || "Errore durante il login");
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
   function handleLogout() {
     clearToken();
+    setLoginSuccess("");
+    setLoginErrore("");
     setUserRole("guest");
     setUserCredits(2);
+    setTokenPreview(null);
     setUserIdForDyana("guest_tema");
     alert("Logout effettuato");
   }
@@ -365,6 +470,116 @@ export default function TemaPage() {
           </p>
         </header>
 
+        {/* BOX LOGIN */}
+        <section className="section">
+          <div
+            className="card"
+            style={{ maxWidth: "650px", margin: "0 auto 24px auto" }}
+          >
+            <h3 className="card-title" style={{ marginBottom: 8 }}>
+              Login (test JWT astrobot_auth_pub)
+            </h3>
+            <p
+              className="card-text"
+              style={{ fontSize: "0.9rem", opacity: 0.8 }}
+            >
+              Effettua l&apos;accesso con le credenziali configurate su{" "}
+              <code>astrobot_auth_pub</code>. Il token sarà usato per chiamare{" "}
+              <code>/tema_ai</code>. Se non fai login, DYANA userà un token
+              guest anonimo generato da <code>/auth/anonymous</code>.
+            </p>
+
+            <form
+              onSubmit={handleLogin}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+                marginTop: 12,
+              }}
+            >
+              <div>
+                <label className="card-text">Username</label>
+                <input
+                  type="text"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  className="form-input"
+                  placeholder="demo"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="card-text">Password</label>
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  className="form-input"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "center",
+                  marginTop: 6,
+                }}
+              >
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={loginLoading}
+                >
+                  {loginLoading ? "Accesso..." : "Accedi"}
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ fontSize: "0.8rem" }}
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
+
+                {tokenPreview && (
+                  <span
+                    className="card-text"
+                    style={{
+                      fontSize: "0.7rem",
+                      opacity: 0.65,
+                      marginLeft: "auto",
+                    }}
+                  >
+                    Token presente: {tokenPreview}...
+                  </span>
+                )}
+              </div>
+
+              {loginErrore && (
+                <p
+                  className="card-text"
+                  style={{ color: "#ff9a9a", marginTop: 6 }}
+                >
+                  {loginErrore}
+                </p>
+              )}
+              {loginSuccess && (
+                <p
+                  className="card-text"
+                  style={{ color: "#9cffb2", marginTop: 6 }}
+                >
+                  {loginSuccess}
+                </p>
+              )}
+            </form>
+          </div>
+        </section>
+
         {/* FORM */}
         <section className="section">
           <div className="card" style={{ maxWidth: "650px", margin: "0 auto" }}>
@@ -381,7 +596,7 @@ export default function TemaPage() {
                   type="text"
                   name="nome"
                   value={form.nome}
-                  onChange={(e) => setForm({ ...form, nome: e.target.value })}
+                  onChange={handleChange}
                   className="form-input"
                 />
               </div>
@@ -392,7 +607,7 @@ export default function TemaPage() {
                   type="date"
                   name="data"
                   value={form.data}
-                  onChange={(e) => setForm({ ...form, data: e.target.value })}
+                  onChange={handleChange}
                   className="form-input"
                 />
               </div>
@@ -403,7 +618,7 @@ export default function TemaPage() {
                   type="time"
                   name="ora"
                   value={form.ora}
-                  onChange={(e) => setForm({ ...form, ora: e.target.value })}
+                  onChange={handleChange}
                   className="form-input"
                 />
               </div>
@@ -414,7 +629,7 @@ export default function TemaPage() {
                   type="text"
                   name="citta"
                   value={form.citta}
-                  onChange={(e) => setForm({ ...form, citta: e.target.value })}
+                  onChange={handleChange}
                   className="form-input"
                   placeholder="Es. Napoli, IT"
                 />
@@ -425,7 +640,7 @@ export default function TemaPage() {
                 <select
                   name="tier"
                   value={form.tier}
-                  onChange={(e) => setForm({ ...form, tier: e.target.value })}
+                  onChange={handleChange}
                   className="form-input"
                 >
                   <option value="free">Free (0 crediti)</option>
@@ -441,7 +656,7 @@ export default function TemaPage() {
                 >
                   Hai <strong>{userCredits}</strong> crediti disponibili.{" "}
                   L&apos;opzione selezionata userà{" "}
-                  <strong>{form.tier === "premium" ? 2 : 0}</strong> crediti.
+                    <strong>{form.tier === "premium" ? 2 : 0}</strong> crediti.
                 </p>
               </div>
 
@@ -487,9 +702,7 @@ export default function TemaPage() {
             >
               <h3 className="card-title">Sezioni dettagliate</h3>
 
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: 16 }}
-              >
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 {Object.entries(sectionLabels).map(([key, label]) => {
                   const text = contenuto?.[key];
                   if (!text) return null;
@@ -595,6 +808,42 @@ export default function TemaPage() {
                   generici.
                 </p>
               </div>
+            </div>
+          </section>
+        )}
+
+        {/* BLOCCO BILLING */}
+        {billing && (
+          <section className="section">
+            <div
+              className="card"
+              style={{ maxWidth: "850px", margin: "0 auto" }}
+            >
+              <h3 className="card-title">Billing (debug)</h3>
+              <pre
+                className="card-text"
+                style={{ whiteSpace: "pre-wrap", fontSize: "0.85rem" }}
+              >
+                {JSON.stringify(billing, null, 2)}
+              </pre>
+            </div>
+          </section>
+        )}
+
+        {/* DEBUG COMPLETO */}
+        {risultato && (
+          <section className="section">
+            <div
+              className="card"
+              style={{ maxWidth: "850px", margin: "0 auto" }}
+            >
+              <h3 className="card-title">Dettagli Tema (debug)</h3>
+              <pre
+                className="card-text"
+                style={{ whiteSpace: "pre-wrap", fontSize: "0.9rem" }}
+              >
+                {JSON.stringify(risultato, null, 2)}
+              </pre>
             </div>
           </section>
         )}

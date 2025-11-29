@@ -1,6 +1,120 @@
 "use client";
-import { useState } from "react";
 
+import { useState, useEffect } from "react";
+import DyanaNavbar from "../../components/DyanaNavbar";
+import { DyanaPopup } from "../../components/DyanaPopup";
+import { getToken, clearToken } from "../../lib/authClient";
+
+// ==========================
+// COSTANTI GLOBALI
+// ==========================
+
+const TYPEBOT_DYANA_ID = "diyana-ai";
+
+// Base URL del backend AstroBot (Render → fallback locale)
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE
+  ? process.env.NEXT_PUBLIC_API_BASE
+  : (typeof window !== "undefined" &&
+      (window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1"))
+  ? "http://127.0.0.1:8001"
+  : "https://chatbot-test-0h4o.onrender.com";
+
+// Base URL del servizio auth (astrobot_auth_pub, Render → fallback locale)
+const AUTH_BASE = process.env.NEXT_PUBLIC_AUTH_BASE
+  ? process.env.NEXT_PUBLIC_AUTH_BASE
+  : (typeof window !== "undefined" &&
+      (window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1"))
+  ? "http://127.0.0.1:8002"
+  : "https://astrobot-auth-pub.onrender.com";
+
+// Storage key per il JWT guest
+const GUEST_TOKEN_STORAGE_KEY = "diyana_guest_jwt";
+
+// JWT di fallback (stesso di tema, ultima spiaggia)
+const ASTROBOT_JWT_TEMA = process.env.NEXT_PUBLIC_ASTROBOT_JWT_TEMA || "";
+
+// Singleton per evitare più chiamate parallele a /auth/anonymous
+let guestTokenPromise = null;
+
+if (typeof window !== "undefined") {
+  console.log("[DYANA/COMPAT] API_BASE runtime:", API_BASE);
+  console.log("[DYANA/COMPAT] AUTH_BASE runtime:", AUTH_BASE);
+}
+
+// ==========================
+// Helper decode JWT
+// ==========================
+function decodeJwtPayload(token) {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const decoded = atob(payload);
+    return JSON.parse(decoded);
+  } catch (e) {
+    console.error("[DYANA/COMPAT] Errore decode JWT:", e);
+    return null;
+  }
+}
+
+// ==========================
+// FUNZIONE GUEST TOKEN SINGLETON
+// ==========================
+async function getGuestTokenSingleton() {
+  if (typeof window === "undefined") return null;
+
+  // 1) Se esiste in localStorage → lo usiamo sempre
+  const stored = window.localStorage.getItem(GUEST_TOKEN_STORAGE_KEY);
+  if (stored) {
+    return stored;
+  }
+
+  // 2) Se una richiesta è già in corso → riusiamo la stessa Promise
+  if (guestTokenPromise) {
+    return guestTokenPromise;
+  }
+
+  // 3) Creiamo la promise una sola volta
+  const base = AUTH_BASE.replace(/\/+$/, ""); // toglie eventuali slash finali
+  const url = `${base}/auth/anonymous`;
+  console.log("[DYANA/COMPAT] getGuestTokenSingleton URL:", url);
+
+  guestTokenPromise = (async () => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.error("[DYANA/COMPAT] /auth/anonymous non OK:", res.status);
+        return null;
+      }
+      const data = await res.json();
+      const token = data?.access_token || data?.token;
+      if (!token) {
+        console.error(
+          "[DYANA/COMPAT] /auth/anonymous: token mancante nella risposta",
+          data
+        );
+        return null;
+      }
+      window.localStorage.setItem(GUEST_TOKEN_STORAGE_KEY, token);
+      console.log("[DYANA/COMPAT] Guest token inizializzato");
+      return token;
+    } catch (err) {
+      console.error("[DYANA/COMPAT] Errore chiamando /auth/anonymous:", err);
+      return null;
+    } finally {
+      // non azzeriamo guestTokenPromise: tiene in cache il risultato
+    }
+  })();
+
+  const token = await guestTokenPromise;
+  return token;
+}
+
+// ==========================
+// COMPONENTE PRINCIPALE
+// ==========================
 export default function CompatibilitaPage() {
   const [form, setForm] = useState({
     nomeA: "",
@@ -16,9 +130,75 @@ export default function CompatibilitaPage() {
 
   const [loading, setLoading] = useState(false);
   const [errore, setErrore] = useState("");
-  const [risultato, setRisultato] = useState(null);      // JSON completo
-  const [sinastriaAI, setSinastriaAI] = useState(null);  // risultato.sinastria_ai
+  const [risultato, setRisultato] = useState(null); // JSON completo
+  const [sinastriaAI, setSinastriaAI] = useState(null); // risultato.sinastria_ai
 
+  // Stato utente per navbar
+  const [userRole, setUserRole] = useState("guest");
+  const [userCredits, setUserCredits] = useState(2);
+  const [userIdForDyana, setUserIdForDyana] = useState("guest_compat");
+
+  // billing (debug/logica interna)
+  const [billing, setBilling] = useState(null);
+
+  // Stati per DYANA Q&A
+  const [readingId, setReadingId] = useState("");
+  const [readingPayload, setReadingPayload] = useState(null);
+  const [kbTags, setKbTags] = useState([]);
+
+  // Sessione per questa pagina (per header X-Client-Session)
+  const [sessionId] = useState(() => `compat_session_${Date.now()}`);
+
+  // ======================================================
+  // Token login (registrato) → aggiorna UI
+  // ======================================================
+  function refreshUserFromToken() {
+    const token = getToken();
+    if (!token) {
+      setUserRole("guest");
+      setUserCredits(2);
+      setUserIdForDyana("guest_compat");
+      return;
+    }
+
+    const payload = decodeJwtPayload(token);
+    const role = payload?.role || "free";
+    setUserRole(role);
+
+    const sub = payload?.sub;
+    if (sub) {
+      setUserIdForDyana(sub);
+    } else {
+      setUserIdForDyana("guest_compat");
+    }
+
+    if (role === "premium") {
+      setUserCredits(10);
+    } else if (role === "free") {
+      setUserCredits(2);
+    } else {
+      setUserCredits(2);
+    }
+  }
+
+  useEffect(() => {
+    // 1) Token login, se c'è
+    refreshUserFromToken();
+    // 2) Guest token in background
+    getGuestTokenSingleton();
+  }, []);
+
+  function handleLogout() {
+    clearToken();
+    setUserRole("guest");
+    setUserCredits(2);
+    setUserIdForDyana("guest_compat");
+    alert("Logout effettuato");
+  }
+
+  // ======================================================
+  // Handlers UI
+  // ======================================================
   function handleChange(e) {
     const { name, value } = e.target;
     setForm((prev) => ({
@@ -27,18 +207,51 @@ export default function CompatibilitaPage() {
     }));
   }
 
+  // Helper per trasformare l'errore backend in stringa sicura
+  function normalizeErrorMessage(data, status) {
+    if (!data) {
+      return `Errore nella generazione della compatibilità (status ${status}).`;
+    }
+
+    if (typeof data.error === "string") {
+      return data.error;
+    }
+
+    const detail = data.detail;
+    if (typeof detail === "string") {
+      return detail;
+    }
+    if (Array.isArray(detail)) {
+      // classico 422 di FastAPI: array di {type, loc, msg, input}
+      const msgs = detail.map((d) => d.msg || JSON.stringify(d));
+      return msgs.join(" | ");
+    }
+    if (detail && typeof detail === "object") {
+      return detail.msg || JSON.stringify(detail);
+    }
+
+    return `Errore nella generazione della compatibilità (status ${status}).`;
+  }
+
+  // ======================================================
+  // Chiamata principale a /sinastria_ai (backend AstroBot)
+  // ======================================================
   async function generaCompatibilita() {
     setLoading(true);
     setErrore("");
     setRisultato(null);
     setSinastriaAI(null);
+    setBilling(null);
+    setReadingId("");
+    setReadingPayload(null);
+    setKbTags([]);
 
     try {
       const payload = {
         A: {
           citta: form.cittaA,
-          data: form.dataA,  // YYYY-MM-DD
-          ora: form.oraA,    // HH:MM
+          data: form.dataA, // YYYY-MM-DD
+          ora: form.oraA, // HH:MM
           nome: form.nomeA || null,
         },
         B: {
@@ -50,9 +263,39 @@ export default function CompatibilitaPage() {
         tier: form.tier,
       };
 
-      const res = await fetch("/api/sinastria_ai", {
+      // 1) Token di login, se esiste
+      let token = getToken();
+
+      // 2) Se non c'è login → guest token singleton
+      if (!token) {
+        const guest = await getGuestTokenSingleton();
+        if (guest) {
+          token = guest;
+        }
+      }
+
+      // 3) Fallback finale: JWT statico (tema)
+      if (!token && ASTROBOT_JWT_TEMA) {
+        token = ASTROBOT_JWT_TEMA;
+      }
+
+      const headers = {
+        "Content-Type": "application/json",
+        "X-Client-Source": "dyana_web/compatibilita",
+        "X-Client-Session": sessionId,
+      };
+
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      } else {
+        console.warn(
+          "[DYANA/COMPAT] Nessun token disponibile (login/guest/fallback)"
+        );
+      }
+
+      const res = await fetch(`${API_BASE}/sinastria_ai`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(payload),
       });
 
@@ -67,16 +310,30 @@ export default function CompatibilitaPage() {
       if (!res.ok) {
         console.log("[DYANA /sinastria_ai] status non OK:", res.status);
         console.log("[DYANA /sinastria_ai] body errore:", data);
-        setErrore(
-          (data && data.error) ||
-            `Errore nella generazione della compatibilità (status ${res.status}).`
-        );
+        const message = normalizeErrorMessage(data, res.status);
+        setErrore(message); // sempre stringa → niente più crash React
         setLoading(false);
         return;
       }
 
       setRisultato(data);
-      setSinastriaAI(data?.sinastria_ai || null);
+      const sin = data?.sinastria_ai || null;
+      setSinastriaAI(sin);
+      if (data && data.billing) {
+        setBilling(data.billing);
+      }
+
+      // Metadati per DYANA (lettura Q&A)
+      const meta =
+        (data && data.payload_ai && data.payload_ai.meta) ||
+        (sin && sin.meta) ||
+        {};
+      const readingIdFromBackend =
+        meta.reading_id || meta.id || `sinastria_${Date.now()}`;
+      setReadingId(readingIdFromBackend);
+      setReadingPayload(data);
+      const kbFromBackend = meta.kb_tags || ["sinastria_ai"];
+      setKbTags(kbFromBackend);
     } catch (err) {
       console.error("[DYANA /sinastria_ai] errore fetch:", err);
       setErrore(
@@ -87,8 +344,59 @@ export default function CompatibilitaPage() {
     }
   }
 
+  // ======================================================
+  // Testo da passare a DYANA Q&A
+  // ======================================================
+  let readingTextForDyana = "";
+  if (sinastriaAI) {
+    const parts = [];
+
+    if (sinastriaAI.sintesi_generale) {
+      parts.push(`Sintesi generale:\n${sinastriaAI.sintesi_generale}`);
+    }
+
+    if (Array.isArray(sinastriaAI.punti_forza) && sinastriaAI.punti_forza.length) {
+      parts.push(
+        "Punti di forza:\n" + sinastriaAI.punti_forza.map((p) => `- ${p}`).join("\n")
+      );
+    }
+
+    if (
+      Array.isArray(sinastriaAI.punti_criticita) &&
+      sinastriaAI.punti_criticita.length
+    ) {
+      parts.push(
+        "Punti di attenzione:\n" +
+          sinastriaAI.punti_criticita.map((p) => `- ${p}`).join("\n")
+      );
+    }
+
+    if (
+      Array.isArray(sinastriaAI.consigli_finali) &&
+      sinastriaAI.consigli_finali.length
+    ) {
+      parts.push(
+        "Consigli finali:\n" +
+          sinastriaAI.consigli_finali.map((c) => `- ${c}`).join("\n")
+      );
+    }
+
+    readingTextForDyana = parts.join("\n\n");
+  }
+
+  const hasReading = !!readingTextForDyana;
+
+  // ======================================================
+  // RENDER
+  // ======================================================
   return (
     <main className="page-root">
+      <DyanaNavbar
+        userRole={userRole}
+        credits={userCredits}
+        onLogout={handleLogout}
+      />
+
       <section className="landing-wrapper">
         {/* INTESTAZIONE */}
         <header className="section">
@@ -248,9 +556,21 @@ export default function CompatibilitaPage() {
                   onChange={handleChange}
                   className="form-input"
                 >
-                  <option value="free">Free</option>
-                  <option value="premium">Premium</option>
+                  <option value="free">Free (0 crediti)</option>
+                  <option value="premium">Premium (3 crediti)</option>
                 </select>
+                <p
+                  className="card-text"
+                  style={{
+                    fontSize: "0.75rem",
+                    opacity: 0.75,
+                    marginTop: 4,
+                  }}
+                >
+                  Hai <strong>{userCredits}</strong> crediti disponibili.{" "}
+                  L&apos;opzione selezionata userà{" "}
+                  <strong>{form.tier === "premium" ? 3 : 0}</strong> crediti.
+                </p>
               </div>
 
               {/* BOTTONE */}
@@ -470,7 +790,90 @@ export default function CompatibilitaPage() {
           </section>
         )}
 
-        {/* DEBUG */}
+        {/* BLOCCO DYANA Q&A SULLA SINASTRIA */}
+        {hasReading && readingPayload && (
+          <section className="section">
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                marginTop: 32,
+              }}
+            >
+              <div
+                className="card"
+                style={{
+                  width: "100%",
+                  maxWidth: "960px",
+                  padding: "22px 24px",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  boxShadow: "0 18px 40px rgba(0,0,0,0.75)",
+                }}
+              >
+                <p
+                  className="card-text"
+                  style={{
+                    fontSize: "0.8rem",
+                    opacity: 0.8,
+                    marginBottom: 4,
+                  }}
+                >
+                  DYANA • Q&amp;A sulla vostra compatibilità
+                </p>
+
+                <h3 className="card-title" style={{ marginBottom: 6 }}>
+                  Hai domande su questa relazione?
+                </h3>
+
+                <p
+                  className="card-text"
+                  style={{ marginBottom: 4, opacity: 0.9 }}
+                >
+                  DYANA conosce già la sinastria che hai appena generato e può
+                  aiutarti a capire meglio le dinamiche della relazione.
+                </p>
+
+                <p
+                  className="card-text"
+                  style={{ fontSize: "0.9rem", opacity: 0.8 }}
+                >
+                  Hai a disposizione <strong>2 domande di chiarimento</strong>{" "}
+                  incluse con questa lettura. Poi potrai usare i tuoi crediti
+                  per sbloccare altre domande extra.
+                </p>
+
+                <div style={{ marginTop: 14 }}>
+                  <DyanaPopup
+                    typebotId={TYPEBOT_DYANA_ID}
+                    userId={userIdForDyana}
+                    sessionId={sessionId}
+                    readingId={readingId || "sinastria_inline"}
+                    readingType="sinastria"
+                    readingLabel="Compatibilità di coppia"
+                    readingText={readingTextForDyana}
+                    readingPayload={readingPayload}
+                    kbTags={kbTags}
+                  />
+                </div>
+
+                <p
+                  className="card-text"
+                  style={{
+                    marginTop: 8,
+                    fontSize: "0.75rem",
+                    opacity: 0.65,
+                    textAlign: "right",
+                  }}
+                >
+                  DYANA risponde solo su questa compatibilità, non su altri
+                  argomenti generici.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* DEBUG COMPLETO */}
         {risultato && (
           <section className="section">
             <div
