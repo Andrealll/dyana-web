@@ -8,22 +8,43 @@ import {
   clearToken,
 } from "../../lib/authClient";
 
-// ID che al momento non usiamo più, ma lo lascio se serve in futuro
+// ==========================
+// COSTANTI GLOBALI
+// ==========================
+
+// ID Typebot (resta com'è ora)
 const TYPEBOT_DYANA_ID = "diyana-ai";
 
-// Base URL del backend AstroBot (usa .env se presente, altrimenti localhost)
+// Base URL del backend AstroBot (Render → fallback locale)
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8001";
+  process.env.NEXT_PUBLIC_API_BASE ||
+  "https://chatbot-test-0h4o.onrender.com" ||
+  "http://127.0.0.1:8001";
 
-if (typeof window !== "undefined") {
-  console.log("[DYANA] API_BASE runtime:", API_BASE);
-}
+// Base URL del servizio auth (astrobot_auth_pub, Render → fallback locale)
+const AUTH_BASE =
+  process.env.NEXT_PUBLIC_AUTH_BASE ||
+  "https://astrobot-auth-pub.onrender.com" ||
+  "http://127.0.0.1:8002";
 
-// JWT per chiamare /tema_ai (fallback da .env.local)
+// Storage key per il JWT guest
+const GUEST_TOKEN_STORAGE_KEY = "diyana_guest_jwt";
+
+// JWT di fallback (non dovrebbe servire, ma lo lasciamo come ultima spiaggia)
 const ASTROBOT_JWT_TEMA =
   process.env.NEXT_PUBLIC_ASTROBOT_JWT_TEMA || "";
 
-// Decodifica molto semplice del payload JWT (senza verifica firma)
+// Singleton per evitare più chiamate parallele a /auth/anonymous
+let guestTokenPromise = null;
+
+if (typeof window !== "undefined") {
+  console.log("[DYANA] API_BASE runtime:", API_BASE);
+  console.log("[DYANA] AUTH_BASE runtime:", AUTH_BASE);
+}
+
+// ==========================
+// Helper decode JWT
+// ==========================
 function decodeJwtPayload(token) {
   try {
     const parts = token.split(".");
@@ -39,6 +60,9 @@ function decodeJwtPayload(token) {
   }
 }
 
+// ==========================
+// Navbar
+// ==========================
 function DyanaNavbar({ userRole, credits, onLogout }) {
   const isGuest = userRole === "guest";
 
@@ -80,19 +104,78 @@ function DyanaNavbar({ userRole, credits, onLogout }) {
   );
 }
 
+// ==========================
+// FUNZIONE GUEST TOKEN SINGLETON
+// ==========================
+
+async function getGuestTokenSingleton() {
+  if (typeof window === "undefined") return null;
+
+  // 1) Se esiste in localStorage → lo usiamo sempre
+  const stored = window.localStorage.getItem(GUEST_TOKEN_STORAGE_KEY);
+  if (stored) {
+    return stored;
+  }
+
+  // 2) Se una richiesta è già in corso → riusiamo la stessa Promise
+  if (guestTokenPromise) {
+    return guestTokenPromise;
+  }
+
+  // 3) Creiamo la promise una sola volta
+  const base = AUTH_BASE.replace(/\/+$/, ""); // toglie eventuali slash finali
+  const url = `${base}/auth/anonymous`;
+  console.log("[DYANA] getGuestTokenSingleton URL:", url);
+
+  guestTokenPromise = (async () => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.error("[DYANA] /auth/anonymous non OK:", res.status);
+        return null;
+      }
+      const data = await res.json();
+      const token = data?.access_token || data?.token;
+      if (!token) {
+        console.error(
+          "[DYANA] /auth/anonymous: token mancante nella risposta",
+          data
+        );
+        return null;
+      }
+      window.localStorage.setItem(GUEST_TOKEN_STORAGE_KEY, token);
+      console.log("[DYANA] Guest token inizializzato");
+      return token;
+    } catch (err) {
+      console.error("[DYANA] Errore chiamando /auth/anonymous:", err);
+      return null;
+    } finally {
+      // NOTE: non azzero guestTokenPromise, così se la chiamata ha avuto successo
+      // la Promise tiene in cache il valore; se è fallita, il risultato è null
+      // ma a quel punto avrai comunque il fallback ASTROBOT_JWT_TEMA.
+    }
+  })();
+
+  const token = await guestTokenPromise;
+  return token;
+}
+
+// ==========================
+// COMPONENTE PRINCIPALE
+// ==========================
 export default function TemaPage() {
   const [form, setForm] = useState({
     nome: "",
     data: "",
     ora: "",
     citta: "",
-    tier: "free", // per testare free/premium
+    tier: "free",
   });
 
   const [loading, setLoading] = useState(false);
   const [interpretazione, setInterpretazione] = useState("");
-  const [contenuto, setContenuto] = useState(null); // contiene data.result.content
-  const [risultato, setRisultato] = useState(null); // JSON completo per debug
+  const [contenuto, setContenuto] = useState(null);
+  const [risultato, setRisultato] = useState(null);
   const [errore, setErrore] = useState("");
 
   // Stati login
@@ -104,40 +187,40 @@ export default function TemaPage() {
 
   const [tokenPreview, setTokenPreview] = useState(null);
 
-  // Stato utente "globale" per la pagina: ruolo + crediti
-  const [userRole, setUserRole] = useState("guest"); // "guest" | "free" | "premium" ...
-  const [userCredits, setUserCredits] = useState(2); // guest parte con 2 crediti demo
+  // Stato utente "globale"
+  const [userRole, setUserRole] = useState("guest");
+  const [userCredits, setUserCredits] = useState(2);
 
-  // NEW: user_id da passare a DYANA Q&A (guest o sub del JWT)
+  // user_id per DYANA Q&A (per ora: sub del JWT login, altrimenti guest_tema)
   const [userIdForDyana, setUserIdForDyana] = useState("guest_tema");
 
-  // NEW: blocco billing restituito dal backend /tema_ai (quando ci sarà)
+  // blocco billing restituito dal backend /tema_ai
   const [billing, setBilling] = useState(null);
 
-  // Stati per DYANA (per ora non usati dall'iframe, ma li teniamo per dopo)
+  // Stati per DYANA
   const [readingId, setReadingId] = useState("");
   const [readingPayload, setReadingPayload] = useState(null);
   const [kbTags, setKbTags] = useState([]);
 
-  // Sessione DYANA per questa pagina (generata una volta)
+  // Sessione DYANA per questa pagina (solo UI, non c'entra con i crediti)
   const [sessionId] = useState(() => `tema_session_${Date.now()}`);
 
-  // Funzione che legge il token (se c'è) e aggiorna ruolo + crediti + userId per DYANA
+  // ======================================================
+  // Token login (registrato) → aggiorna UI
+  // ======================================================
   function refreshUserFromToken() {
     const token = getToken();
     if (!token) {
       setUserRole("guest");
-      setUserCredits(2); // guest = 2 crediti demo
+      setUserCredits(2);
       setUserIdForDyana("guest_tema");
       return;
     }
 
     const payload = decodeJwtPayload(token);
-    const role = payload?.role || "free"; // nel tuo JWT: "role": "free"
+    const role = payload?.role || "free";
     setUserRole(role);
 
-    // NEW: user_id per DYANA Q&A
-    // se il token ha un sub usiamo quello, altrimenti fallback guest
     const sub = payload?.sub;
     if (sub) {
       setUserIdForDyana(sub);
@@ -145,30 +228,33 @@ export default function TemaPage() {
       setUserIdForDyana("guest_tema");
     }
 
-    // Mappa semplice di crediti per ora (mock lato frontend)
-    // Poi la sostituiremo con una chiamata al backend /credits/state
     if (role === "premium") {
       setUserCredits(10);
     } else if (role === "free") {
       setUserCredits(2);
     } else {
-      // guest o altri ruoli particolari
       setUserCredits(2);
     }
   }
 
   useEffect(() => {
+    // 1) Token login, se c'è
     refreshUserFromToken();
 
-    // Aggiorna anche la preview del token (solo lato client, dopo mount)
     const token = getToken();
     if (token) {
       setTokenPreview(token.slice(0, 20));
     } else {
       setTokenPreview(null);
     }
+
+    // 2) Inizializza guest token in background (ma in modo singleton)
+    getGuestTokenSingleton();
   }, []);
 
+  // ======================================================
+  // Handlers UI
+  // ======================================================
   function handleChange(e) {
     const { name, value } = e.target;
     setForm((prev) => ({
@@ -187,7 +273,6 @@ export default function TemaPage() {
       await loginWithCredentials(loginEmail, loginPassword);
       setLoginSuccess("Login effettuato con successo ✅");
 
-      // Aggiorna ruolo + crediti + userId leggendo il nuovo token
       refreshUserFromToken();
 
       const newToken = getToken();
@@ -209,42 +294,56 @@ export default function TemaPage() {
     setUserRole("guest");
     setUserCredits(2);
     setTokenPreview(null);
-    // NEW: reset userId per DYANA
     setUserIdForDyana("guest_tema");
     alert("Logout effettuato");
   }
 
+  // ======================================================
+  // Chiamata principale a /tema_ai
+  // ======================================================
   async function generaTema() {
     setLoading(true);
     setErrore("");
     setInterpretazione("");
     setContenuto(null);
     setRisultato(null);
-    // NEW: reset billing ad ogni nuova richiesta
     setBilling(null);
 
     try {
-      // Payload allineato al curl che funziona con /tema_ai
       const payload = {
         citta: form.citta,
-        data: form.data, // "YYYY-MM-DD"
-        ora: form.ora, // "HH:MM"
+        data: form.data,
+        ora: form.ora,
         nome: form.nome || null,
-        tier: form.tier, // "free" o "premium"
+        tier: form.tier,
       };
 
-      // token dynamic da login, se presente; altrimenti fallback .env
-      const token = getToken() || ASTROBOT_JWT_TEMA;
+      // 1) Token di login, se esiste
+      let token = getToken();
+
+      // 2) Se non c'è login → usiamo il guest token SINGLETON
+      if (!token) {
+        const guest = await getGuestTokenSingleton();
+        if (guest) {
+          token = guest;
+        }
+      }
+
+      // 3) Fallback finale: JWT statico da .env
+      if (!token && ASTROBOT_JWT_TEMA) {
+        token = ASTROBOT_JWT_TEMA;
+      }
 
       const headers = {
         "Content-Type": "application/json",
-        // Metadati per logging lato backend
         "X-Client-Source": "dyana_web/tema",
         "X-Client-Session": sessionId,
       };
 
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
+      } else {
+        console.warn("[DYANA] Nessun token disponibile (login/guest/fallback)");
       }
 
       const res = await fetch(`${API_BASE}/tema_ai`, {
@@ -256,7 +355,6 @@ export default function TemaPage() {
       let data = null;
       const text = await res.text();
 
-      // Proviamo a interpretare la risposta come JSON
       try {
         data = text ? JSON.parse(text) : null;
       } catch {
@@ -275,10 +373,8 @@ export default function TemaPage() {
         return;
       }
 
-      // Salviamo tutto per debug
       setRisultato(data);
 
-      // NEW: estraiamo blocco billing se il backend lo espone
       if (data && data.billing) {
         setBilling(data.billing);
       } else {
@@ -288,9 +384,7 @@ export default function TemaPage() {
       const content = data?.result?.content || null;
       setContenuto(content);
 
-      // Interpretazione principale = profilo_generale
       const profiloGenerale = content?.profilo_generale || "";
-
       if (!profiloGenerale) {
         setInterpretazione(
           "Interpretazione non disponibile (profilo_generale vuoto)."
@@ -299,12 +393,10 @@ export default function TemaPage() {
         setInterpretazione(profiloGenerale);
       }
 
-      // ====== Aggancio variabili per DYANA (serve dopo) ======
       const meta = data?.result?.meta || {};
       const readingIdFromBackend =
         meta.reading_id || meta.id || `tema_${Date.now()}`;
       setReadingId(readingIdFromBackend);
-
       setReadingPayload(data);
 
       const kbFromBackend = meta.kb_tags || ["tema_natale"];
@@ -319,7 +411,9 @@ export default function TemaPage() {
     }
   }
 
-  // Mappa chiave -> etichetta umana
+  // ==========================
+  // Mappa sezioni
+  // ==========================
   const sectionLabels = {
     psicologia_profonda: "Psicologia profonda",
     amore_relazioni: "Amore e relazioni",
@@ -332,7 +426,6 @@ export default function TemaPage() {
 
   const isPremium = form.tier === "premium";
 
-  // Costruiamo il reading_text che DYANA deve vedere:
   let readingTextForDyana = interpretazione || "";
   if (isPremium && contenuto) {
     const extraParts = [];
@@ -349,6 +442,9 @@ export default function TemaPage() {
 
   const hasReading = !!interpretazione;
 
+  // ==========================
+  // RENDER
+  // ==========================
   return (
     <main className="page-root">
       <DyanaNavbar
@@ -384,9 +480,8 @@ export default function TemaPage() {
             >
               Effettua l&apos;accesso con le credenziali configurate su{" "}
               <code>astrobot_auth_pub</code>. Il token sarà usato per chiamare{" "}
-              <code>/tema_ai</code>. Se non fai login, verrà usato il token di
-              fallback definito in{" "}
-              <code>NEXT_PUBLIC_ASTROBOT_JWT_TEMA</code>.
+              <code>/tema_ai</code>. Se non fai login, DYANA userà un token
+              guest anonimo generato da <code>/auth/anonymous</code>.
             </p>
 
             <form
@@ -490,7 +585,6 @@ export default function TemaPage() {
                 gap: "18px",
               }}
             >
-              {/* Nome */}
               <div>
                 <label className="card-text">Nome</label>
                 <input
@@ -502,7 +596,6 @@ export default function TemaPage() {
                 />
               </div>
 
-              {/* Data */}
               <div>
                 <label className="card-text">Data di nascita</label>
                 <input
@@ -514,7 +607,6 @@ export default function TemaPage() {
                 />
               </div>
 
-              {/* Ora */}
               <div>
                 <label className="card-text">Ora di nascita</label>
                 <input
@@ -526,7 +618,6 @@ export default function TemaPage() {
                 />
               </div>
 
-              {/* Città */}
               <div>
                 <label className="card-text">Luogo di nascita</label>
                 <input
@@ -539,7 +630,6 @@ export default function TemaPage() {
                 />
               </div>
 
-              {/* TIER */}
               <div>
                 <label className="card-text">Livello</label>
                 <select
@@ -565,7 +655,6 @@ export default function TemaPage() {
                 </p>
               </div>
 
-              {/* Invio */}
               <button
                 onClick={generaTema}
                 className="btn btn-primary"
@@ -575,7 +664,6 @@ export default function TemaPage() {
                 {loading ? "Generazione..." : "Calcola Tema"}
               </button>
 
-              {/* Errore */}
               {errore && (
                 <p className="card-text" style={{ color: "#ff9a9a" }}>
                   {errore}
@@ -688,11 +776,9 @@ export default function TemaPage() {
                   crediti per sbloccare ulteriori domande extra.
                 </p>
 
-                {/* Bottone + finestra DYANA sotto */}
                 <div style={{ marginTop: 14 }}>
                   <DyanaPopup
                     typebotId={TYPEBOT_DYANA_ID}
-                    // NEW: id coerente col JWT/guest
                     userId={userIdForDyana}
                     sessionId={sessionId}
                     readingId={readingId || "tema_inline"}
@@ -721,7 +807,7 @@ export default function TemaPage() {
           </section>
         )}
 
-        {/* BLOCCO BILLING (se il backend lo restituisce) */}
+        {/* BLOCCO BILLING */}
         {billing && (
           <section className="section">
             <div
@@ -739,7 +825,7 @@ export default function TemaPage() {
           </section>
         )}
 
-        {/* RISULTATO - DEBUG COMPLETO */}
+        {/* DEBUG COMPLETO */}
         {risultato && (
           <section className="section">
             <div
