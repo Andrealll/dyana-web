@@ -70,43 +70,43 @@ async function getGuestTokenSingleton() {
   // 1) Se esiste in localStorage → lo usiamo sempre
   const stored = window.localStorage.getItem(GUEST_TOKEN_STORAGE_KEY);
   if (stored) {
+    console.log("[DYANA][GUEST] Uso token guest da localStorage:", stored.slice(0, 25));
     return stored;
   }
 
   // 2) Se una richiesta è già in corso → riusiamo la stessa Promise
   if (guestTokenPromise) {
+    console.log("[DYANA][GUEST] Riuso guestTokenPromise esistente");
     return guestTokenPromise;
   }
 
   // 3) Creiamo la promise una sola volta
   const base = AUTH_BASE.replace(/\/+$/, ""); // toglie eventuali slash finali
   const url = `${base}/auth/anonymous`;
-  console.log("[DYANA] getGuestTokenSingleton URL:", url);
+  console.log("[DYANA][GUEST] Nessun token LS, chiamo /auth/anonymous:", url);
 
   guestTokenPromise = (async () => {
     try {
       const res = await fetch(url);
       if (!res.ok) {
-        console.error("[DYANA] /auth/anonymous non OK:", res.status);
+        console.error("[DYANA][GUEST] /auth/anonymous non OK:", res.status);
         return null;
       }
       const data = await res.json();
       const token = data?.access_token || data?.token;
       if (!token) {
         console.error(
-          "[DYANA] /auth/anonymous: token mancante nella risposta",
+          "[DYANA][GUEST] /auth/anonymous: token mancante nella risposta",
           data
         );
         return null;
       }
       window.localStorage.setItem(GUEST_TOKEN_STORAGE_KEY, token);
-      console.log("[DYANA] Guest token inizializzato");
+      console.log("[DYANA][GUEST] Guest token inizializzato e salvato in LS:", token.slice(0, 25));
       return token;
     } catch (err) {
-      console.error("[DYANA] Errore chiamando /auth/anonymous:", err);
+      console.error("[DYANA][GUEST] Errore chiamando /auth/anonymous:", err);
       return null;
-    } finally {
-      // non azzeriamo guestTokenPromise: tiene in cache il risultato
     }
   })();
 
