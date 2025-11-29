@@ -311,7 +311,7 @@ export default function CompatibilitaPage() {
         console.log("[DYANA /sinastria_ai] status non OK:", res.status);
         console.log("[DYANA /sinastria_ai] body errore:", data);
         const message = normalizeErrorMessage(data, res.status);
-        setErrore(message); // sempre stringa → niente più crash React
+        setErrore(message);
         setLoading(false);
         return;
       }
