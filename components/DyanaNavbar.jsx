@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { NAV_ITEMS } from "../app/config/navItems";
 
 export default function DyanaNavbar({ userRole, credits, onLogout }) {
   const isGuest = userRole === "guest";
@@ -63,7 +64,7 @@ export default function DyanaNavbar({ userRole, credits, onLogout }) {
           </span>
         </Link>
 
-        {/* Menu principale */}
+        {/* Menu principale guidato da NAV_ITEMS */}
         <nav
           style={{
             display: "flex",
@@ -72,62 +73,26 @@ export default function DyanaNavbar({ userRole, credits, onLogout }) {
             flexWrap: "wrap",
           }}
         >
-          <Link
-            href="/tema"
-            className="nav-link"
-            style={{
-              textDecoration: "none",
-              textTransform: "uppercase",
-              letterSpacing: "0.12em",
-              fontSize: "0.8rem",
-              color: "#f5f5ff",
-              opacity: 0.9,
-            }}
-          >
-            Tema Natale
-          </Link>
-          <Link
-            href="/compatibilita"
-            className="nav-link"
-            style={{
-              textDecoration: "none",
-              textTransform: "uppercase",
-              letterSpacing: "0.12em",
-              fontSize: "0.8rem",
-              color: "#f5f5ff",
-              opacity: 0.9,
-            }}
-          >
-            Compatibilità
-          </Link>
-          <Link
-            href="/oroscopo"
-            className="nav-link"
-            style={{
-              textDecoration: "none",
-              textTransform: "uppercase",
-              letterSpacing: "0.12em",
-              fontSize: "0.8rem",
-              color: "#f5f5ff",
-              opacity: 0.9,
-            }}
-          >
-            Oroscopo
-          </Link>
-          <Link
-            href="/login"
-            className="nav-link"
-            style={{
-              textDecoration: "none",
-              textTransform: "uppercase",
-              letterSpacing: "0.12em",
-              fontSize: "0.8rem",
-              color: "var(--dyana-gold)",
-              opacity: 0.95,
-            }}
-          >
-            Accedi / Registrati
-          </Link>
+          {NAV_ITEMS.map((item) => {
+            const isLogin = item.href === "/login";
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="nav-link"
+                style={{
+                  textDecoration: "none",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.12em",
+                  fontSize: "0.8rem",
+                  color: isLogin ? "var(--dyana-gold)" : "#f5f5ff",
+                  opacity: isLogin ? 0.95 : 0.9,
+                }}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
       </div>
 
