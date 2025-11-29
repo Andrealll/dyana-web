@@ -245,6 +245,7 @@ export default function TemaPage() {
       } else {
         console.warn("[DYANA] Nessun token disponibile (login/guest/fallback)");
       }
+		console.log("[DYANA][TEMA] Token usato per /tema_ai:", token ? token.slice(0, 25) : "NESSUN TOKEN");
 
       const res = await fetch(`${API_BASE}/tema_ai`, {
         method: "POST",
