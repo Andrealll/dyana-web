@@ -293,7 +293,7 @@ export default function CompatibilitaPage() {
         );
       }
 
-      const res = await fetch(`${API_BASE}/sinastria_ai`, {
+      const res = await fetch(`${API_BASE}/sinastria_ai/`, {
         method: "POST",
         headers,
         body: JSON.stringify(payload),
