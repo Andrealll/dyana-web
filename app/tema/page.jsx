@@ -5,6 +5,7 @@ import Link from "next/link";
 import { DyanaPopup } from "../../components/DyanaPopup";
 import { getToken, clearToken } from "../../lib/authClient";
 import DyanaNavbar from "../../components/DyanaNavbar";
+
 // ==========================
 // COSTANTI GLOBALI
 // ==========================
@@ -60,7 +61,6 @@ function decodeJwtPayload(token) {
   }
 }
 
-
 // ==========================
 // FUNZIONE GUEST TOKEN SINGLETON
 // ==========================
@@ -70,7 +70,10 @@ async function getGuestTokenSingleton() {
   // 1) Se esiste in localStorage → lo usiamo sempre
   const stored = window.localStorage.getItem(GUEST_TOKEN_STORAGE_KEY);
   if (stored) {
-    console.log("[DYANA][GUEST] Uso token guest da localStorage:", stored.slice(0, 25));
+    console.log(
+      "[DYANA][GUEST] Uso token guest da localStorage:",
+      stored.slice(0, 25)
+    );
     return stored;
   }
 
@@ -102,7 +105,10 @@ async function getGuestTokenSingleton() {
         return null;
       }
       window.localStorage.setItem(GUEST_TOKEN_STORAGE_KEY, token);
-      console.log("[DYANA][GUEST] Guest token inizializzato e salvato in LS:", token.slice(0, 25));
+      console.log(
+        "[DYANA][GUEST] Guest token inizializzato e salvato in LS:",
+        token.slice(0, 25)
+      );
       return token;
     } catch (err) {
       console.error("[DYANA][GUEST] Errore chiamando /auth/anonymous:", err);
@@ -131,6 +137,9 @@ export default function TemaPage() {
   const [contenuto, setContenuto] = useState(null);
   const [risultato, setRisultato] = useState(null);
   const [errore, setErrore] = useState("");
+
+  // 🔹 NUOVO: stato per il blocco tema_vis (grafico + meta)
+  const [temaVis, setTemaVis] = useState(null);
 
   // Stato utente "globale"
   const [userRole, setUserRole] = useState("guest");
@@ -208,6 +217,7 @@ export default function TemaPage() {
     setContenuto(null);
     setRisultato(null);
     setBilling(null);
+    setTemaVis(null); // reset grafico ad ogni nuova richiesta
 
     try {
       const payload = {
@@ -245,7 +255,10 @@ export default function TemaPage() {
       } else {
         console.warn("[DYANA] Nessun token disponibile (login/guest/fallback)");
       }
-		console.log("[DYANA][TEMA] Token usato per /tema_ai:", token ? token.slice(0, 25) : "NESSUN TOKEN");
+      console.log(
+        "[DYANA][TEMA] Token usato per /tema_ai:",
+        token ? token.slice(0, 25) : "NESSUN TOKEN"
+      );
 
       const res = await fetch(`${API_BASE}/tema_ai`, {
         method: "POST",
@@ -280,6 +293,13 @@ export default function TemaPage() {
         setBilling(data.billing);
       } else {
         setBilling(null);
+      }
+
+      // 🔹 NUOVO: salva il blocco tema_vis se presente
+      if (data && data.tema_vis) {
+        setTemaVis(data.tema_vis);
+      } else {
+        setTemaVis(null);
       }
 
       const content = data?.result?.content || null;
@@ -428,10 +448,7 @@ export default function TemaPage() {
                   value={form.tier}
                   onChange={(e) => setForm({ ...form, tier: e.target.value })}
                   className="form-input"
-                >
-                  <option value="free">Free (0 crediti)</option>
-                  <option value="premium">Premium + DYANA (2 crediti)</option>
-                </select>
+                />
                 <p
                   className="card-text"
                   style={{
@@ -463,6 +480,76 @@ export default function TemaPage() {
             </div>
           </div>
         </section>
+
+        {/* GRAFICO TEMA NATALE */}
+        {temaVis && temaVis.chart_png_base64 && (
+          <section className="section">
+            <div
+              className="card"
+              style={{
+                maxWidth: "850px",
+                margin: "0 auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
+              <h3 className="card-title">La tua carta del Tema Natale</h3>
+
+              <div
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  justifyContent: "center",
+                  marginTop: 8,
+                  marginBottom: 8,
+                }}
+              >
+                <img
+                  src={`data:image/png;base64,${temaVis.chart_png_base64}`}
+                  alt="Carta del Tema Natale"
+                  style={{
+                    maxWidth: "100%",
+                    height: "auto",
+                    borderRadius: "12px",
+                  }}
+                />
+              </div>
+
+              {temaVis.meta && (
+                <div
+                  className="card-text"
+                  style={{
+                    fontSize: "0.9rem",
+                    opacity: 0.9,
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "16px",
+                  }}
+                >
+                  {temaVis.meta.ascendente_segno && (
+                    <span>
+                      <strong>Ascendente:</strong>{" "}
+                      {temaVis.meta.ascendente_segno}{" "}
+                      {typeof temaVis.meta.ascendente_gradi_segno === "number"
+                        ? `${temaVis.meta.ascendente_gradi_segno.toFixed(1)}°`
+                        : ""}
+                    </span>
+                  )}
+                  {temaVis.meta.mc_segno && (
+                    <span>
+                      <strong>Medio Cielo:</strong>{" "}
+                      {temaVis.meta.mc_segno}{" "}
+                      {typeof temaVis.meta.mc_gradi_segno === "number"
+                        ? `${temaVis.meta.mc_gradi_segno.toFixed(1)}°`
+                        : ""}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* INTERPRETAZIONE PRINCIPALE */}
         {interpretazione && (
