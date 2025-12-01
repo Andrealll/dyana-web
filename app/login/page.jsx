@@ -2,16 +2,20 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import DyanaNavbar from "../../components/DyanaNavbar";
 import { loginWithCredentials, registerWithEmail } from "../../lib/authClient";
 
 export default function LoginPage() {
+  const router = useRouter();
+
   const [mode, setMode] = useState("login"); // login | register
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [errore, setErrore] = useState("");
   const [success, setSuccess] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const userRole = "guest";
   const userCredits = 0;
@@ -20,12 +24,17 @@ export default function LoginPage() {
     e.preventDefault();
     setErrore("");
     setSuccess("");
+    setLoading(true);
 
     try {
       await loginWithCredentials(email, password);
-      window.location.href = "/tema";
+      // 🔁 dopo login vai sulla landing privata
+      router.push("/area-personale");
     } catch (err) {
+      console.error("[LOGIN] errore:", err);
       setErrore("Email o password non validi.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -49,6 +58,7 @@ export default function LoginPage() {
       setSuccess("Registrazione completata! Controlla la tua email.");
       setMode("login");
     } catch (err) {
+      console.error("[SIGNUP] errore:", err);
       setErrore(err.message);
     }
   }
@@ -137,8 +147,8 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                 />
 
-                <button type="submit" className="btn btn-primary">
-                  Entra
+                <button type="submit" className="btn btn-primary" disabled={loading}>
+                  {loading ? "Accesso in corso..." : "Entra"}
                 </button>
 
                 <p
