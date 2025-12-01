@@ -53,58 +53,54 @@ export default function CreditiPage() {
     fetchPacks();
   }, []);
 
-  async function handleCompra(packId) {
-    setErrore("");
-    setSuccess("");
+async function handleCompra(packId) {
+  setErrore("");
+  setSuccess("");
 
-    if (!jwt) {
-      setErrore(
-        "Per acquistare crediti devi prima effettuare il login con la tua email."
-      );
-      return;
-    }
-
-    setLoadingPack(packId);
-    try {
-      const res = await fetch(`${API_BASE}/payments/create-checkout-session`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          // in futuro, quando il backend leggerà il JWT:
-          // Authorization: `Bearer ${jwt}`,
-        },
-        body: JSON.stringify({ pack_id: packId }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(
-          data.detail || "Errore nella creazione della sessione di pagamento."
-        );
-      }
-
-      const data = await res.json();
-
-      if (data.checkout_url && data.mode === "placeholder") {
-        // per ora non reindirizziamo davvero, è solo demo
-        setSuccess(
-          "Simulazione: l'integrazione con Stripe non è ancora attiva, ma il flusso è pronto."
-        );
-      } else if (data.checkout_url) {
-        // quando integrerai Stripe, qui faremo il redirect reale:
-        window.location.href = data.checkout_url;
-      } else {
-        setSuccess(
-          "Richiesta di pagamento creata, ma manca la checkout_url. Controlla il backend."
-        );
-      }
-    } catch (err) {
-      console.error("[CREDITI] Errore acquisto:", err);
-      setErrore(err.message || "Errore inatteso durante l'acquisto.");
-    } finally {
-      setLoadingPack(null);
-    }
+  if (!jwt) {
+    setErrore(
+      "Per acquistare crediti devi prima effettuare il login con la tua email."
+    );
+    return;
   }
+
+  setLoadingPack(packId);
+  try {
+    const res = await fetch(`${API_BASE}/payments/create-checkout-session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // Quando vorrai far leggere il JWT al backend, aggiungi:
+        // Authorization: `Bearer ${jwt}`,
+      },
+      body: JSON.stringify({ pack_id: packId }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(
+        data.detail || "Errore nella creazione della sessione di pagamento."
+      );
+    }
+
+    const data = await res.json();
+
+    if (data.checkout_url) {
+      // Stripe Checkout reale: reindirizziamo l'utente alla pagina di pagamento
+      window.location.href = data.checkout_url;
+    } else {
+      setSuccess(
+        "Richiesta di pagamento creata, ma manca la checkout_url. Controlla il backend."
+      );
+    }
+  } catch (err) {
+    console.error("[CREDITI] Errore acquisto:", err);
+    setErrore(err.message || "Errore inatteso durante l'acquisto.");
+  } finally {
+    setLoadingPack(null);
+  }
+}
+
 
   return (
     <main className="page-root">
