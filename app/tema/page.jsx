@@ -295,12 +295,31 @@ export default function TemaPage() {
         setBilling(null);
       }
 
-      // 🔹 NUOVO: salva il blocco tema_vis se presente
-      if (data && data.tema_vis) {
-        setTemaVis(data.tema_vis);
+      // 🔹 Normalizziamo il blocco tema_vis in base a quello che arriva dal backend:
+      // - chart_png_base64 al root
+      // - grafico e (eventuale) meta dentro data.tema_vis
+      const chartBase64 =
+        data?.chart_png_base64 ||
+        data?.tema_vis?.chart_png_base64 ||
+        null;
+
+      const graficoJson = data?.tema_vis?.grafico || null;
+
+      const metaVis =
+        (data?.tema_vis && data.tema_vis.meta) ||
+        data?.tema_meta || // nel caso tu in futuro aggiunga un campo separato
+        null;
+
+      if (chartBase64 || graficoJson || metaVis) {
+        setTemaVis({
+          chart_png_base64: chartBase64,
+          grafico: graficoJson,
+          meta: metaVis,
+        });
       } else {
         setTemaVis(null);
       }
+
 
       const content = data?.result?.content || null;
       setContenuto(content);

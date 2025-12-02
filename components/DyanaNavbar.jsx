@@ -1,10 +1,71 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { NAV_ITEMS } from "../app/config/navItems";
+import {
+  getToken,
+  fetchCreditsState,
+  clearToken,
+} from "../lib/authClient";
 
-export default function DyanaNavbar({ userRole, credits, onLogout }) {
+export default function DyanaNavbar({
+  userRole: userRoleProp,
+  credits: creditsProp,
+  onLogout,
+}) {
+  const [userRole, setUserRole] = useState(userRoleProp ?? "guest");
+  const [credits, setCredits] = useState(creditsProp ?? 0);
+  const [email, setEmail] = useState(null);
+
+  // Carica ruolo + crediti + email reali da /credits/state
+  useEffect(() => {
+    async function loadNavbarState() {
+      try {
+        const token = getToken();
+        if (!token) {
+          setUserRole("guest");
+          setCredits(0);
+          setEmail(null);
+          return;
+        }
+
+        const cs = await fetchCreditsState(token);
+
+        const role = cs.paid > 0 ? "user" : "free";
+
+        setUserRole(role);
+        setCredits(cs.total_available ?? 0);
+        setEmail(cs.email || null);
+      } catch (err) {
+        console.error("[NAVBAR] errore caricamento stato utente:", err);
+        setUserRole("guest");
+        setCredits(0);
+        setEmail(null);
+      }
+    }
+
+    loadNavbarState();
+  }, []);
+
   const isGuest = userRole === "guest";
+
+  function handleLogoutClick() {
+    if (onLogout) {
+      onLogout();
+      return;
+    }
+    // fallback di default: pulisco token e porto al login
+    clearToken();
+    if (typeof window !== "undefined") {
+      window.location.href = "/";
+    }
+  }
+
+  // Testo riga superiore a sinistra
+  const topLineText = isGuest
+    ? "Navigazione come ospite"
+    : email || "Utente registrato";
 
   return (
     <header
@@ -107,9 +168,7 @@ export default function DyanaNavbar({ userRole, credits, onLogout }) {
         }}
       >
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <span style={{ opacity: 0.9 }}>
-            {isGuest ? "Navigazione come ospite" : `Utente DYANA (${userRole})`}
-          </span>
+          <span style={{ opacity: 0.9 }}>{topLineText}</span>
           <span style={{ opacity: 0.8 }}>
             Crediti disponibili:{" "}
             <strong style={{ color: "var(--dyana-gold)" }}>{credits}</strong>
@@ -117,10 +176,10 @@ export default function DyanaNavbar({ userRole, credits, onLogout }) {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {!isGuest && onLogout && (
+          {!isGuest && (
             <button
               type="button"
-              onClick={onLogout}
+              onClick={handleLogoutClick}
               className="btn"
               style={{
                 fontSize: "0.8rem",

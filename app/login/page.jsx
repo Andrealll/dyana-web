@@ -2,20 +2,20 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import DyanaNavbar from "../../components/DyanaNavbar";
 import { loginWithCredentials, registerWithEmail } from "../../lib/authClient";
 
 export default function LoginPage() {
-  const router = useRouter();
-
   const [mode, setMode] = useState("login"); // login | register
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
+
+  // ✅ Flag privacy SOLO per iscrizione
+  const [privacyRegister, setPrivacyRegister] = useState(true);
+
   const [errore, setErrore] = useState("");
   const [success, setSuccess] = useState("");
-  const [loading, setLoading] = useState(false);
 
   const userRole = "guest";
   const userCredits = 0;
@@ -24,17 +24,12 @@ export default function LoginPage() {
     e.preventDefault();
     setErrore("");
     setSuccess("");
-    setLoading(true);
 
     try {
       await loginWithCredentials(email, password);
-      // 🔁 dopo login vai sulla landing privata
-      router.push("/area-personale");
+      window.location.href = "/area-personale";
     } catch (err) {
-      console.error("[LOGIN] errore:", err);
       setErrore("Email o password non validi.");
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -53,12 +48,16 @@ export default function LoginPage() {
       return;
     }
 
+    if (!privacyRegister) {
+      setErrore("Devi accettare l’informativa privacy per iscriverti.");
+      return;
+    }
+
     try {
       await registerWithEmail(email, password);
       setSuccess("Registrazione completata! Controlla la tua email.");
       setMode("login");
     } catch (err) {
-      console.error("[SIGNUP] errore:", err);
       setErrore(err.message);
     }
   }
@@ -124,6 +123,9 @@ export default function LoginPage() {
               </p>
             )}
 
+            {/* ======================
+               FORM LOGIN (senza flag)
+               ====================== */}
             {mode === "login" ? (
               <form
                 onSubmit={handleLogin}
@@ -147,8 +149,8 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                 />
 
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? "Accesso in corso..." : "Entra"}
+                <button type="submit" className="btn btn-primary">
+                  Entra
                 </button>
 
                 <p
@@ -163,6 +165,9 @@ export default function LoginPage() {
                 </p>
               </form>
             ) : (
+              /* =========================
+                 FORM ISCRIZIONE (flag qui)
+                 ========================= */
               <form
                 onSubmit={handleSignup}
                 style={{ display: "flex", flexDirection: "column", gap: 12 }}
@@ -193,6 +198,43 @@ export default function LoginPage() {
                   value={password2}
                   onChange={(e) => setPassword2(e.target.value)}
                 />
+
+                {/* Link alle condizioni del servizio */}
+                <p
+                  className="card-text"
+                  style={{ fontSize: "0.8rem", opacity: 0.8, marginTop: 4 }}
+                >
+                  Leggi le{" "}
+                  <Link href="/condizioni" className="nav-link">
+                    condizioni del servizio
+                  </Link>
+                  .
+                </p>
+
+                {/* Flag privacy spuntato di default */}
+                <label
+                  className="card-text"
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "flex-start",
+                    fontSize: "0.8rem",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={privacyRegister}
+                    onChange={(e) => setPrivacyRegister(e.target.checked)}
+                    style={{ marginTop: 3 }}
+                  />
+                  <span>
+                    Ho letto e accetto l&apos;{" "}
+                    <Link href="/privacy" className="nav-link">
+                      informativa privacy
+                    </Link>
+                    .
+                  </span>
+                </label>
 
                 <button type="submit" className="btn btn-primary">
                   Registrati
