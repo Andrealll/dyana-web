@@ -171,8 +171,8 @@ body {
 /* CARDS */
 .cards-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 24px;
 }
 
 @media (min-width: 768px) {
@@ -188,6 +188,10 @@ body {
   border: 1px solid rgba(44, 64, 80, 0.8);
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(12px);
+
+  /* NUOVO: layout a colonna, niente sovrapposizioni */
+  display: flex;
+  flex-direction: column;
 }
 
 .card-title {
@@ -196,7 +200,8 @@ body {
 }
 
 .card-text {
-  margin: 0;
+  /* PRIMA era margin: 0;  */
+  margin: 0 0 16px;
   font-size: 0.94rem;
   line-height: 1.55;
   color: #d0d7ff;
@@ -291,4 +296,172 @@ body {
   outline: none;
   border-color: var(--dyana-gold);
   box-shadow: 0 0 8px rgba(187, 154, 99, 0.4);
+}
+/* NAVBAR DYANA */
+.dyana-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  width: 100%;
+  border-bottom: 1px solid rgba(187, 154, 99, 0.35);
+  background: linear-gradient(
+    90deg,
+    rgba(21, 25, 28, 0.96),
+    rgba(44, 64, 80, 0.96)
+  );
+  backdrop-filter: blur(10px);
+}
+
+.dyana-navbar-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 10px 16px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dyana-navbar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dyana-navbar-logo-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.dyana-navbar-logo {
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+}
+
+.dyana-navbar-logo-text {
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dyana-gold);
+}
+
+.dyana-navbar-menu-wrapper {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+/* RIGA INFERIORE: stato utente sempre a destra */
+.dyana-navbar-bottom {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  margin-top: 2px;
+}
+
+.dyana-navbar-status {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  text-align: right;
+}
+
+.dyana-navbar-status-top {
+  opacity: 0.85;
+}
+
+.dyana-navbar-status-credits {
+  opacity: 0.9;
+}
+
+.dyana-navbar-status-credits strong {
+  color: var(--dyana-gold);
+}
+
+/* Link menu */
+.dyana-navbar-links {
+  display: none; /* MOBILE: nascosto, lo apre il panino */
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.8rem;
+  position: absolute;
+  right: 0;
+  top: 32px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(12, 16, 22, 0.98);
+  border: 1px solid rgba(44, 64, 80, 0.9);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.65);
+}
+
+.dyana-navbar-links.open {
+  display: flex;
+}
+
+.dyana-navbar-link {
+  text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #f5f5ff;
+  opacity: 0.9;
+}
+
+.dyana-navbar-link:hover {
+  opacity: 1;
+}
+
+.dyana-navbar-link-area {
+  color: var(--dyana-gold);
+}
+
+/* Logout nel menu */
+.dyana-navbar-logout {
+  border-radius: 999px;
+  padding: 6px 12px;
+  border: 1px solid rgba(187, 154, 99, 0.6);
+  background: transparent;
+  color: #f5f5ff;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+/* Toggle (hamburger) */
+.dyana-navbar-toggle {
+  border: none;
+  background: transparent;
+  color: #f5f5ff;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+
+/* DESKTOP: panino sparisce, menu sempre visibile in riga */
+@media (min-width: 768px) {
+  .dyana-navbar-inner {
+    padding: 10px 20px 6px;
+  }
+
+  .dyana-navbar-links {
+    position: static;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 18px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+  }
+
+  .dyana-navbar-toggle {
+    display: none;
+  }
+
+  .dyana-navbar-bottom {
+    justify-content: flex-end; /* anche su desktop la teniamo a destra */
+  }
 }

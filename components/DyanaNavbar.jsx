@@ -1,13 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { NAV_ITEMS } from "../app/config/navItems";
-import {
-  getToken,
-  fetchCreditsState,
-  clearToken,
-} from "../lib/authClient";
+import Image from "next/image";
+import { getToken, fetchCreditsState, clearToken } from "../lib/authClient";
 
 export default function DyanaNavbar({
   userRole: userRoleProp,
@@ -17,181 +13,168 @@ export default function DyanaNavbar({
   const [userRole, setUserRole] = useState(userRoleProp ?? "guest");
   const [credits, setCredits] = useState(creditsProp ?? 0);
   const [email, setEmail] = useState(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  // Carica ruolo + crediti + email reali da /credits/state
-  useEffect(() => {
-    async function loadNavbarState() {
-      try {
-        const token = getToken();
-        if (!token) {
-          setUserRole("guest");
-          setCredits(0);
-          setEmail(null);
-          return;
-        }
+  const isGuest = userRole === "guest";
 
-        const cs = await fetchCreditsState(token);
-
-        const role = cs.paid > 0 ? "user" : "free";
-
-        setUserRole(role);
-        setCredits(cs.total_available ?? 0);
-        setEmail(cs.email || null);
-      } catch (err) {
-        console.error("[NAVBAR] errore caricamento stato utente:", err);
+  // --- CARICAMENTO CREDITS / RUOLO ----------------------------------------
+  const loadNavbarState = useCallback(async () => {
+    try {
+      const token = getToken();
+      if (!token) {
         setUserRole("guest");
         setCredits(0);
         setEmail(null);
+        return;
       }
-    }
 
-    loadNavbarState();
+      const cs = await fetchCreditsState(token);
+      const role = cs.paid > 0 ? "user" : "free";
+
+      setUserRole(role);
+      setCredits(cs.total_available ?? 0);
+      setEmail(cs.email || null);
+    } catch (err) {
+      console.error("[NAVBAR] errore caricamento stato utente:", err);
+      setUserRole("guest");
+      setCredits(0);
+      setEmail(null);
+    }
   }, []);
 
-  const isGuest = userRole === "guest";
+  useEffect(() => {
+    loadNavbarState();
+  }, [loadNavbarState]);
+
+  // Ricarica crediti quando fai:
+  // window.dispatchEvent(new Event("dyana:refresh-credits"))
+  useEffect(() => {
+    function handleRefresh() {
+      loadNavbarState();
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("dyana:refresh-credits", handleRefresh);
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("dyana:refresh-credits", handleRefresh);
+      }
+    };
+  }, [loadNavbarState]);
 
   function handleLogoutClick() {
     if (onLogout) {
       onLogout();
       return;
     }
-    // fallback di default: pulisco token e porto al login
     clearToken();
     if (typeof window !== "undefined") {
       window.location.href = "/";
     }
   }
 
-  // Testo riga superiore a sinistra
+  function handleAreaPersonaleClick(e) {
+    e.preventDefault();
+    if (typeof window === "undefined") return;
+
+    if (isGuest) {
+      window.location.href = "/login";
+    } else {
+      window.location.href = "/area-personale";
+    }
+  }
+
   const topLineText = isGuest
     ? "Navigazione come ospite"
     : email || "Utente registrato";
 
+  const navItems = [
+    { href: "/", label: "Home" },
+    { href: "/tema", label: "Tema natale" },
+    { href: "/compatibilita", label: "Compatibilità" },
+    { href: "/oroscopo", label: "Oroscopo" },
+  ];
+
   return (
-    <header
-      style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 50,
-        width: "100%",
-        padding: "14px 32px",
-        borderBottom: "1px solid rgba(187,154,99,0.35)", // dyana-gold soft
-        background:
-          "linear-gradient(90deg, rgba(21,25,28,0.98), rgba(44,64,80,0.98))",
-        backdropFilter: "blur(10px)",
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
-      }}
-    >
-      {/* Riga 1: logo + menu */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 24,
-        }}
-      >
-        {/* Logo testuale (il vero logo resta nella home splash) */}
-        <Link
-          href="/"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            textDecoration: "none",
-          }}
-        >
-          <span
-            style={{
-              fontSize: "1.3rem",
-              fontWeight: 700,
-              letterSpacing: "0.18em",
-              textTransform: "uppercase",
-              color: "var(--dyana-gold)",
-            }}
-          >
-            DYANA
-          </span>
-          <span
-            style={{
-              fontSize: "0.8rem",
-              opacity: 0.75,
-              color: "#f5f5ff",
-            }}
-          >
-            astrology engine
-          </span>
-        </Link>
+    <header className="dyana-navbar">
+      <div className="dyana-navbar-inner">
+        {/* RIGA SUPERIORE: logo + menu / hamburger */}
+        <div className="dyana-navbar-top">
+          <Link href="/" className="dyana-navbar-logo-link">
+<Image
+  src="/dyana-logo-NAV.png"
+  alt="DYANA"
+  width={32}
+  height={32}
+  className="dyana-navbar-logo"
+/>
 
-        {/* Menu principale guidato da NAV_ITEMS */}
-        <nav
-          style={{
-            display: "flex",
-            gap: 22,
-            fontSize: "0.9rem",
-            flexWrap: "wrap",
-          }}
-        >
-          {NAV_ITEMS.map((item) => {
-            const isLogin = item.href === "/login";
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="nav-link"
-                style={{
-                  textDecoration: "none",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.12em",
-                  fontSize: "0.8rem",
-                  color: isLogin ? "var(--dyana-gold)" : "#f5f5ff",
-                  opacity: isLogin ? 0.95 : 0.9,
-                }}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-      </div>
+            <span className="dyana-navbar-logo-text">DYANA</span>
+          </Link>
 
-      {/* Riga 2: stato utente + logout */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 12,
-          fontSize: "0.8rem",
-        }}
-      >
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <span style={{ opacity: 0.9 }}>{topLineText}</span>
-          <span style={{ opacity: 0.8 }}>
-            Crediti disponibili:{" "}
-            <strong style={{ color: "var(--dyana-gold)" }}>{credits}</strong>
-          </span>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {!isGuest && (
+          {/* Menu desktop + mobile (a tendina) */}
+          <div className="dyana-navbar-menu-wrapper">
+            {/* Hamburger solo su mobile (CSS) */}
             <button
               type="button"
-              onClick={handleLogoutClick}
-              className="btn"
-              style={{
-                fontSize: "0.8rem",
-                padding: "6px 14px",
-                borderRadius: "999px",
-                border: "1px solid rgba(187,154,99,0.6)",
-                background: "transparent",
-              }}
+              className="dyana-navbar-toggle"
+              onClick={() => setIsMenuOpen((v) => !v)}
+              aria-label="Apri menu"
             >
-              Logout
+              ☰
             </button>
-          )}
+
+            <nav
+              className={`dyana-navbar-links ${
+                isMenuOpen ? "open" : ""
+              }`}
+            >
+              {navItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="dyana-navbar-link"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  {item.label}
+                </Link>
+              ))}
+
+              <a
+                href={isGuest ? "/login" : "/area-personale"}
+                className="dyana-navbar-link dyana-navbar-link-area"
+                onClick={(e) => {
+                  handleAreaPersonaleClick(e);
+                  setIsMenuOpen(false);
+                }}
+              >
+                Area personale
+              </a>
+
+              {!isGuest && (
+                <button
+                  type="button"
+                  className="dyana-navbar-logout"
+                  onClick={() => {
+                    handleLogoutClick();
+                    setIsMenuOpen(false);
+                  }}
+                >
+                  Logout
+                </button>
+              )}
+            </nav>
+          </div>
+        </div>
+
+        {/* RIGA INFERIORE: stato utente + crediti */}
+        <div className="dyana-navbar-bottom">
+          <div className="dyana-navbar-status">
+            <span className="dyana-navbar-status-top">{topLineText}</span>
+            <span className="dyana-navbar-status-credits">
+              Crediti: <strong>{credits}</strong>
+            </span>
+          </div>
         </div>
       </div>
     </header>
