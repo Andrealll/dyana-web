@@ -358,7 +358,7 @@ export default function TemaPage() {
   };
 
   const isPremium = form.tier === "premium";
-
+  const isPremiumReading = isPremium;
   let readingTextForDyana = interpretazione || "";
   if (isPremium && contenuto) {
     const extraParts = [];

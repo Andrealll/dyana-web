@@ -17,7 +17,7 @@ type DyanaPopupProps = {
   readingPayload: any;
   kbTags: string[];
 
-  // NUOVI CAMPI
+  // Gating
   isPremium: boolean;          // true solo per letture premium
   questionsIncluded?: number;  // default 2 per le premium
 };
@@ -32,14 +32,14 @@ export function DyanaPopup(props: DyanaPopupProps) {
     readingText,
     readingPayload,
     kbTags,
-    isPremium,               // per ora NON lo usiamo nel debug
+    isPremium,
     questionsIncluded = 2,
   } = props;
 
   const [open, setOpen] = useState(false);
 
-  // 🔥 DEBUG: bottone SEMPRE abilitato
-  const isEnabled = true;
+  // bottone abilitato solo se premium con domande > 0
+  const isEnabled = isPremium && questionsIncluded > 0;
 
   const urlWithParams = useMemo(() => {
     try {
@@ -62,8 +62,12 @@ export function DyanaPopup(props: DyanaPopupProps) {
       params.set("reading_payload_json", payloadJson);
       params.set("kb_tags_json", kbTagsJson);
 
-      // 🔥 DEBUG: sempre le domande incluse
-      params.set("questions_left_initial", String(questionsIncluded));
+      // Numero di domande incluse
+      if (isEnabled) {
+        params.set("questions_left_initial", String(questionsIncluded));
+      } else {
+        params.set("questions_left_initial", "0");
+      }
 
       const qs = params.toString();
       if (!qs) return URL_BOT_DYANA_BASE;
@@ -81,11 +85,12 @@ export function DyanaPopup(props: DyanaPopupProps) {
     readingText,
     readingPayload,
     kbTags,
+    isEnabled,
     questionsIncluded,
   ]);
 
   const handleToggle = () => {
-    // 🔥 in debug NON blocchiamo mai
+    if (!isEnabled) return; // non aprire se non abilitato
     setOpen((prev) => !prev);
   };
 
@@ -96,16 +101,35 @@ export function DyanaPopup(props: DyanaPopupProps) {
         type="button"
         className="btn btn-primary"
         onClick={handleToggle}
-        // 🔥 in debug non lo disabilitiamo mai
-        disabled={false}
+        disabled={!isEnabled}
+        style={
+          !isEnabled
+            ? {
+                opacity: 0.6,
+                cursor: "not-allowed",
+              }
+            : undefined
+        }
       >
         {open ? "Chiudi DYANA" : "Chiedi a DYANA"}
       </button>
 
-      {/* In debug NESSUN messaggio di blocco */}
+      {/* Messaggio informativo se NON è premium */}
+      {!isEnabled && (
+        <p
+          className="card-text"
+          style={{
+            marginTop: 8,
+            fontSize: "0.9rem",
+            opacity: 0.8,
+          }}
+        >
+          La chat con DYANA è disponibile solo per le letture Premium, che includono 2 domande di approfondimento.
+        </p>
+      )}
 
       {/* Finestra chat che si apre da sotto */}
-      {open && (
+      {open && isEnabled && (
         <div
           style={{
             marginTop: 16,
