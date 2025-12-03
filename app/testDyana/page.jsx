@@ -1,9 +1,11 @@
-// app/test-typebot/page.jsx
 "use client";
 
+import { useState } from "react";
+
 export default function TestTypebotPage() {
-  // per ora simuliamo SEMPRE il caso premium
   const isPremium = true;
+
+  const [open, setOpen] = useState(false);
 
   return (
     <main className="page-root">
@@ -41,10 +43,7 @@ export default function TestTypebotPage() {
                 Hai domande su questa lettura?
               </h3>
 
-              <p
-                className="card-text"
-                style={{ marginBottom: 4, opacity: 0.9 }}
-              >
+              <p className="card-text" style={{ opacity: 0.9 }}>
                 DYANA conosce già il Tema che hai appena generato e può
                 aiutarti a capire meglio cosa sta emergendo nel tuo cielo
                 personale.
@@ -54,29 +53,21 @@ export default function TestTypebotPage() {
                 className="card-text"
                 style={{ fontSize: "0.9rem", opacity: 0.8 }}
               >
-                Hai a disposizione <strong>2 domande di chiarimento</strong>{" "}
-                incluse con questo Tema. In seguito potrai usare i tuoi
-                crediti per sbloccare ulteriori domande extra.
+                Hai <strong>2 domande incluse</strong> con la versione Premium.
               </p>
 
-              {/* MESSAGGIO FREE (per ora non usato, isPremium = true) */}
-              {!isPremium && (
-                <p
-                  className="card-text"
-                  style={{
-                    marginTop: 12,
-                    fontSize: "0.9rem",
-                    opacity: 0.85,
-                  }}
-                >
-                  La chat con DYANA è disponibile solo per le letture{" "}
-                  <strong>Premium</strong>, che includono 2 domande di
-                  approfondimento sul tuo Tema Natale.
-                </p>
-              )}
+              {/* 🔥 BOTTONE TOGGLE */}
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ marginTop: 16 }}
+                onClick={() => setOpen((prev) => !prev)}
+              >
+                {open ? "Chiudi DYANA" : "Chiedi a DYANA"}
+              </button>
 
-              {/* EMBED TYPEBOT – IDENTICO AL TEST CHE FUNZIONA */}
-              {isPremium && (
+              {/* 🔥 IFRAME SOLO SE OPEN = TRUE */}
+              {open && (
                 <div
                   style={{
                     marginTop: 16,
@@ -109,8 +100,7 @@ export default function TestTypebotPage() {
                   textAlign: "right",
                 }}
               >
-                DYANA risponde solo su questo Tema, non su altri argomenti
-                generici.
+                DYANA risponde solo su questo Tema, non su altre tematiche.
               </p>
             </div>
           </div>
