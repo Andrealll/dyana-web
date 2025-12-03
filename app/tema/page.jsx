@@ -760,7 +760,9 @@ export default function TemaPage() {
             </div>
           </section>
         )}
-        {/* BLOCCO DYANA */}
+  
+  
+          {/* BLOCCO DYANA */}
         {hasReading && readingTextForDyana && (
           <section className="section">
             <div
@@ -824,7 +826,7 @@ export default function TemaPage() {
                     readingText={readingTextForDyana}
                     readingPayload={readingPayload}
                     kbTags={kbTags}
-                    // 🔹 qui abilitiamo / disabilitiamo il bottone
+                    // 🔹 qui il flag che sblocca il bottone
                     isPremium={isPremiumReading}
                     questionsIncluded={2}
                   />
