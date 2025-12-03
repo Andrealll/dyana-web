@@ -539,4 +539,28 @@ body {
   transform: translateY(1px);
   box-shadow: none;
 }
+.cookie-reject-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(245, 245, 255, 0.5);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  background: transparent;
+  color: #f5f5ff;
+  transition: background 0.1s ease, color 0.1s ease, opacity 0.1s ease;
+}
+
+.cookie-reject-btn:hover {
+  background: rgba(21, 25, 28, 0.9);
+  opacity: 0.95;
+}
+
+.cookie-reject-btn:active {
+  opacity: 0.8;
+}
 

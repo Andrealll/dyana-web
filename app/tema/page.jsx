@@ -1,3 +1,4 @@
+// TEMA_AI
 "use client";
 
 import { useState, useEffect } from "react";
@@ -10,7 +11,6 @@ import DyanaNavbar from "../../components/DyanaNavbar";
 // COSTANTI GLOBALI
 // ==========================
 
-// ID Typebot (resta com'è ora)
 const TYPEBOT_DYANA_ID = "diyana-ai";
 
 // Base URL del backend AstroBot (Render → fallback locale)
@@ -34,7 +34,7 @@ const AUTH_BASE = process.env.NEXT_PUBLIC_AUTH_BASE
 // Storage key per il JWT guest
 const GUEST_TOKEN_STORAGE_KEY = "diyana_guest_jwt";
 
-// JWT di fallback (non dovrebbe servire, ma lo lasciamo come ultima spiaggia)
+// JWT di fallback
 const ASTROBOT_JWT_TEMA = process.env.NEXT_PUBLIC_ASTROBOT_JWT_TEMA || "";
 
 // Singleton per evitare più chiamate parallele a /auth/anonymous
@@ -67,7 +67,6 @@ function decodeJwtPayload(token) {
 async function getGuestTokenSingleton() {
   if (typeof window === "undefined") return null;
 
-  // 1) Se esiste in localStorage → lo usiamo sempre
   const stored = window.localStorage.getItem(GUEST_TOKEN_STORAGE_KEY);
   if (stored) {
     console.log(
@@ -77,14 +76,12 @@ async function getGuestTokenSingleton() {
     return stored;
   }
 
-  // 2) Se una richiesta è già in corso → riusiamo la stessa Promise
   if (guestTokenPromise) {
     console.log("[DYANA][GUEST] Riuso guestTokenPromise esistente");
     return guestTokenPromise;
   }
 
-  // 3) Creiamo la promise una sola volta
-  const base = AUTH_BASE.replace(/\/+$/, ""); // toglie eventuali slash finali
+  const base = AUTH_BASE.replace(/\/+$/, "");
   const url = `${base}/auth/anonymous`;
   console.log("[DYANA][GUEST] Nessun token LS, chiamo /auth/anonymous:", url);
 
@@ -138,25 +135,19 @@ export default function TemaPage() {
   const [risultato, setRisultato] = useState(null);
   const [errore, setErrore] = useState("");
 
-  // 🔹 NUOVO: stato per il blocco tema_vis (grafico + meta)
   const [temaVis, setTemaVis] = useState(null);
 
-  // Stato utente "globale"
   const [userRole, setUserRole] = useState("guest");
   const [userCredits, setUserCredits] = useState(2);
 
-  // user_id per DYANA Q&A (per ora: sub del JWT login, altrimenti guest_tema)
   const [userIdForDyana, setUserIdForDyana] = useState("guest_tema");
 
-  // blocco billing restituito dal backend /tema_ai
   const [billing, setBilling] = useState(null);
 
-  // Stati per DYANA
   const [readingId, setReadingId] = useState("");
   const [readingPayload, setReadingPayload] = useState(null);
   const [kbTags, setKbTags] = useState([]);
 
-  // Sessione DYANA per questa pagina (solo UI, non c'entra con i crediti)
   const [sessionId] = useState(() => `tema_session_${Date.now()}`);
 
   // ======================================================
@@ -192,10 +183,7 @@ export default function TemaPage() {
   }
 
   useEffect(() => {
-    // 1) Token login, se c'è
     refreshUserFromToken();
-
-    // 2) Inizializza guest token in background (ma in modo singleton)
     getGuestTokenSingleton();
   }, []);
 
@@ -217,7 +205,7 @@ export default function TemaPage() {
     setContenuto(null);
     setRisultato(null);
     setBilling(null);
-    setTemaVis(null); // reset grafico ad ogni nuova richiesta
+    setTemaVis(null);
 
     try {
       const payload = {
@@ -228,10 +216,8 @@ export default function TemaPage() {
         tier: form.tier,
       };
 
-      // 1) Token di login, se esiste
       let token = getToken();
 
-      // 2) Se non c'è login → usiamo il guest token SINGLETON
       if (!token) {
         const guest = await getGuestTokenSingleton();
         if (guest) {
@@ -239,7 +225,6 @@ export default function TemaPage() {
         }
       }
 
-      // 3) Fallback finale: JWT statico da .env
       if (!token && ASTROBOT_JWT_TEMA) {
         token = ASTROBOT_JWT_TEMA;
       }
@@ -255,6 +240,7 @@ export default function TemaPage() {
       } else {
         console.warn("[DYANA] Nessun token disponibile (login/guest/fallback)");
       }
+
       console.log(
         "[DYANA][TEMA] Token usato per /tema_ai:",
         token ? token.slice(0, 25) : "NESSUN TOKEN"
@@ -295,9 +281,6 @@ export default function TemaPage() {
         setBilling(null);
       }
 
-      // 🔹 Normalizziamo il blocco tema_vis in base a quello che arriva dal backend:
-      // - chart_png_base64 al root
-      // - grafico e (eventuale) meta dentro data.tema_vis
       const chartBase64 =
         data?.chart_png_base64 ||
         data?.tema_vis?.chart_png_base64 ||
@@ -307,19 +290,29 @@ export default function TemaPage() {
 
       const metaVis =
         (data?.tema_vis && data.tema_vis.meta) ||
-        data?.tema_meta || // nel caso tu in futuro aggiunga un campo separato
+        data?.tema_meta ||
         null;
 
-      if (chartBase64 || graficoJson || metaVis) {
+      const pianetiVis = data?.tema_vis?.pianeti || [];
+      const aspettiVis = data?.tema_vis?.aspetti || [];
+
+      if (
+        chartBase64 ||
+        graficoJson ||
+        metaVis ||
+        pianetiVis.length > 0 ||
+        aspettiVis.length > 0
+      ) {
         setTemaVis({
           chart_png_base64: chartBase64,
           grafico: graficoJson,
           meta: metaVis,
+          pianeti: pianetiVis,
+          aspetti: aspettiVis,
         });
       } else {
         setTemaVis(null);
       }
-
 
       const content = data?.result?.content || null;
       setContenuto(content);
@@ -460,30 +453,33 @@ export default function TemaPage() {
                 />
               </div>
 
-<div>
-  <label className="card-text">Livello</label>
-  <select
-    name="tier"
-    value={form.tier}
-    onChange={(e) => setForm({ ...form, tier: e.target.value })}
-    className="form-input"
-  >
-    <option value="free">Free (0 crediti)</option>
-    <option value="premium">Premium + DYANA (2 crediti)</option>
-  </select>
-  <p
-    className="card-text"
-    style={{
-      fontSize: "0.75rem",
-      opacity: 0.75,
-      marginTop: 4,
-    }}
-  >
-    Hai <strong>{userCredits}</strong> crediti disponibili.{" "}
-    L&apos;opzione selezionata userà{" "}
-    <strong>{form.tier === "premium" ? 2 : 0}</strong> crediti.
-  </p>
-</div>
+              <div>
+                <label className="card-text">Livello</label>
+                <select
+                  name="tier"
+                  value={form.tier}
+                  onChange={(e) =>
+                    setForm({ ...form, tier: e.target.value })
+                  }
+                  className="form-input"
+                >
+                  <option value="free">Free (0 crediti)</option>
+                  <option value="premium">Premium + DYANA (2 crediti)</option>
+                </select>
+                <p
+                  className="card-text"
+                  style={{
+                    fontSize: "0.75rem",
+                    opacity: 0.75,
+                    marginTop: 4,
+                  }}
+                >
+                  Hai <strong>{userCredits}</strong> crediti disponibili.{" "}
+                  L&apos;opzione selezionata userà{" "}
+                  <strong>{form.tier === "premium" ? 2 : 0}</strong> crediti.
+                </p>
+              </div>
+
               <button
                 onClick={generaTema}
                 className="btn btn-primary"
@@ -502,7 +498,7 @@ export default function TemaPage() {
           </div>
         </section>
 
-        {/* GRAFICO TEMA NATALE */}
+        {/* GRAFICO TEMA NATALE + BOX PIANETI/ASPETTI */}
         {temaVis && temaVis.chart_png_base64 && (
           <section className="section">
             <div
@@ -517,71 +513,211 @@ export default function TemaPage() {
             >
               <h3 className="card-title">La tua carta del Tema Natale</h3>
 
-<div
-  style={{
-    width: "100%",
-    display: "flex",
-    justifyContent: "center",
-  }}
->
-  {/* Contenitore quadrato */}
-  <div
-    style={{
-      position: "relative",
-      width: "100%",
-      maxWidth: "560px",   // lato massimo del quadrato
-      paddingTop: "100%",  // 👉 rende il box perfettamente quadrato
-    }}
-  >
-    <img
-      src={`data:image/png;base64,${temaVis.chart_png_base64}`}
-      alt="Carta del Tema Natale"
-      style={{
-        position: "absolute",
-        top: 0,
-        left: 0,
-        width: "100%",
-        height: "100%",
-        objectFit: "contain",  // la ruota resta intera dentro il quadrato
-        borderRadius: "12px",
-        display: "block",
-      }}
-    />
-  </div>
-</div>
-
-
-              {temaVis.meta && (
+              {/* grafico quadrato */}
+              <div
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  justifyContent: "center",
+                }}
+              >
                 <div
-                  className="card-text"
                   style={{
-                    fontSize: "0.9rem",
-                    opacity: 0.9,
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: "16px",
+                    position: "relative",
+                    width: "100%",
+                    maxWidth: "560px",
+                    paddingTop: "100%",
                   }}
                 >
-                  {temaVis.meta.ascendente_segno && (
-                    <span>
-                      <strong>Ascendente:</strong>{" "}
-                      {temaVis.meta.ascendente_segno}{" "}
-                      {typeof temaVis.meta.ascendente_gradi_segno === "number"
-                        ? `${temaVis.meta.ascendente_gradi_segno.toFixed(1)}°`
-                        : ""}
-                    </span>
+                  <img
+                    src={`data:image/png;base64,${temaVis.chart_png_base64}`}
+                    alt="Carta del Tema Natale"
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "contain",
+                      borderRadius: "12px",
+                      display: "block",
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* BLOCCO PIANETI + ASPETTI AFFIANCATI */}
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "16px",
+                  marginTop: "24px",
+                }}
+              >
+                {/* Card Pianeti */}
+                <div
+                  style={{
+                    flex: 1,
+                    minWidth: "260px",
+                    backgroundColor: "#15191c",
+                    borderRadius: "12px",
+                    border: "1px solid #2c3238",
+                    padding: "16px",
+                  }}
+                >
+                  <h3
+                    style={{
+                      fontSize: "1.05rem",
+                      fontWeight: 600,
+                      marginBottom: "12px",
+                    }}
+                  >
+                    Pianeti nel tema natale
+                  </h3>
+
+                  {temaVis?.pianeti && temaVis.pianeti.length > 0 ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "4px",
+                      }}
+                    >
+                      {temaVis.pianeti.map((p) => (
+                        <div
+                          key={p.name}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            fontSize: "0.9rem",
+                          }}
+                        >
+                          <span style={{ fontSize: "1.3rem" }}>
+                            {p.glyph}
+                          </span>
+                          <span>{p.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p
+                      style={{
+                        fontSize: "0.8rem",
+                        opacity: 0.7,
+                      }}
+                    >
+                      Dati pianeti non disponibili nel payload.
+                    </p>
                   )}
-                  {temaVis.meta.mc_segno && (
-                    <span>
-                      <strong>Medio Cielo:</strong>{" "}
-                      {temaVis.meta.mc_segno}{" "}
-                      {typeof temaVis.meta.mc_gradi_segno === "number"
-                        ? `${temaVis.meta.mc_gradi_segno.toFixed(1)}°`
-                        : ""}
-                    </span>
+
+                  {temaVis?.meta && (
+                    <div
+                      style={{
+                        marginTop: "10px",
+                        fontSize: "0.8rem",
+                        opacity: 0.9,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "4px",
+                      }}
+                    >
+                      {temaVis.meta.ascendente_segno && (
+                        <div>
+                          <strong>Ascendente:</strong>{" "}
+                          {temaVis.meta.ascendente_segno}{" "}
+                          {typeof temaVis.meta.ascendente_gradi_segno ===
+                          "number"
+                            ? `${temaVis.meta.ascendente_gradi_segno.toFixed(
+                                1
+                              )}°`
+                            : ""}
+                        </div>
+                      )}
+                      {temaVis.meta.mc_segno && (
+                        <div>
+                          <strong>Medio Cielo:</strong>{" "}
+                          {temaVis.meta.mc_segno}{" "}
+                          {typeof temaVis.meta.mc_gradi_segno === "number"
+                            ? `${temaVis.meta.mc_gradi_segno.toFixed(1)}°`
+                            : ""}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
+
+                {/* Card Aspetti */}
+                <div
+                  style={{
+                    flex: 1,
+                    minWidth: "260px",
+                    backgroundColor: "#15191c",
+                    borderRadius: "12px",
+                    border: "1px solid #2c3238",
+                    padding: "16px",
+                  }}
+                >
+                  <h3
+                    style={{
+                      fontSize: "1.05rem",
+                      fontWeight: 600,
+                      marginBottom: "12px",
+                    }}
+                  >
+                    Aspetti principali
+                  </h3>
+
+                  {temaVis?.aspetti && temaVis.aspetti.length > 0 ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px",
+                      }}
+                    >
+                      {temaVis.aspetti.map((a, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "10px",
+                            fontSize: "0.9rem",
+                          }}
+                        >
+                          {/* simboli a sinistra */}
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              fontSize: "1.1rem",
+                              minWidth: "70px",
+                            }}
+                          >
+                            <span>{a.g1}</span>
+                            <span>{a.g_asp}</span>
+                            <span>{a.g2}</span>
+                          </div>
+                          {/* testo completo: es. "Plutone trigono Lilith (orb 0,2°)" */}
+                          <div style={{ flex: 1 }}>{a.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p
+                      style={{
+                        fontSize: "0.8rem",
+                        opacity: 0.7,
+                      }}
+                    >
+                      Dati aspetti non disponibili nel payload.
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           </section>
         )}
