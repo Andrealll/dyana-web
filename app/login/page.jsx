@@ -1,6 +1,10 @@
+
+//LOGIN
+// LOGIN
+
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import DyanaNavbar from "../../components/DyanaNavbar";
 import { loginWithCredentials, registerWithEmail } from "../../lib/authClient";
@@ -20,6 +24,12 @@ export default function LoginPage() {
   const userRole = "guest";
   const userCredits = 0;
 
+  // ✅ Evita problemi di hydration: montiamo la navbar solo lato client
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   async function handleLogin(e) {
     e.preventDefault();
     setErrore("");
@@ -29,7 +39,9 @@ export default function LoginPage() {
       await loginWithCredentials(email, password);
       window.location.href = "/area-personale";
     } catch (err) {
-      setErrore("Email o password non validi.");
+      console.error("[LoginPage] errore login", err);
+      // 👇 usiamo il messaggio reale, fallback al testo generico
+      setErrore(err?.message || "Email o password non validi.");
     }
   }
 
@@ -64,7 +76,13 @@ export default function LoginPage() {
 
   return (
     <main className="page-root">
-      <DyanaNavbar userRole={userRole} credits={userCredits} onLogout={() => {}} />
+      {mounted && (
+        <DyanaNavbar
+          userRole={userRole}
+          credits={userCredits}
+          onLogout={() => {}}
+        />
+      )}
 
       <section className="landing-wrapper">
         <header className="section">
