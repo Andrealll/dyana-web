@@ -1,9 +1,9 @@
 // components/DyanaPopup.tsx
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 
-// Base URL del tuo bot DYANA su Typebot
+// Base URL del tuo bot DYANA su Typebot (quella che hai incollato)
 const URL_BOT_DYANA_BASE = "https://typebot.co/dyana-ai";
 
 type DyanaPopupProps = {
@@ -24,14 +24,6 @@ type DyanaPopupProps = {
 
 export function DyanaPopup(props: DyanaPopupProps) {
   const {
-    userId,
-    sessionId,
-    readingId,
-    readingType,
-    readingLabel,
-    readingText,
-    readingPayload,
-    kbTags,
     isPremium,
     questionsIncluded = 2,
   } = props;
@@ -40,54 +32,6 @@ export function DyanaPopup(props: DyanaPopupProps) {
 
   // bottone abilitato solo se premium con domande > 0
   const isEnabled = isPremium && questionsIncluded > 0;
-
-  const urlWithParams = useMemo(() => {
-    try {
-      const params = new URLSearchParams();
-
-      if (userId) params.set("user_id", userId);
-      if (sessionId) params.set("session_id", sessionId);
-      if (readingId) params.set("reading_id", readingId);
-      if (readingType) params.set("reading_type", readingType);
-      if (readingLabel) params.set("reading_label", readingLabel);
-
-      // reading_text potrebbe essere molto lungo: tagliamo un po' per sicurezza
-      const safeReadingText = (readingText || "").slice(0, 6000);
-      if (safeReadingText) params.set("reading_text", safeReadingText);
-
-      // JSON grezzo per payload e kb_tags
-      const payloadJson = JSON.stringify(readingPayload ?? {});
-      const kbTagsJson = JSON.stringify(kbTags ?? []);
-
-      params.set("reading_payload_json", payloadJson);
-      params.set("kb_tags_json", kbTagsJson);
-
-      // Numero di domande incluse
-      if (isEnabled) {
-        params.set("questions_left_initial", String(questionsIncluded));
-      } else {
-        params.set("questions_left_initial", "0");
-      }
-
-      const qs = params.toString();
-      if (!qs) return URL_BOT_DYANA_BASE;
-      return `${URL_BOT_DYANA_BASE}?${qs}`;
-    } catch (e) {
-      console.error("[DYANA] errore build URL Typebot:", e);
-      return URL_BOT_DYANA_BASE;
-    }
-  }, [
-    userId,
-    sessionId,
-    readingId,
-    readingType,
-    readingLabel,
-    readingText,
-    readingPayload,
-    kbTags,
-    isEnabled,
-    questionsIncluded,
-  ]);
 
   const handleToggle = () => {
     if (!isEnabled) return; // non aprire se non abilitato
@@ -142,7 +86,7 @@ export function DyanaPopup(props: DyanaPopupProps) {
           }}
         >
           <iframe
-            src={urlWithParams}
+            src={URL_BOT_DYANA_BASE}
             style={{
               border: "none",
               width: "100%",
