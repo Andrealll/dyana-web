@@ -469,3 +469,74 @@ body {
     justify-content: flex-end; /* anche su desktop la teniamo a destra */
   }
 }
+
+
+
+
+/* ==========================
+   COOKIE MODAL DYANA
+   ========================== */
+
+.cookie-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.cookie-modal {
+  background: var(--dyana-bg);
+  border: 1px solid var(--dyana-gold);
+  border-radius: 16px;
+  max-width: 480px;
+  width: 100%;
+  padding: 24px 20px;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.7);
+}
+
+.cookie-title {
+  margin: 0 0 8px 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #f5f5ff;
+}
+
+.cookie-text {
+  margin: 0 0 20px 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #e0e0ff;
+}
+
+.cookie-accept-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: var(--dyana-gold);
+  color: #15191c;
+  transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.1s ease;
+}
+
+.cookie-accept-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+  opacity: 0.95;
+}
+
+.cookie-accept-btn:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
