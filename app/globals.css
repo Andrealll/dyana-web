@@ -357,17 +357,21 @@ body {
 /* RIGA INFERIORE: stato utente sempre a destra */
 .dyana-navbar-bottom {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start; /* SINISTRA */
   width: 100%;
-  margin-top: 2px;
+  margin-top: 4px;
+  padding-left: 8px; /* un po' di respiro dal bordo */
 }
 
 .dyana-navbar-status {
+  max-width: 75%;
   display: flex;
   flex-direction: column;
-  font-size: 0.75rem;
-  line-height: 1.2;
-  text-align: right;
+  font-size: 0.7rem;
+  line-height: 1.25;
+  text-align: left;          /* SINISTRA */
+  white-space: normal;
+  word-break: break-word;
 }
 
 .dyana-navbar-status-top {
