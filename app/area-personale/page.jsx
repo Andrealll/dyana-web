@@ -1,3 +1,5 @@
+//AREA PERSONALE
+
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -77,8 +79,9 @@ export default function AreaPersonalePage() {
       setErrore("");
 
       const cs = await fetchCreditsState(token);
+	  console.log("[AREA] credits state:", cs);
       setCreditsState(cs);
-
+	  setMarketingConsent(Boolean(cs.marketing_consent));
       const usageData = await fetchUsageHistory(token);
       setUsage(usageData?.usage || []);
       setPurchases(usageData?.purchases || []);
@@ -215,6 +218,7 @@ export default function AreaPersonalePage() {
                 <input
                   type="checkbox"
                   checked={marketingConsent}
+                  onChange={handleToggleMarketing}
                   onChange={handleToggleMarketing}
                   style={{ margin: 0 }}
                 />
