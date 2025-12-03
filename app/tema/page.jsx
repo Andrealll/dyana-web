@@ -827,7 +827,7 @@ export default function TemaPage() {
                     readingPayload={readingPayload}
                     kbTags={kbTags}
                     // 🔹 qui il flag che sblocca il bottone
-                    isPremium={isPremiumReading}
+                    isPremium={isPremium} 
                     questionsIncluded={2}
                   />
                 </div>
