@@ -37,10 +37,9 @@ export function DyanaPopup(props: DyanaPopupProps) {
   } = props;
 
   const [open, setOpen] = useState(false);
-  // 🔥 DEBUG: forza sempre abilitato
-  const isEnabled = true;
+
   // bottone abilitato solo se premium con domande > 0
-  const isEnabled = isPremium && questionsIncluded > 0;
+  //const isEnabled = isPremium && questionsIncluded > 0;
 
   const urlWithParams = useMemo(() => {
     try {
