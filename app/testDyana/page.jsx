@@ -3,9 +3,17 @@
 import { useState } from "react";
 
 export default function TestTypebotPage() {
+  // 🔧 QUI simuli il caso: metti = false per vedere la versione "bloccata"
   const isPremium = true;
 
   const [open, setOpen] = useState(false);
+
+  const isEnabled = isPremium; // in futuro su /tema useremo il vero isPremium
+
+  const handleClick = () => {
+    if (!isEnabled) return;
+    setOpen((prev) => !prev);
+  };
 
   return (
     <main className="page-root">
@@ -53,21 +61,40 @@ export default function TestTypebotPage() {
                 className="card-text"
                 style={{ fontSize: "0.9rem", opacity: 0.8 }}
               >
-                Hai <strong>2 domande incluse</strong> con la versione Premium.
+                Hai <strong>2 domande di chiarimento</strong> incluse con la
+                lettura Premium. In seguito potrai usare i tuoi crediti per
+                sbloccare ulteriori domande extra.
               </p>
 
-              {/* 🔥 BOTTONE TOGGLE */}
+              {/* 🔥 BOTTONE TOGGLE con gating */}
               <button
                 type="button"
                 className="btn btn-primary"
                 style={{ marginTop: 16 }}
-                onClick={() => setOpen((prev) => !prev)}
+                onClick={handleClick}
+                disabled={!isEnabled}
               >
                 {open ? "Chiudi DYANA" : "Chiedi a DYANA"}
               </button>
 
-              {/* 🔥 IFRAME SOLO SE OPEN = TRUE */}
-              {open && (
+              {/* Messaggio se NON è premium */}
+              {!isEnabled && (
+                <p
+                  className="card-text"
+                  style={{
+                    marginTop: 8,
+                    fontSize: "0.9rem",
+                    opacity: 0.85,
+                  }}
+                >
+                  La chat con DYANA è disponibile solo per le letture{" "}
+                  <strong>Premium</strong>, che includono 2 domande di
+                  approfondimento sul tuo Tema Natale.
+                </p>
+              )}
+
+              {/* IFRAME solo se premium + aperto */}
+              {open && isEnabled && (
                 <div
                   style={{
                     marginTop: 16,
