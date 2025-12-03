@@ -10,7 +10,6 @@ export default function CookieBanner() {
   const [accepted, setAccepted] = useState(false);
 
   useEffect(() => {
-    // siamo sul client
     setMounted(true);
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
@@ -18,16 +17,11 @@ export default function CookieBanner() {
         setAccepted(true);
       }
     } catch (e) {
-      // se localStorage non è disponibile, non blocchiamo niente
       console.warn("[CookieBanner] localStorage non disponibile", e);
     }
   }, []);
 
-  // 🔴 PUNTO CHIAVE:
-  // - sul server: mounted = false → return null
-  // - primo render sul client: mounted = false → return null
-  //   ⇒ HTML server e HTML client iniziale coincidono (nessun mismatch)
-  // - solo DOPO l'useEffect, se non è accettato, mostriamo il banner
+  // Evita problemi di hydration + nasconde se già accettato
   if (!mounted || accepted) {
     return null;
   }
@@ -42,20 +36,22 @@ export default function CookieBanner() {
   };
 
   return (
-    <div
-      className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-between px-4 py-3 text-sm bg-black/80 text-white backdrop-blur"
-    >
-      <span>
-        DYANA utilizza cookie tecnici. Accettando riceverai il bonus di
-        benvenuto.
-      </span>
-      <button
-        type="button"
-        onClick={handleAccept}
-        className="ml-4 px-3 py-1 rounded-full border border-white/60 text-xs uppercase tracking-wide"
-      >
-        Accetto
-      </button>
+    <div className="cookie-overlay">
+      <div className="cookie-modal">
+        <h2 className="cookie-title">DYANA e i cookie</h2>
+        <p className="cookie-text">
+          DYANA utilizza cookie tecnici per funzionare correttamente.
+          Accettando potrai usare tutte le funzionalità previste dal tuo piano.
+        </p>
+
+        <button
+          type="button"
+          onClick={handleAccept}
+          className="cookie-accept-btn"
+        >
+          Accetto e continuo
+        </button>
+      </div>
     </div>
   );
 }
