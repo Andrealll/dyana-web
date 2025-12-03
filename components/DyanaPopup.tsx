@@ -37,7 +37,8 @@ export function DyanaPopup(props: DyanaPopupProps) {
   } = props;
 
   const [open, setOpen] = useState(false);
-
+  // 🔥 DEBUG: forza sempre abilitato
+  const isEnabled = true;
   // bottone abilitato solo se premium con domande > 0
   const isEnabled = isPremium && questionsIncluded > 0;
 
@@ -90,7 +91,7 @@ export function DyanaPopup(props: DyanaPopupProps) {
   ]);
 
   const handleToggle = () => {
-    if (!isEnabled) return; // non aprire se non abilitato
+    //if (!isEnabled) return; // non aprire se non abilitato
     setOpen((prev) => !prev);
   };
 
