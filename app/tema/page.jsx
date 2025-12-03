@@ -452,33 +452,20 @@ export default function TemaPage() {
                   placeholder="Es. Napoli, IT"
                 />
               </div>
-
-              <div>
-                <label className="card-text">Livello</label>
-                <select
-                  name="tier"
-                  value={form.tier}
-                  onChange={(e) =>
-                    setForm({ ...form, tier: e.target.value })
-                  }
-                  className="form-input"
-                >
-                  <option value="free">Free (0 crediti)</option>
-                  <option value="premium">Premium + DYANA (2 crediti)</option>
-                </select>
-                <p
-                  className="card-text"
-                  style={{
-                    fontSize: "0.75rem",
-                    opacity: 0.75,
-                    marginTop: 4,
-                  }}
-                >
-                  Hai <strong>{userCredits}</strong> crediti disponibili.{" "}
-                  L&apos;opzione selezionata userà{" "}
-                  <strong>{form.tier === "premium" ? 2 : 0}</strong> crediti.
-                </p>
-              </div>
+<div>
+  <label className="card-text">Livello</label>
+  <select
+    name="tier"
+    value={form.tier}
+    onChange={(e) =>
+      setForm({ ...form, tier: e.target.value })
+    }
+    className="form-input"
+  >
+    <option value="free">Free (0 crediti)</option>
+    <option value="premium">Premium + DYANA (2 crediti)</option>
+  </select>
+</div>
 
               <button
                 onClick={generaTema}
@@ -773,7 +760,6 @@ export default function TemaPage() {
             </div>
           </section>
         )}
-
         {/* BLOCCO DYANA */}
         {hasReading && readingTextForDyana && (
           <section className="section">
@@ -838,6 +824,9 @@ export default function TemaPage() {
                     readingText={readingTextForDyana}
                     readingPayload={readingPayload}
                     kbTags={kbTags}
+                    // 🔹 qui abilitiamo / disabilitiamo il bottone
+                    isPremium={isPremiumReading}
+                    questionsIncluded={2}
                   />
                 </div>
 

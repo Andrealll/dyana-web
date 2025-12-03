@@ -1,3 +1,5 @@
+//oroscopo
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -43,6 +45,15 @@ const PERIOD_COSTS = {
   settimanale: 2,
   mensile: 3,
   annuale: 5,
+};
+
+// Etichette per il grafico di intensità
+const INTENSITY_LABELS = {
+  energy: "Energia",
+  emotions: "Emozioni",
+  relationships: "Relazioni",
+  work: "Lavoro",
+  luck: "Fortuna",
 };
 
 // Singleton per evitare più chiamate parallele a /auth/anonymous
@@ -189,6 +200,67 @@ function estraiInterpretazione(oroscopo_ai) {
     : [];
 
   return { sintesi, capitoli };
+}
+
+// Info aggiuntive dal motore numerico (pipe / metriche)
+function estraiInfoMetriche(engineResult) {
+  if (!engineResult || typeof engineResult !== "object") return null;
+
+  const engineVersion = engineResult.engine_version || null;
+  const periodoIta = engineResult.periodo_ita || null;
+
+  const pipe = engineResult.pipe || {};
+  const metriche = pipe.metriche_grafico || {};
+  const samples = Array.isArray(metriche.samples) ? metriche.samples : [];
+
+  const nSamples = samples.length;
+
+  let nAspettiTot = 0;
+  let hasNAspetti = false;
+
+  samples.forEach((s) => {
+    const n =
+      s?.metrics && typeof s.metrics.n_aspetti === "number"
+        ? s.metrics.n_aspetti
+        : null;
+    if (typeof n === "number") {
+      hasNAspetti = true;
+      nAspettiTot += n;
+    }
+  });
+
+  const nAspettiMedio =
+    hasNAspetti && nSamples > 0
+      ? Math.round(nAspettiTot / nSamples)
+      : null;
+
+  return {
+    engineVersion,
+    periodoIta,
+    nSamples,
+    nAspettiMedio,
+  };
+}
+
+// Info di alto livello dal payload AI
+function estraiInfoPayload(payloadAi) {
+  if (!payloadAi || typeof payloadAi !== "object") return null;
+
+  const topLevelKeys = Object.keys(payloadAi);
+  const meta =
+    payloadAi.meta && typeof payloadAi.meta === "object"
+      ? payloadAi.meta
+      : null;
+
+  const lang = meta?.lang || meta?.language || null;
+  const periodCode =
+    payloadAi.period_code || meta?.period_code || meta?.period || null;
+
+  return {
+    lang: lang || null,
+    periodCode: periodCode || null,
+    sectionsCount: topLevelKeys.length,
+  };
 }
 
 // ==========================
@@ -406,6 +478,14 @@ export default function OroscopoPage() {
     : null;
   const interpretazione = risultato
     ? estraiInterpretazione(risultato.oroscopo_ai)
+    : null;
+
+  const metricsInfo = risultato
+    ? estraiInfoMetriche(risultato.engine_result)
+    : null;
+
+  const payloadInfo = risultato
+    ? estraiInfoPayload(risultato.payload_ai)
     : null;
 
   const periodoLabel =
@@ -631,26 +711,67 @@ export default function OroscopoPage() {
                 {/* Capitoli sintetici, se presenti */}
                 {interpretazione?.capitoli &&
                   interpretazione.capitoli.length > 0 && (
-                    <div style={{ marginTop: "12px" }}>
-                      <h5 className="card-subtitle">Capitoli principali</h5>
-                      <ul
-                        style={{
-                          listStyle: "disc",
-                          paddingLeft: "20px",
-                        }}
-                      >
-                        {interpretazione.capitoli.map((cap, idx) => (
-                          <li key={cap.id || idx} className="card-text">
-                            <strong>
-                              {cap.titolo || `Capitolo ${idx + 1}`} —{" "}
-                            </strong>
-                            {cap.sintesi ||
-                              cap.riassunto ||
-                              "Capitolo senza sintesi breve disponibile."}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+                    <>
+                      <div style={{ marginTop: "12px" }}>
+                        <h5 className="card-subtitle">Capitoli principali</h5>
+                        <ul
+                          style={{
+                            listStyle: "disc",
+                            paddingLeft: "20px",
+                          }}
+                        >
+                          {interpretazione.capitoli.map((cap, idx) => (
+                            <li key={cap.id || idx} className="card-text">
+                              <strong>
+                                {cap.titolo || `Capitolo ${idx + 1}`} —{" "}
+                              </strong>
+                              {cap.sintesi ||
+                                cap.riassunto ||
+                                "Capitolo senza sintesi breve disponibile."}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Capitoli più lunghi */}
+                      <div style={{ marginTop: "16px" }}>
+                        <h5 className="card-subtitle">
+                          Approfondimento capitoli
+                        </h5>
+                        {interpretazione.capitoli.map((cap, idx) => {
+                          const titolo =
+                            cap.titolo || `Capitolo ${idx + 1}`;
+                          const testoLungo =
+                            cap.testo || cap.testo_esteso || "";
+
+                          if (!testoLungo) return null;
+
+                          return (
+                            <div
+                              key={cap.id || `long_${idx}`}
+                              style={{ marginTop: "8px" }}
+                            >
+                              <p
+                                className="card-text"
+                                style={{ fontWeight: 600 }}
+                              >
+                                {titolo}
+                              </p>
+                              <p
+                                className="card-text"
+                                style={{
+                                  whiteSpace: "pre-wrap",
+                                  fontSize: "0.9rem",
+                                  opacity: 0.95,
+                                }}
+                              >
+                                {testoLungo}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
                   )}
               </div>
 
@@ -690,9 +811,106 @@ export default function OroscopoPage() {
                         Fortuna: {intensita.luck}
                       </li>
                     </ul>
+
+                    {/* Grafico intensità */}
+                    <div className="intensity-chart">
+                      <h5
+                        className="card-subtitle"
+                        style={{ marginTop: "8px" }}
+                      >
+                        Grafico intensità
+                      </h5>
+                      <div className="intensity-chart-grid">
+                        {["energy", "emotions", "relationships", "work", "luck"].map(
+                          (key) => (
+                            <div key={key} className="intensity-row">
+                              <span className="intensity-label">
+                                {INTENSITY_LABELS[key]}
+                              </span>
+                              <div className="intensity-bar-track">
+                                <div
+                                  className="intensity-bar-fill"
+                                  style={{
+                                    width: `${Math.min(
+                                      100,
+                                      Math.max(0, intensita[key] ?? 0)
+                                    )}%`,
+                                  }}
+                                />
+                              </div>
+                              <span className="intensity-value">
+                                {intensita[key] ?? 0}
+                              </span>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    </div>
                   </>
                 )}
               </div>
+
+              {/* INFO MOTORE NUMERICO */}
+              {metricsInfo && (
+                <div style={{ marginTop: "16px" }}>
+                  <h4 className="card-subtitle">Info dal motore AstroBot</h4>
+                  <ul
+                    className="card-text"
+                    style={{ listStyle: "disc", paddingLeft: "20px" }}
+                  >
+                    {metricsInfo.periodoIta && (
+                      <li>
+                        Periodo astrologico considerato:{" "}
+                          <strong>{metricsInfo.periodoIta}</strong>
+                      </li>
+                    )}
+                    <li>
+                      Snapshot analizzati:{" "}
+                      <strong>{metricsInfo.nSamples}</strong>
+                    </li>
+                    {typeof metricsInfo.nAspettiMedio === "number" && (
+                      <li>
+                        Aspetti medi per snapshot:{" "}
+                        <strong>{metricsInfo.nAspettiMedio}</strong>
+                      </li>
+                    )}
+                    {metricsInfo.engineVersion && (
+                      <li>
+                        Versione motore:{" "}
+                        <strong>{metricsInfo.engineVersion}</strong>
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              )}
+
+              {/* INFO PAYLOAD AI */}
+              {payloadInfo && (
+                <div style={{ marginTop: "16px" }}>
+                  <h4 className="card-subtitle">Info sul payload AI</h4>
+                  <ul
+                    className="card-text"
+                    style={{ listStyle: "disc", paddingLeft: "20px" }}
+                  >
+                    {payloadInfo.lang && (
+                      <li>
+                        Lingua della lettura:{" "}
+                        <strong>{payloadInfo.lang}</strong>
+                      </li>
+                    )}
+                    {payloadInfo.periodCode && (
+                      <li>
+                        Codice periodo nel prompt:{" "}
+                        <strong>{payloadInfo.periodCode}</strong>
+                      </li>
+                    )}
+                    <li>
+                      Sezioni nel payload:{" "}
+                      <strong>{payloadInfo.sectionsCount}</strong>
+                    </li>
+                  </ul>
+                </div>
+              )}
 
               {/* RAW JSON */}
               <div style={{ marginTop: "18px" }}>

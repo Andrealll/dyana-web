@@ -17,9 +17,9 @@ type DyanaPopupProps = {
   readingPayload: any;
   kbTags: string[];
 
-  // 🔹 NUOVI CAMPI
+  // NUOVI CAMPI
   isPremium: boolean;          // true solo per letture premium
-  questionsIncluded?: number;  // di default 2 (per le premium)
+  questionsIncluded?: number;  // default 2 per le premium
 };
 
 export function DyanaPopup(props: DyanaPopupProps) {
@@ -33,7 +33,7 @@ export function DyanaPopup(props: DyanaPopupProps) {
     readingPayload,
     kbTags,
     isPremium,
-    questionsIncluded = 2,   // default: 2 domande incluse
+    questionsIncluded = 2,
   } = props;
 
   const [open, setOpen] = useState(false);
@@ -62,7 +62,7 @@ export function DyanaPopup(props: DyanaPopupProps) {
       params.set("reading_payload_json", payloadJson);
       params.set("kb_tags_json", kbTagsJson);
 
-      // 🔹 Numero di domande incluse: solo se premium e > 0
+      // Numero di domande incluse: solo se premium e > 0
       if (isEnabled) {
         params.set("questions_left_initial", String(questionsIncluded));
       } else {
@@ -90,7 +90,7 @@ export function DyanaPopup(props: DyanaPopupProps) {
   ]);
 
   const handleToggle = () => {
-    if (!isEnabled) return; // safety: non aprire se non abilitato
+    if (!isEnabled) return; // non aprire se non abilitato
     setOpen((prev) => !prev);
   };
 
@@ -117,13 +117,15 @@ export function DyanaPopup(props: DyanaPopupProps) {
       {/* Messaggio informativo se NON è premium */}
       {!isEnabled && (
         <p
+          className="card-text"
           style={{
             marginTop: 8,
             fontSize: "0.9rem",
             opacity: 0.8,
           }}
         >
-          La chat con DYANA è disponibile solo per le letture Premium, che includono 2 domande di approfondimento.
+          La chat con DYANA è disponibile solo per le letture Premium, che
+          includono 2 domande di approfondimento.
         </p>
       )}
 
