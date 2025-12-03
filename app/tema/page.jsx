@@ -517,25 +517,39 @@ export default function TemaPage() {
             >
               <h3 className="card-title">La tua carta del Tema Natale</h3>
 
-              <div
-                style={{
-                  width: "100%",
-                  display: "flex",
-                  justifyContent: "center",
-                  marginTop: 8,
-                  marginBottom: 8,
-                }}
-              >
-                <img
-                  src={`data:image/png;base64,${temaVis.chart_png_base64}`}
-                  alt="Carta del Tema Natale"
-                  style={{
-                    maxWidth: "100%",
-                    height: "auto",
-                    borderRadius: "12px",
-                  }}
-                />
-              </div>
+<div
+  style={{
+    width: "100%",
+    display: "flex",
+    justifyContent: "center",
+  }}
+>
+  {/* Contenitore quadrato */}
+  <div
+    style={{
+      position: "relative",
+      width: "100%",
+      maxWidth: "560px",   // lato massimo del quadrato
+      paddingTop: "100%",  // 👉 rende il box perfettamente quadrato
+    }}
+  >
+    <img
+      src={`data:image/png;base64,${temaVis.chart_png_base64}`}
+      alt="Carta del Tema Natale"
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        width: "100%",
+        height: "100%",
+        objectFit: "contain",  // la ruota resta intera dentro il quadrato
+        borderRadius: "12px",
+        display: "block",
+      }}
+    />
+  </div>
+</div>
+
 
               {temaVis.meta && (
                 <div

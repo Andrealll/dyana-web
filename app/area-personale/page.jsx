@@ -1,5 +1,5 @@
 "use client";
-
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import DyanaNavbar from "../../components/DyanaNavbar";
@@ -9,6 +9,7 @@ import {
   fetchUsageHistory,
   updateMarketingConsent,
   deleteProfile,
+  clearToken,
 } from "../../lib/authClient";
 // =======================
 // Helpers formattazione
@@ -44,6 +45,9 @@ function formatUsageFeature(feature, scope) {
   return feature || "";
 }
 export default function AreaPersonalePage() {
+  const router = useRouter();
+
+	
   const [loading, setLoading] = useState(true);
   const [errore, setErrore] = useState("");
   const [erroreMarketing, setErroreMarketing] = useState("");
@@ -61,41 +65,46 @@ export default function AreaPersonalePage() {
   const userCredits = creditsState?.total_available ?? 0;
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        setErrore("");
-        setErroreMarketing("");
-        setSuccessMarketing("");
-        setLoading(true);
-
-        const token = getToken();
-        if (!token) {
-          setErrore("Non sei autenticato. Effettua di nuovo il login.");
-          setLoading(false);
-          return;
-        }
-
-        const [credits, usageHistory] = await Promise.all([
-          fetchCreditsState(token),
-          fetchUsageHistory(token),
-        ]);
-
-        setCreditsState(credits);
-        setMarketingConsent(Boolean(credits.marketing_consent));
-
-        setUsage(usageHistory.usage || []);
-        setPurchases(usageHistory.purchases || []);
-      } catch (err) {
-        console.error("[AREA-PERSONALE] errore:", err);
-        setErrore("Impossibile caricare i tuoi dati. Riprova più tardi.");
-      } finally {
-        setLoading(false);
-      }
+  async function loadData() {
+    const token = getToken();
+    if (!token) {
+      router.replace("/login");
+      return;
     }
 
-    loadData();
-  }, []);
+    try {
+      setLoading(true);
+      setErrore("");
 
+      const cs = await fetchCreditsState(token);
+      setCreditsState(cs);
+
+      const usageData = await fetchUsageHistory(token);
+      setUsage(usageData?.usage || []);
+      setPurchases(usageData?.purchases || []);
+    } catch (err) {
+      console.error("[AREA PERSONALE] errore:", err);
+      setErrore("Errore nel caricamento dei dati utente.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  loadData();
+}, [router]);
+  function handleLogoutFromNavbar() {
+    // svuota token lato client
+    clearToken();
+
+    // opzionale: pulisci lo stato locale della pagina
+    setCreditsState(null);
+    setUsage([]);
+    setPurchases([]);
+    setErrore("");
+
+    // redirect dove vuoi portare l'utente dopo il logout
+    router.push("/");
+  }
   async function handleToggleMarketing() {
     const token = getToken();
     if (!token) {
@@ -146,7 +155,7 @@ export default function AreaPersonalePage() {
 
   return (
     <main className="page-root">
-      <DyanaNavbar userRole={userRole} credits={userCredits} onLogout={() => {}} />
+      <DyanaNavbar userRole={userRole} credits={userCredits} onLogout={handleLogoutFromNavbar} />
 
       <section className="landing-wrapper">
         <header className="section">

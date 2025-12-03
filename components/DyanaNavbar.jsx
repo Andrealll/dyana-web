@@ -14,7 +14,7 @@ export default function DyanaNavbar({
   const [credits, setCredits] = useState(creditsProp ?? 0);
   const [email, setEmail] = useState(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-
+  const [logoutInProgress, setLogoutInProgress] = useState(false);
   const isGuest = userRole === "guest";
 
   // --- CARICAMENTO CREDITS / RUOLO ----------------------------------------
@@ -61,17 +61,30 @@ export default function DyanaNavbar({
       }
     };
   }, [loadNavbarState]);
+function handleLogoutClick() {
+  if (logoutInProgress) return; // evita doppi click
+  setLogoutInProgress(true);
 
-  function handleLogoutClick() {
-    if (onLogout) {
-      onLogout();
-      return;
-    }
-    clearToken();
-    if (typeof window !== "undefined") {
-      window.location.href = "/";
-    }
+  // Aggiorna SUBITO la UI
+  setUserRole("guest");
+  setCredits(0);
+  setEmail(null);
+
+  // Chiudi eventualmente il menu mobile
+  setIsMenuOpen(false);
+
+  if (onLogout) {
+    onLogout();
+    return;
   }
+
+  clearToken();
+
+  if (typeof window !== "undefined") {
+    window.location.href = "/";
+  }
+}
+
 
   function handleAreaPersonaleClick(e) {
     e.preventDefault();
@@ -152,17 +165,18 @@ export default function DyanaNavbar({
               </a>
 
               {!isGuest && (
-                <button
-                  type="button"
-                  className="dyana-navbar-logout"
-                  onClick={() => {
-                    handleLogoutClick();
-                    setIsMenuOpen(false);
-                  }}
-                >
-                  Logout
-                </button>
-              )}
+  <button
+    type="button"
+    className="dyana-navbar-logout"
+    onClick={() => {
+      handleLogoutClick();
+      setIsMenuOpen(false);
+    }}
+    disabled={logoutInProgress}
+  >
+    {logoutInProgress ? "Logout..." : "Logout"}
+  </button>
+)}
             </nav>
           </div>
         </div>

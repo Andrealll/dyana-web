@@ -1,60 +1,59 @@
+// components/CookieBanner.jsx
 "use client";
 
 import { useEffect, useState } from "react";
-import { getToken, updateCookieConsent } from "../lib/authClient";
 
-export default function CookieBanner({ onAccept }) {
-  const [visible, setVisible] = useState(false);
+const STORAGE_KEY = "dyana_cookie_accepted";
+
+export default function CookieBanner() {
+  const [mounted, setMounted] = useState(false);
+  const [accepted, setAccepted] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const ok = localStorage.getItem("cookieAccepted");
-    if (!ok) setVisible(true);
+    // siamo sul client
+    setMounted(true);
+    try {
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+      if (stored === "true") {
+        setAccepted(true);
+      }
+    } catch (e) {
+      // se localStorage non è disponibile, non blocchiamo niente
+      console.warn("[CookieBanner] localStorage non disponibile", e);
+    }
   }, []);
 
-  if (!visible) return null;
-
-  async function handleAccept() {
-    // 1) chiudo banner + salvo scelta lato browser
-    localStorage.setItem("cookieAccepted", "true");
-    setVisible(false);
-
-    // 2) provo ad aggiornare il backend (solo se ho un token guest/utente)
-    try {
-      const token = getToken();
-      if (token) {
-        await updateCookieConsent(token);
-      }
-    } catch (err) {
-      console.error("[COOKIE] errore updateCookieConsent:", err);
-      // non blocco l'UX: il banner resta chiuso comunque
-    }
-
-    // 3) callback opzionale (se l'hai passata)
-    if (onAccept) {
-      onAccept();
-    }
+  // 🔴 PUNTO CHIAVE:
+  // - sul server: mounted = false → return null
+  // - primo render sul client: mounted = false → return null
+  //   ⇒ HTML server e HTML client iniziale coincidono (nessun mismatch)
+  // - solo DOPO l'useEffect, se non è accettato, mostriamo il banner
+  if (!mounted || accepted) {
+    return null;
   }
+
+  const handleAccept = () => {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, "true");
+    } catch (e) {
+      console.warn("[CookieBanner] errore salvataggio localStorage", e);
+    }
+    setAccepted(true);
+  };
 
   return (
     <div
-      style={{
-        position: "fixed",
-        bottom: 0,
-        width: "100%",
-        background: "#2c4050",
-        padding: 16,
-        color: "white",
-        textAlign: "center",
-        zIndex: 999,
-      }}
+      className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-between px-4 py-3 text-sm bg-black/80 text-white backdrop-blur"
     >
-      <p style={{ marginBottom: 8 }}>
-        DYANA utilizza cookie tecnici di sessione. Accettandoli riceverai il{" "}
-        <strong>bonus di benvenuto</strong>. Se non li accetti potrai usare il sito,
-        ma senza alcun trial gratuito.
-      </p>
-      <button className="btn btn-primary" onClick={handleAccept}>
+      <span>
+        DYANA utilizza cookie tecnici. Accettando riceverai il bonus di
+        benvenuto.
+      </span>
+      <button
+        type="button"
+        onClick={handleAccept}
+        className="ml-4 px-3 py-1 rounded-full border border-white/60 text-xs uppercase tracking-wide"
+      >
         Accetto
       </button>
     </div>
