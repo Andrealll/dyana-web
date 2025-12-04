@@ -1,9 +1,8 @@
 // TEMA_AI
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { DyanaPopup } from "../../components/DyanaPopup";
 import { getToken, clearToken } from "../../lib/authClient";
 import DyanaNavbar from "../../components/DyanaNavbar";
 
@@ -11,7 +10,7 @@ import DyanaNavbar from "../../components/DyanaNavbar";
 // COSTANTI GLOBALI
 // ==========================
 
-const TYPEBOT_DYANA_ID = "diyana-ai";
+const TYPEBOT_DYANA_ID = "diyana-ai"; // per ora non usato ma lo teniamo
 
 // Base URL del backend AstroBot (Render → fallback locale)
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE
@@ -149,6 +148,7 @@ export default function TemaPage() {
   const [kbTags, setKbTags] = useState([]);
 
   const [sessionId] = useState(() => `tema_session_${Date.now()}`);
+  const [diyanaOpen, setDiyanaOpen] = useState(false);
 
   // ======================================================
   // Token login (registrato) → aggiorna UI
@@ -206,6 +206,7 @@ export default function TemaPage() {
     setRisultato(null);
     setBilling(null);
     setTemaVis(null);
+    setDiyanaOpen(false); // chiudi eventualmente la chat quando rigeneri
 
     try {
       const payload = {
@@ -358,7 +359,7 @@ export default function TemaPage() {
   };
 
   const isPremium = form.tier === "premium";
-  const isPremiumReading = isPremium;
+
   let readingTextForDyana = interpretazione || "";
   if (isPremium && contenuto) {
     const extraParts = [];
@@ -374,6 +375,46 @@ export default function TemaPage() {
   }
 
   const hasReading = !!interpretazione;
+
+  // ==========================
+  // URL Typebot con parametri per il body
+  // ==========================
+  const typebotUrl = useMemo(() => {
+    const baseUrl = "https://typebot.co/dyana-ai";
+
+    try {
+      const params = new URLSearchParams();
+
+      if (userIdForDyana) {
+        params.set("user_id", userIdForDyana);
+      }
+
+      if (sessionId) {
+        params.set("session_id", sessionId);
+      }
+
+      if (readingId) {
+        params.set("reading_id", readingId);
+      } else {
+        params.set("reading_id", "tema_inline");
+      }
+
+      params.set("reading_type", "tema_natale");
+      params.set("reading_label", "Il tuo Tema Natale");
+
+      const safeReadingText = (readingTextForDyana || "").slice(0, 6000);
+      if (safeReadingText) {
+        params.set("reading_text", safeReadingText);
+      }
+
+      const qs = params.toString();
+      if (!qs) return baseUrl;
+      return `${baseUrl}?${qs}`;
+    } catch (e) {
+      console.error("[DYANA][TEMA] errore build URL Typebot:", e);
+      return baseUrl;
+    }
+  }, [userIdForDyana, sessionId, readingId, readingTextForDyana]);
 
   // ==========================
   // RENDER
@@ -452,20 +493,21 @@ export default function TemaPage() {
                   placeholder="Es. Napoli, IT"
                 />
               </div>
-<div>
-  <label className="card-text">Livello</label>
-  <select
-    name="tier"
-    value={form.tier}
-    onChange={(e) =>
-      setForm({ ...form, tier: e.target.value })
-    }
-    className="form-input"
-  >
-    <option value="free">Free (0 crediti)</option>
-    <option value="premium">Premium + DYANA (2 crediti)</option>
-  </select>
-</div>
+
+              <div>
+                <label className="card-text">Livello</label>
+                <select
+                  name="tier"
+                  value={form.tier}
+                  onChange={(e) =>
+                    setForm({ ...form, tier: e.target.value })
+                  }
+                  className="form-input"
+                >
+                  <option value="free">Free (0 crediti)</option>
+                  <option value="premium">Premium + DYANA (2 crediti)</option>
+                </select>
+              </div>
 
               <button
                 onClick={generaTema}
@@ -760,9 +802,8 @@ export default function TemaPage() {
             </div>
           </section>
         )}
-  
-  
-          {/* BLOCCO DYANA */}
+
+        {/* BLOCCO DYANA */}
         {hasReading && readingTextForDyana && (
           <section className="section">
             <div
@@ -815,22 +856,60 @@ export default function TemaPage() {
                   crediti per sbloccare ulteriori domande extra.
                 </p>
 
-                <div style={{ marginTop: 14 }}>
-                  <DyanaPopup
-                    typebotId={TYPEBOT_DYANA_ID}
-                    userId={userIdForDyana}
-                    sessionId={sessionId}
-                    readingId={readingId || "tema_inline"}
-                    readingType="tema_natale"
-                    readingLabel="Il tuo Tema Natale"
-                    readingText={readingTextForDyana}
-                    readingPayload={readingPayload}
-                    kbTags={kbTags}
-                    // 🔹 qui il flag che sblocca il bottone
-                    isPremium={isPremium} 
-                    questionsIncluded={2}
-                  />
-                </div>
+                {/* Bottone con gating premium */}
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ marginTop: 16 }}
+                  onClick={() => {
+                    if (!isPremium) return;
+                    setDiyanaOpen((prev) => !prev);
+                  }}
+                  disabled={!isPremium}
+                >
+                  {diyanaOpen ? "Chiudi DYANA" : "Chiedi a DYANA"}
+                </button>
+
+                {/* Messaggio se NON è premium */}
+                {!isPremium && (
+                  <p
+                    className="card-text"
+                    style={{
+                      marginTop: 8,
+                      fontSize: "0.9rem",
+                      opacity: 0.85,
+                    }}
+                  >
+                    La chat con DYANA è disponibile solo per le letture{" "}
+                    <strong>Premium</strong>, che includono 2 domande di
+                    approfondimento sul tuo Tema Natale.
+                  </p>
+                )}
+
+                {/* IFRAME solo se premium + aperto */}
+                {diyanaOpen && isPremium && (
+                  <div
+                    style={{
+                      marginTop: 16,
+                      width: "100%",
+                      height: "600px",
+                      borderRadius: "14px",
+                      overflow: "hidden",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      boxShadow: "0 22px 48px rgba(0,0,0,0.75)",
+                    }}
+                  >
+                    <iframe
+                      src={typebotUrl}
+                      style={{
+                        border: "none",
+                        width: "100%",
+                        height: "100%",
+                      }}
+                      allow="clipboard-write; microphone; camera"
+                    />
+                  </div>
+                )}
 
                 <p
                   className="card-text"
