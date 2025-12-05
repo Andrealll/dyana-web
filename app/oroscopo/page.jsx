@@ -1,12 +1,9 @@
-//oroscopo
-
+// app/oroscopo/page.jsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import DyanaNavbar from "../../components/DyanaNavbar";
-import { DyanaPopup } from "../../components/DyanaPopup";
-import { getToken, clearToken } from "../../lib/authClient";
 
 // ==========================
 // COSTANTI GLOBALI
@@ -191,13 +188,57 @@ function estraiIntensita(engineResult) {
   }
 }
 
+// Adatta sia vecchio schema (sintesi_periodo/capitoli)
+// sia nuovo schema (intro/sections/premium_message)
 function estraiInterpretazione(oroscopo_ai) {
   if (!oroscopo_ai) return null;
 
-  const sintesi = oroscopo_ai.sintesi_periodo;
-  const capitoli = Array.isArray(oroscopo_ai.capitoli)
-    ? oroscopo_ai.capitoli
-    : [];
+  // se c'è già sintesi_periodo e capitoli → compatibilità
+  const hasOldShape =
+    typeof oroscopo_ai.sintesi_periodo === "string" ||
+    Array.isArray(oroscopo_ai.capitoli);
+
+  if (hasOldShape) {
+    const sintesi = oroscopo_ai.sintesi_periodo || null;
+    const capitoli = Array.isArray(oroscopo_ai.capitoli)
+      ? oroscopo_ai.capitoli
+      : [];
+    return { sintesi, capitoli };
+  }
+
+  // nuovo schema: intro + sections
+  const sintesi =
+    oroscopo_ai.intro ||
+    oroscopo_ai.sintesi ||
+    oroscopo_ai.premium_message ||
+    null;
+
+  const capitoli = [];
+
+  // se ci sono macro_periods tipo [{ titolo, testo }...]
+  if (Array.isArray(oroscopo_ai.macro_periods)) {
+    oroscopo_ai.macro_periods.forEach((m, idx) => {
+      capitoli.push({
+        id: m.id || `macro_${idx}`,
+        titolo: m.title || m.titolo || `Periodo ${idx + 1}`,
+        sintesi: m.summary || m.sintesi || "",
+        testo: m.text || m.testo || "",
+      });
+    });
+  }
+
+  // se c'è sections: oggetto chiave → descrizione breve
+  if (oroscopo_ai.sections && typeof oroscopo_ai.sections === "object") {
+    Object.entries(oroscopo_ai.sections).forEach(([key, value]) => {
+      if (!value) return;
+      capitoli.push({
+        id: `sec_${key}`,
+        titolo: `${value}`,
+        sintesi: "",
+        testo: "",
+      });
+    });
+  }
 
   return { sintesi, capitoli };
 }
@@ -295,12 +336,13 @@ export default function OroscopoPage() {
 
   // Sessione DYANA per questa pagina (solo UI)
   const [sessionId] = useState(() => `oroscopo_session_${Date.now()}`);
+  const [diyanaOpen, setDiyanaOpen] = useState(false);
 
   // ======================================================
   // Token login (registrato) → aggiorna UI
   // ======================================================
   function refreshUserFromToken() {
-    const token = getToken();
+    const token = getTokenSafe();
     if (!token) {
       setUserRole("guest");
       setUserCredits(2);
@@ -329,16 +371,32 @@ export default function OroscopoPage() {
     }
   }
 
-  useEffect(() => {
-    // 1) Token login, se c'è
-    refreshUserFromToken();
+  // wrapper per evitare crash se lib non è disponibile
+  function getTokenSafe() {
+    try {
+      const { getToken } = require("../../lib/authClient");
+      return getToken();
+    } catch {
+      return null;
+    }
+  }
 
-    // 2) Inizializza guest token in background (singleton)
+  function clearTokenSafe() {
+    try {
+      const { clearToken } = require("../../lib/authClient");
+      clearToken();
+    } catch {
+      // ignore
+    }
+  }
+
+  useEffect(() => {
+    refreshUserFromToken();
     getGuestTokenSingleton();
   }, []);
 
   function handleLogout() {
-    clearToken();
+    clearTokenSafe();
     setUserRole("guest");
     setUserCredits(2);
     setUserIdForDyana("guest_oroscopo");
@@ -364,6 +422,7 @@ export default function OroscopoPage() {
     setReadingId("");
     setReadingPayload(null);
     setKbTags([]);
+    setDiyanaOpen(false); // chiudi DYANA quando rigeneri
 
     try {
       const slug = mapPeriodoToSlug(form.periodo);
@@ -379,7 +438,7 @@ export default function OroscopoPage() {
       };
 
       // 1) Token di login, se esiste
-      let token = getToken();
+      let token = getTokenSafe();
 
       // 2) Se non c'è login → usiamo il guest token SINGLETON
       if (!token) {
@@ -449,7 +508,7 @@ export default function OroscopoPage() {
       }
 
       // Estraggo meta per DYANA (se presente)
-      const meta = data?.oroscopo_ai?.meta || {};
+      const meta = data?.oroscopo_ai?.meta || data?.payload_ai?.meta || {};
       const readingIdFromBackend =
         meta.reading_id ||
         meta.id ||
@@ -505,9 +564,12 @@ export default function OroscopoPage() {
     interpretazione.capitoli.forEach((cap, idx) => {
       const titolo = cap.titolo || `Capitolo ${idx + 1}`;
       const testo =
-        cap.sintesi || cap.riassunto || cap.testo || "";
+        cap.sintesi || cap.riassunto || cap.testo || cap.testo_esteso || "";
       if (testo) {
         extraParts.push(`${titolo}:\n${testo}`);
+      } else {
+        // se non c'è testo, metto solo il titolo
+        extraParts.push(`${titolo}`);
       }
     });
     if (extraParts.length > 0) {
@@ -517,6 +579,59 @@ export default function OroscopoPage() {
 
   const hasReading = !!readingTextForDyana;
 
+  // ==========================
+  // URL Typebot con parametri per il body (come Tema)
+  // ==========================
+  const typebotUrl = useMemo(() => {
+    const baseUrl = "https://typebot.co/dyana-ai";
+
+    try {
+      const params = new URLSearchParams();
+
+      if (userIdForDyana) {
+        params.set("user_id", userIdForDyana);
+      }
+
+      if (sessionId) {
+        params.set("session_id", sessionId);
+      }
+
+      if (readingId) {
+        params.set("reading_id", readingId);
+      } else {
+        params.set("reading_id", "oroscopo_inline");
+      }
+
+      params.set("reading_type", "oroscopo_ai");
+      params.set(
+        "reading_label",
+        `Il tuo oroscopo (${periodoLabel || form.periodo || "giornaliero"})`
+      );
+
+      const safeReadingText = (readingTextForDyana || "").slice(0, 6000);
+      if (safeReadingText) {
+        params.set("reading_text", safeReadingText);
+      }
+
+      const qs = params.toString();
+      if (!qs) return baseUrl;
+      return `${baseUrl}?${qs}`;
+    } catch (e) {
+      console.error("[DYANA][OROSCOPO] errore build URL Typebot:", e);
+      return baseUrl;
+    }
+  }, [
+    userIdForDyana,
+    sessionId,
+    readingId,
+    readingTextForDyana,
+    periodoLabel,
+    form.periodo,
+  ]);
+
+  // ==========================
+  // RENDER
+  // ==========================
   return (
     <main className="page-root">
       <DyanaNavbar
@@ -704,7 +819,7 @@ export default function OroscopoPage() {
                 ) : (
                   <p className="card-text">
                     Nessuna interpretazione testuale disponibile (campo
-                    oroscopo_ai assente nella risposta).
+                    oroscopo_ai assente o non completo nella risposta).
                   </p>
                 )}
 
@@ -731,45 +846,6 @@ export default function OroscopoPage() {
                             </li>
                           ))}
                         </ul>
-                      </div>
-
-                      {/* Capitoli più lunghi */}
-                      <div style={{ marginTop: "16px" }}>
-                        <h5 className="card-subtitle">
-                          Approfondimento capitoli
-                        </h5>
-                        {interpretazione.capitoli.map((cap, idx) => {
-                          const titolo =
-                            cap.titolo || `Capitolo ${idx + 1}`;
-                          const testoLungo =
-                            cap.testo || cap.testo_esteso || "";
-
-                          if (!testoLungo) return null;
-
-                          return (
-                            <div
-                              key={cap.id || `long_${idx}`}
-                              style={{ marginTop: "8px" }}
-                            >
-                              <p
-                                className="card-text"
-                                style={{ fontWeight: 600 }}
-                              >
-                                {titolo}
-                              </p>
-                              <p
-                                className="card-text"
-                                style={{
-                                  whiteSpace: "pre-wrap",
-                                  fontSize: "0.9rem",
-                                  opacity: 0.95,
-                                }}
-                              >
-                                {testoLungo}
-                              </p>
-                            </div>
-                          );
-                        })}
                       </div>
                     </>
                   )}
@@ -821,29 +897,33 @@ export default function OroscopoPage() {
                         Grafico intensità
                       </h5>
                       <div className="intensity-chart-grid">
-                        {["energy", "emotions", "relationships", "work", "luck"].map(
-                          (key) => (
-                            <div key={key} className="intensity-row">
-                              <span className="intensity-label">
-                                {INTENSITY_LABELS[key]}
-                              </span>
-                              <div className="intensity-bar-track">
-                                <div
-                                  className="intensity-bar-fill"
-                                  style={{
-                                    width: `${Math.min(
-                                      100,
-                                      Math.max(0, intensita[key] ?? 0)
-                                    )}%`,
-                                  }}
-                                />
-                              </div>
-                              <span className="intensity-value">
-                                {intensita[key] ?? 0}
-                              </span>
+                        {[
+                          "energy",
+                          "emotions",
+                          "relationships",
+                          "work",
+                          "luck",
+                        ].map((key) => (
+                          <div key={key} className="intensity-row">
+                            <span className="intensity-label">
+                              {INTENSITY_LABELS[key]}
+                            </span>
+                            <div className="intensity-bar-track">
+                              <div
+                                className="intensity-bar-fill"
+                                style={{
+                                  width: `${Math.min(
+                                    100,
+                                    Math.max(0, intensita[key] ?? 0)
+                                  )}%`,
+                                }}
+                              />
                             </div>
-                          )
-                        )}
+                            <span className="intensity-value">
+                              {intensita[key] ?? 0}
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </>
@@ -861,7 +941,7 @@ export default function OroscopoPage() {
                     {metricsInfo.periodoIta && (
                       <li>
                         Periodo astrologico considerato:{" "}
-                          <strong>{metricsInfo.periodoIta}</strong>
+                        <strong>{metricsInfo.periodoIta}</strong>
                       </li>
                     )}
                     <li>
@@ -911,35 +991,12 @@ export default function OroscopoPage() {
                   </ul>
                 </div>
               )}
-
-              {/* RAW JSON */}
-              <div style={{ marginTop: "18px" }}>
-                <h4 className="card-subtitle">Dettaglio completo (raw JSON)</h4>
-                <pre
-                  className="card-text"
-                  style={{
-                    whiteSpace: "pre-wrap",
-                    fontSize: "0.8rem",
-                    maxHeight: "360px",
-                    overflow: "auto",
-                    marginTop: "8px",
-                  }}
-                >
-                  {JSON.stringify(risultato, null, 2)}
-                </pre>
-              </div>
-
-              <div style={{ marginTop: "16px", textAlign: "center" }}>
-                <Link href="/chat" className="btn btn-secondary">
-                  Vai alla chat con DYANA
-                </Link>
-              </div>
             </div>
           </section>
         )}
 
         {/* BLOCCO DYANA Q&A (solo se esiste una lettura testuale) */}
-        {hasReading && (
+        {hasReading && readingTextForDyana && (
           <section className="section">
             <div
               style={{
@@ -986,24 +1043,65 @@ export default function OroscopoPage() {
                   className="card-text"
                   style={{ fontSize: "0.9rem", opacity: 0.8 }}
                 >
-                  Come per il Tema Natale, avrai un numero limitato di domande
-                  di chiarimento incluse con questo oroscopo, poi potrai usare i
-                  tuoi crediti per sbloccarne di extra.
+                  Come per il Tema Natale, hai un numero limitato di domande di
+                  chiarimento incluse con questo oroscopo. Poi potrai usare i
+                  tuoi crediti per sbloccare domande extra.
                 </p>
 
-                <div style={{ marginTop: 14 }}>
-                  <DyanaPopup
-                    typebotId={TYPEBOT_DYANA_ID}
-                    userId={userIdForDyana}
-                    sessionId={sessionId}
-                    readingId={readingId || "oroscopo_inline"}
-                    readingType="oroscopo_ai"
-                    readingLabel={`Il tuo oroscopo (${periodoLabel})`}
-                    readingText={readingTextForDyana}
-                    readingPayload={readingPayload}
-                    kbTags={kbTags}
-                  />
-                </div>
+                {/* Bottone con gating premium */}
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ marginTop: 16 }}
+                  onClick={() => {
+                    if (!isPremium) return;
+                    setDiyanaOpen((prev) => !prev);
+                  }}
+                  disabled={!isPremium}
+                >
+                  {diyanaOpen ? "Chiudi DYANA" : "Chiedi a DYANA"}
+                </button>
+
+                {/* Messaggio se NON è premium */}
+                {!isPremium && (
+                  <p
+                    className="card-text"
+                    style={{
+                      marginTop: 8,
+                      fontSize: "0.9rem",
+                      opacity: 0.85,
+                    }}
+                  >
+                    La chat con DYANA è disponibile solo per le letture{" "}
+                    <strong>Premium</strong>, che includono domande di
+                    approfondimento sul tuo oroscopo.
+                  </p>
+                )}
+
+                {/* IFRAME solo se premium + aperto */}
+                {diyanaOpen && isPremium && (
+                  <div
+                    style={{
+                      marginTop: 16,
+                      width: "100%",
+                      height: "600px",
+                      borderRadius: "14px",
+                      overflow: "hidden",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      boxShadow: "0 22px 48px rgba(0,0,0,0.75)",
+                    }}
+                  >
+                    <iframe
+                      src={typebotUrl}
+                      style={{
+                        border: "none",
+                        width: "100%",
+                        height: "100%",
+                      }}
+                      allow="clipboard-write; microphone; camera"
+                    />
+                  </div>
+                )}
 
                 <p
                   className="card-text"
