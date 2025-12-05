@@ -44,6 +44,64 @@ if (typeof window !== "undefined") {
 }
 
 // ==========================
+// MAPPE ASTROLOGICHE (per le tabelle)
+// ==========================
+const ZODIAC_SIGNS = [
+  "Ariete",
+  "Toro",
+  "Gemelli",
+  "Cancro",
+  "Leone",
+  "Vergine",
+  "Bilancia",
+  "Scorpione",
+  "Sagittario",
+  "Capricorno",
+  "Acquario",
+  "Pesci",
+];
+
+const ZODIAC_GLYPHS = [
+  "♈",
+  "♉",
+  "♊",
+  "♋",
+  "♌",
+  "♍",
+  "♎",
+  "♏",
+  "♐",
+  "♑",
+  "♒",
+  "♓",
+];
+
+const PLANET_GLYPHS = {
+  Sole: "☉",
+  Luna: "☽",
+  Mercurio: "☿",
+  Venere: "♀",
+  Marte: "♂",
+  Giove: "♃",
+  Saturno: "♄",
+  Urano: "♅",
+  Nettuno: "♆",
+  Plutone: "♇",
+  Nodo: "☊",
+  "Nodo Nord": "☊",
+  "Nodo Sud": "☋",
+  Lilith: "⚸",
+};
+
+const ASPECT_GLYPHS = {
+  congiunzione: "☌",
+  trigono: "△",
+  sestile: "✶",
+  quadratura: "□",
+  opposizione: "☍",
+};
+
+// ==========================
 // Helper decode JWT
 // ==========================
 function decodeJwtPayload(token) {
@@ -113,6 +171,90 @@ async function getGuestTokenSingleton() {
 }
 
 // ==========================
+// HELPERS PER TABELLE VISIVE
+// ==========================
+function buildPianetiRowsFromDecod(pianetiDecod) {
+  if (!pianetiDecod || typeof pianetiDecod !== "object") return [];
+
+  const rows = [];
+
+  Object.entries(pianetiDecod).forEach(([name, data]) => {
+    if (name === "Ascendente") return;
+
+    const lonRaw =
+      data?.gradi_eclittici ??
+      data?.gradi ??
+      data?.long ??
+      data?.longitudine ??
+      null;
+
+    const lon = typeof lonRaw === "number" ? lonRaw : Number(lonRaw);
+    if (!Number.isFinite(lon)) return;
+
+    const lonNorm = ((lon % 360) + 360) % 360;
+    const signIndex = Math.floor(lonNorm / 30) % 12;
+    const degInSign = lonNorm % 30;
+
+    const signName = ZODIAC_SIGNS[signIndex] || "";
+    const signGlyph = ZODIAC_GLYPHS[signIndex] || "";
+    const degStr = degInSign.toFixed(1).replace(".", ",");
+
+    const glyph = PLANET_GLYPHS[name] || name.charAt(0);
+
+    const label = `${name} ${degStr}° ${signName || signGlyph}`;
+
+    rows.push({
+      name,
+      glyph,
+      label,
+    });
+  });
+
+  return rows;
+}
+
+function buildAspettiRows(aspettiRaw) {
+  if (!Array.isArray(aspettiRaw) || aspettiRaw.length === 0) return [];
+
+  const valid = aspettiRaw
+    .map((a) => {
+      const p1 = a.pianeta1 || a.pianetaA;
+      const p2 = a.pianeta2 || a.pianetaB;
+      if (!p1 || !p2) return null;
+
+      const tipoRaw = (a.tipo || "").toString().toLowerCase();
+      const orbVal =
+        typeof a.orb === "number"
+          ? a.orb
+          : typeof a.delta === "number"
+          ? a.delta
+          : null;
+
+      if (!Number.isFinite(orbVal)) return null;
+
+      const g1 = PLANET_GLYPHS[p1] || p1.charAt(0);
+      const g2 = PLANET_GLYPHS[p2] || p2.charAt(0);
+      const gAsp = ASPECT_GLYPHS[tipoRaw] || "";
+
+      const orbStr = orbVal.toFixed(1).replace(".", ",");
+      const label = `${p1} ${tipoRaw} ${p2} (orb ${orbStr}°)`;
+
+      return {
+        g1,
+        g_asp: gAsp,
+        g2,
+        label,
+        orb: orbVal,
+      };
+    })
+    .filter(Boolean);
+
+  const sorted = valid.sort((a, b) => a.orb - b.orb).slice(0, 13);
+
+  return sorted;
+}
+
+// ==========================
 // COMPONENTE PRINCIPALE
 // ==========================
 export default function CompatibilitaPage() {
@@ -132,6 +274,7 @@ export default function CompatibilitaPage() {
   const [errore, setErrore] = useState("");
   const [risultato, setRisultato] = useState(null); // JSON completo
   const [sinastriaAI, setSinastriaAI] = useState(null); // risultato.sinastria_ai
+  const [chartBase64, setChartBase64] = useState(null); // grafico sinastria
 
   // Stato utente per navbar
   const [userRole, setUserRole] = useState("guest");
@@ -148,6 +291,8 @@ export default function CompatibilitaPage() {
 
   // Sessione per questa pagina (per header X-Client-Session)
   const [sessionId] = useState(() => `compat_session_${Date.now()}`);
+
+  const isPremium = form.tier === "premium";
 
   // ======================================================
   // Token login (registrato) → aggiorna UI
@@ -222,7 +367,6 @@ export default function CompatibilitaPage() {
       return detail;
     }
     if (Array.isArray(detail)) {
-      // classico 422 di FastAPI: array di {type, loc, msg, input}
       const msgs = detail.map((d) => d.msg || JSON.stringify(d));
       return msgs.join(" | ");
     }
@@ -245,6 +389,7 @@ export default function CompatibilitaPage() {
     setReadingId("");
     setReadingPayload(null);
     setKbTags([]);
+    setChartBase64(null);
 
     try {
       const payload = {
@@ -263,10 +408,8 @@ export default function CompatibilitaPage() {
         tier: form.tier,
       };
 
-      // 1) Token di login, se esiste
       let token = getToken();
 
-      // 2) Se non c'è login → guest token singleton
       if (!token) {
         const guest = await getGuestTokenSingleton();
         if (guest) {
@@ -274,7 +417,6 @@ export default function CompatibilitaPage() {
         }
       }
 
-      // 3) Fallback finale: JWT statico (tema)
       if (!token && ASTROBOT_JWT_TEMA) {
         token = ASTROBOT_JWT_TEMA;
       }
@@ -317,13 +459,17 @@ export default function CompatibilitaPage() {
       }
 
       setRisultato(data);
+
       const sin = data?.sinastria_ai || null;
       setSinastriaAI(sin);
+
       if (data && data.billing) {
         setBilling(data.billing);
       }
 
-      // Metadati per DYANA (lettura Q&A)
+      const chart = data?.chart_sinastria_base64 || null;
+      setChartBase64(chart);
+
       const meta =
         (data && data.payload_ai && data.payload_ai.meta) ||
         (sin && sin.meta) ||
@@ -387,6 +533,28 @@ export default function CompatibilitaPage() {
   const hasReading = !!readingTextForDyana;
 
   // ======================================================
+  // DATI VISIVI PER TABELLE TEMI A / B + ASPETTI
+  // ======================================================
+  const sinastriaPayload = risultato?.payload_ai?.sinastria || null;
+  const temaA = sinastriaPayload?.A || null;
+  const temaB = sinastriaPayload?.B || null;
+  const sinastriaCore = sinastriaPayload?.sinastria || null;
+
+  const pianetiRowsA = temaA?.pianeti_decod
+    ? buildPianetiRowsFromDecod(temaA.pianeti_decod)
+    : [];
+  const pianetiRowsB = temaB?.pianeti_decod
+    ? buildPianetiRowsFromDecod(temaB.pianeti_decod)
+    : [];
+
+  const aspettiRows = sinastriaCore?.aspetti_AB
+    ? buildAspettiRows(sinastriaCore.aspetti_AB)
+    : [];
+
+  const displayNomeA = form.nomeA || "Persona A";
+  const displayNomeB = form.nomeB || "Persona B";
+
+  // ======================================================
   // RENDER
   // ======================================================
   return (
@@ -402,11 +570,10 @@ export default function CompatibilitaPage() {
         <header className="section">
           <h1 className="section-title">Compatibilità di Coppia</h1>
           <p className="section-subtitle">
-            Inserisci i dati di nascita delle due persone: DYANA userà il
-            motore AI di AstroBot (<code>/sinastria_ai</code>) per valutare
-            l&apos;affinità astrologica e restituire un quadro sintetico
-            della relazione. Usa il campo Livello per testare le versioni
-            free e premium.
+            In questa pagina puoi esplorare la compatibilità di coppia con la{" "}
+            <strong>sinastria</strong>, la tecnica astrologica che confronta
+            due temi natali per leggere affinità, chimica e possibili sfide
+            nella relazione.
           </p>
         </header>
 
@@ -559,18 +726,6 @@ export default function CompatibilitaPage() {
                   <option value="free">Free (0 crediti)</option>
                   <option value="premium">Premium (3 crediti)</option>
                 </select>
-                <p
-                  className="card-text"
-                  style={{
-                    fontSize: "0.75rem",
-                    opacity: 0.75,
-                    marginTop: 4,
-                  }}
-                >
-                  Hai <strong>{userCredits}</strong> crediti disponibili.{" "}
-                  L&apos;opzione selezionata userà{" "}
-                  <strong>{form.tier === "premium" ? 3 : 0}</strong> crediti.
-                </p>
               </div>
 
               {/* BOTTONE */}
@@ -592,6 +747,260 @@ export default function CompatibilitaPage() {
             </div>
           </div>
         </section>
+
+        {/* GRAFICO SINASTRIA */}
+        {chartBase64 && (
+          <section className="section">
+            <div
+              className="card"
+              style={{
+                maxWidth: "850px",
+                margin: "0 auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
+              <h3 className="card-title">Carta di sinastria</h3>
+
+              <div
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  justifyContent: "center",
+                }}
+              >
+                <div
+                  style={{
+                    position: "relative",
+                    width: "100%",
+                    maxWidth: "560px",
+                    paddingTop: "100%", // quadrato
+                  }}
+                >
+                  <img
+                    src={`data:image/png;base64,${chartBase64}`}
+                    alt="Carta di sinastria"
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "contain",
+                      borderRadius: "12px",
+                      display: "block",
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* TABELLE TEMI A/B + ASPETTI PRINCIPALI */}
+        {(pianetiRowsA.length > 0 ||
+          pianetiRowsB.length > 0 ||
+          aspettiRows.length > 0) && (
+          <section className="section">
+            <div
+              className="card"
+              style={{
+                maxWidth: "850px",
+                margin: "0 auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: 16,
+              }}
+            >
+              <h3 className="card-title">Dettagli astrologici</h3>
+
+              {/* TEMI A + B AFFIANCATI */}
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "16px",
+                  marginTop: "8px",
+                }}
+              >
+                {/* Tema A */}
+                <div
+                  style={{
+                    flex: 1,
+                    minWidth: "260px",
+                    backgroundColor: "#15191c",
+                    borderRadius: "12px",
+                    border: "1px solid #2c3238",
+                    padding: "16px",
+                  }}
+                >
+                  <h3
+                    style={{
+                      fontSize: "1.05rem",
+                      fontWeight: 600,
+                      marginBottom: "12px",
+                    }}
+                  >
+                    Tema natale di {displayNomeA}
+                  </h3>
+
+                  {pianetiRowsA.length > 0 ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "4px",
+                      }}
+                    >
+                      {pianetiRowsA.map((p) => (
+                        <div
+                          key={p.name}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            fontSize: "0.9rem",
+                          }}
+                        >
+                          <span style={{ fontSize: "1.3rem" }}>
+                            {p.glyph}
+                          </span>
+                          <span>{p.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p
+                      style={{
+                        fontSize: "0.8rem",
+                        opacity: 0.7,
+                      }}
+                    >
+                      Dati pianeti non disponibili nel payload.
+                    </p>
+                  )}
+                </div>
+
+                {/* Tema B */}
+                <div
+                  style={{
+                    flex: 1,
+                    minWidth: "260px",
+                    backgroundColor: "#15191c",
+                    borderRadius: "12px",
+                    border: "1px solid #2c3238",
+                    padding: "16px",
+                  }}
+                >
+                  <h3
+                    style={{
+                      fontSize: "1.05rem",
+                      fontWeight: 600,
+                      marginBottom: "12px",
+                    }}
+                  >
+                    Tema natale di {displayNomeB}
+                  </h3>
+
+                  {pianetiRowsB.length > 0 ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "4px",
+                      }}
+                    >
+                      {pianetiRowsB.map((p) => (
+                        <div
+                          key={p.name}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            fontSize: "0.9rem",
+                          }}
+                        >
+                          <span style={{ fontSize: "1.3rem" }}>
+                            {p.glyph}
+                          </span>
+                          <span>{p.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p
+                      style={{
+                        fontSize: "0.8rem",
+                        opacity: 0.7,
+                      }}
+                    >
+                      Dati pianeti non disponibili nel payload.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* ASPETTI PRINCIPALI SINASTRIA */}
+              {aspettiRows.length > 0 && (
+                <div
+                  style={{
+                    marginTop: "8px",
+                    backgroundColor: "#15191c",
+                    borderRadius: "12px",
+                    border: "1px solid #2c3238",
+                    padding: "16px",
+                  }}
+                >
+                  <h3
+                    style={{
+                      fontSize: "1.05rem",
+                      fontWeight: 600,
+                      marginBottom: "12px",
+                    }}
+                  >
+                    Aspetti principali della sinastria
+                  </h3>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "6px",
+                    }}
+                  >
+                    {aspettiRows.map((a, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          fontSize: "0.9rem",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            fontSize: "1.1rem",
+                            minWidth: "70px",
+                          }}
+                        >
+                          <span>{a.g1}</span>
+                          <span>{a.g_asp}</span>
+                          <span>{a.g2}</span>
+                        </div>
+                        <div style={{ flex: 1 }}>{a.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* SINTESI GENERALE */}
         {sinastriaAI?.sintesi_generale && (
@@ -650,7 +1059,6 @@ export default function CompatibilitaPage() {
                         </p>
                       )}
 
-                      {/* Aspetti principali */}
                       {Array.isArray(area.aspetti_principali) &&
                         area.aspetti_principali.length > 0 && (
                           <div style={{ marginBottom: 6 }}>
@@ -674,7 +1082,6 @@ export default function CompatibilitaPage() {
                           </div>
                         )}
 
-                      {/* Consigli pratici */}
                       {Array.isArray(area.consigli_pratici) &&
                         area.consigli_pratici.length > 0 && (
                           <div>
@@ -723,7 +1130,6 @@ export default function CompatibilitaPage() {
                   marginTop: 8,
                 }}
               >
-                {/* Punti di forza */}
                 {Array.isArray(sinastriaAI?.punti_forza) &&
                   sinastriaAI.punti_forza.length > 0 && (
                     <div>
@@ -744,7 +1150,6 @@ export default function CompatibilitaPage() {
                     </div>
                   )}
 
-                {/* Punti di criticità */}
                 {Array.isArray(sinastriaAI?.punti_criticita) &&
                   sinastriaAI.punti_criticita.length > 0 && (
                     <div>
@@ -765,7 +1170,6 @@ export default function CompatibilitaPage() {
                     </div>
                   )}
 
-                {/* Consigli finali */}
                 {Array.isArray(sinastriaAI?.consigli_finali) &&
                   sinastriaAI.consigli_finali.length > 0 && (
                     <div>
@@ -818,42 +1222,73 @@ export default function CompatibilitaPage() {
                     marginBottom: 4,
                   }}
                 >
-                  DYANA • Q&amp;A sulla vostra compatibilità
+                  {isPremium
+                    ? "DYANA • Q&A sulla vostra compatibilità (Premium)"
+                    : "DYANA • Disponibile con la lettura Premium"}
                 </p>
 
                 <h3 className="card-title" style={{ marginBottom: 6 }}>
-                  Hai domande su questa relazione?
+                  {isPremium
+                    ? "Hai domande su questa relazione?"
+                    : "Sblocca DYANA per approfondire questa relazione"}
                 </h3>
 
                 <p
                   className="card-text"
                   style={{ marginBottom: 4, opacity: 0.9 }}
                 >
-                  DYANA conosce già la sinastria che hai appena generato e può
-                  aiutarti a capire meglio le dinamiche della relazione.
+                  {isPremium
+                    ? "DYANA conosce già la sinastria che hai appena generato e può aiutarti a capire meglio le dinamiche della relazione."
+                    : "Con la versione Premium potrai fare domande mirate sulla vostra sinastria e ricevere risposte guidate da DYANA."}
                 </p>
 
                 <p
                   className="card-text"
                   style={{ fontSize: "0.9rem", opacity: 0.8 }}
                 >
-                  Hai a disposizione <strong>2 domande di chiarimento</strong>{" "}
-                  incluse con questa lettura. Poi potrai usare i tuoi crediti
-                  per sbloccare altre domande extra.
+                  {isPremium ? (
+                    <>
+                      Hai a disposizione{" "}
+                      <strong>2 domande di chiarimento</strong> incluse con
+                      questa lettura. Poi potrai usare i tuoi crediti per
+                      sbloccare altre domande extra.
+                    </>
+                  ) : (
+                    <>
+                      Passa alla lettura <strong>Premium</strong> per attivare
+                      la chat con DYANA e porre domande di approfondimento su
+                      questa compatibilità.
+                    </>
+                  )}
                 </p>
 
                 <div style={{ marginTop: 14 }}>
-                  <DyanaPopup
-                    typebotId={TYPEBOT_DYANA_ID}
-                    userId={userIdForDyana}
-                    sessionId={sessionId}
-                    readingId={readingId || "sinastria_inline"}
-                    readingType="sinastria"
-                    readingLabel="Compatibilità di coppia"
-                    readingText={readingTextForDyana}
-                    readingPayload={readingPayload}
-                    kbTags={kbTags}
-                  />
+                  {isPremium ? (
+                    <DyanaPopup
+                      typebotId={TYPEBOT_DYANA_ID}
+                      userId={userIdForDyana}
+                      sessionId={sessionId}
+                      readingId={readingId || "sinastria_inline"}
+                      readingType="sinastria"
+                      readingLabel="Compatibilità di coppia"
+                      readingText={readingTextForDyana}
+                      readingPayload={readingPayload}
+                      kbTags={kbTags}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled
+                      style={{
+                        opacity: 0.5,
+                        cursor: "not-allowed",
+                        marginTop: 4,
+                      }}
+                    >
+                      Disponibile nella versione Premium
+                    </button>
+                  )}
                 </div>
 
                 <p
@@ -869,24 +1304,6 @@ export default function CompatibilitaPage() {
                   argomenti generici.
                 </p>
               </div>
-            </div>
-          </section>
-        )}
-
-        {/* DEBUG COMPLETO */}
-        {risultato && (
-          <section className="section">
-            <div
-              className="card"
-              style={{ maxWidth: "850px", margin: "0 auto" }}
-            >
-              <h3 className="card-title">Dettagli Sinastria (debug)</h3>
-              <pre
-                className="card-text"
-                style={{ whiteSpace: "pre-wrap", fontSize: "0.9rem" }}
-              >
-                {JSON.stringify(risultato, null, 2)}
-              </pre>
             </div>
           </section>
         )}
