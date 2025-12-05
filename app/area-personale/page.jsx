@@ -1,6 +1,6 @@
-//AREA PERSONALE
-
+// AREA PERSONALE
 "use client";
+
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -13,6 +13,7 @@ import {
   deleteProfile,
   clearToken,
 } from "../../lib/authClient";
+
 // =======================
 // Helpers formattazione
 // =======================
@@ -46,10 +47,10 @@ function formatUsageFeature(feature, scope) {
   // fallback: chiave tecnica se non riconosciuta
   return feature || "";
 }
+
 export default function AreaPersonalePage() {
   const router = useRouter();
 
-	
   const [loading, setLoading] = useState(true);
   const [errore, setErrore] = useState("");
   const [erroreMarketing, setErroreMarketing] = useState("");
@@ -63,51 +64,81 @@ export default function AreaPersonalePage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const userRole = "user"; // TODO: in futuro leggilo dal JWT
-  const userCredits = creditsState?.total_available ?? 0;
+  // 🔹 valori per la navbar, derivati dallo stato reale dei crediti
+  const [userRole, setUserRole] = useState("guest");
+  const [userCredits, setUserCredits] = useState(0);
 
   useEffect(() => {
-  async function loadData() {
-    const token = getToken();
-    if (!token) {
-      router.replace("/login");
-      return;
+    async function loadData() {
+      const token = getToken();
+      if (!token) {
+        router.replace("/login");
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setErrore("");
+
+        const cs = await fetchCreditsState(token);
+        console.log("[AREA] credits state:", cs);
+        setCreditsState(cs);
+
+        // aggiorna marketing
+        setMarketingConsent(Boolean(cs?.marketing_consent));
+
+        // 🔹 aggiorna dati per navbar
+        const role = cs?.role || "user";
+        const total = cs?.total_available ?? 0;
+        setUserRole(role);
+        setUserCredits(total);
+
+        const usageData = await fetchUsageHistory(token);
+        setUsage(usageData?.usage || usageData?.usage_logs || []);
+        setPurchases(usageData?.purchases || []);
+      } catch (err) {
+        console.error("[AREA PERSONALE] errore:", err);
+        setErrore("Errore nel caricamento dei dati utente.");
+      } finally {
+        setLoading(false);
+      }
     }
 
-    try {
-      setLoading(true);
-      setErrore("");
+    loadData();
 
-      const cs = await fetchCreditsState(token);
-	  console.log("[AREA] credits state:", cs);
-      setCreditsState(cs);
-	  setMarketingConsent(Boolean(cs.marketing_consent));
-      const usageData = await fetchUsageHistory(token);
-      setUsage(usageData?.usage || []);
-      setPurchases(usageData?.purchases || []);
-    } catch (err) {
-      console.error("[AREA PERSONALE] errore:", err);
-      setErrore("Errore nel caricamento dei dati utente.");
-    } finally {
-      setLoading(false);
+    // listener per aggiornare l'area quando cambiano i crediti (acquisti / consumi)
+    function handleCreditsUpdated() {
+      console.log("[AREA PERSONALE] Evento dyana-credits-updated → reload");
+      loadData();
     }
-  }
 
-  loadData();
-}, [router]);
+    if (typeof window !== "undefined") {
+      window.addEventListener("diyana-credits-updated", handleCreditsUpdated);
+    }
+
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener(
+          "diyana-credits-updated",
+          handleCreditsUpdated
+        );
+      }
+    };
+  }, [router]);
+
   function handleLogoutFromNavbar() {
-    // svuota token lato client
     clearToken();
 
-    // opzionale: pulisci lo stato locale della pagina
     setCreditsState(null);
     setUsage([]);
     setPurchases([]);
     setErrore("");
+    setUserRole("guest");
+    setUserCredits(0);
 
-    // redirect dove vuoi portare l'utente dopo il logout
     router.push("/");
   }
+
   async function handleToggleMarketing() {
     const token = getToken();
     if (!token) {
@@ -128,7 +159,9 @@ export default function AreaPersonalePage() {
       );
     } catch (err) {
       console.error("[AREA-PERSONALE] errore marketing:", err);
-      setErroreMarketing("Non è stato possibile aggiornare il consenso marketing.");
+      setErroreMarketing(
+        "Non è stato possibile aggiornare il consenso marketing."
+      );
     }
   }
 
@@ -158,13 +191,18 @@ export default function AreaPersonalePage() {
 
   return (
     <main className="page-root">
-      <DyanaNavbar userRole={userRole} credits={userCredits} onLogout={handleLogoutFromNavbar} />
+      <DyanaNavbar
+        userRole={userRole}
+        credits={userCredits}
+        onLogout={handleLogoutFromNavbar}
+      />
 
       <section className="landing-wrapper">
         <header className="section">
           <h1 className="section-title">La tua area DYANA</h1>
           <p className="section-subtitle">
-            Qui trovi i tuoi crediti, le letture recenti e le ricariche effettuate.
+            Qui trovi i tuoi crediti, le letture recenti e le ricariche
+            effettuate.
           </p>
         </header>
 
@@ -219,7 +257,6 @@ export default function AreaPersonalePage() {
                   type="checkbox"
                   checked={marketingConsent}
                   onChange={handleToggleMarketing}
-                  onChange={handleToggleMarketing}
                   style={{ margin: 0 }}
                 />
                 <span>Consenso al marketing diretto</span>
@@ -234,7 +271,7 @@ export default function AreaPersonalePage() {
             </div>
           </div>
 
-                    {/* CREDITI DISPONIBILI */}
+          {/* CREDITI DISPONIBILI */}
           <div className="card">
             <h2 className="card-title">Crediti disponibili</h2>
             {loading && !creditsState ? (
@@ -248,7 +285,7 @@ export default function AreaPersonalePage() {
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "flex-start",
-                  gap: 4, // 👈 spaziatura verticale uniforme
+                  gap: 4,
                 }}
               >
                 <p className="card-text">
@@ -275,7 +312,7 @@ export default function AreaPersonalePage() {
             )}
           </div>
 
-           {/* ULTIME LETTURE PREMIUM */}
+          {/* ULTIME LETTURE PREMIUM */}
           <div className="card">
             <h2 className="card-title">Ultime letture premium</h2>
             {loading && !usage.length ? (
@@ -320,7 +357,6 @@ export default function AreaPersonalePage() {
             )}
           </div>
 
-
           {/* RICARICHE */}
           <div className="card">
             <h2 className="card-title">Ricariche effettuate</h2>
@@ -359,7 +395,9 @@ export default function AreaPersonalePage() {
                       {p.when} – {p.product}
                     </span>
                     <span>
-                      {p.amount != null ? `${p.amount} ${p.currency || "EUR"}` : ""}
+                      {p.amount != null
+                        ? `${p.amount} ${p.currency || "EUR"}`
+                        : ""}
                     </span>
                   </li>
                 ))}
@@ -400,7 +438,9 @@ export default function AreaPersonalePage() {
                     disabled={deleting}
                     onClick={handleDeleteProfile}
                   >
-                    {deleting ? "Cancellazione in corso..." : "Conferma cancellazione"}
+                    {deleting
+                      ? "Cancellazione in corso..."
+                      : "Conferma cancellazione"}
                   </button>
                   <button
                     className="btn btn-secondary"
