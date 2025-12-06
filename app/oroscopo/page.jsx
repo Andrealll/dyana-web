@@ -1,5 +1,3 @@
-// app/oroscopo/page.jsx
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -11,6 +9,7 @@ import { getToken, clearToken } from "../../lib/authClient";
 // COSTANTI GLOBALI
 // ==========================
 
+// ID Typebot (uguale a Tema/Sinastria)
 const TYPEBOT_DYANA_ID = "diyana-ai";
 
 // Base URL del backend AstroBot (Render → fallback locale)
@@ -34,7 +33,7 @@ const AUTH_BASE = process.env.NEXT_PUBLIC_AUTH_BASE
 // Storage key per il JWT guest
 const GUEST_TOKEN_STORAGE_KEY = "diyana_guest_jwt";
 
-// JWT di fallback (stesso del Tema, se presente)
+// JWT di fallback (stesso del Tema)
 const ASTROBOT_JWT_TEMA = process.env.NEXT_PUBLIC_ASTROBOT_JWT_TEMA || "";
 
 // Mappa costi crediti per periodo (allineata a OROSCOPO_FEATURE_COSTS lato backend)
@@ -76,7 +75,7 @@ function decodeJwtPayload(token) {
 async function getGuestTokenSingleton() {
   if (typeof window === "undefined") return null;
 
-  // 1) Se esiste in localStorage → lo usiamo sempre
+  // 1) Se esiste in localStorage → lo usiamo
   const stored = window.localStorage.getItem(GUEST_TOKEN_STORAGE_KEY);
   if (stored) {
     console.log(
@@ -93,7 +92,7 @@ async function getGuestTokenSingleton() {
   }
 
   // 3) Creiamo la promise una sola volta
-  const base = AUTH_BASE.replace(/\/+$/, ""); // toglie eventuali slash finali
+  const base = AUTH_BASE.replace(/\/+$/, "");
   const url = `${base}/auth/anonymous`;
   console.log(
     "[DYANA][OROSCOPO][GUEST] Nessun token LS, chiamo /auth/anonymous:",
@@ -156,102 +155,78 @@ function mapPeriodoToSlug(periodo) {
   }
 }
 
-// ==========================
-// Estrattore interpretazione COMPLETA
-// Usa intro + macro_periods/capitoli + sections
-// ==========================
-function buildInterpretazioneCompleta(oroscopo_ai) {
-  if (!oroscopo_ai || typeof oroscopo_ai !== "object") {
-    return "";
+// Costruiamo UN TESTO LUNGO unico per l'interpretazione
+// Costruiamo UN TESTO LUNGO unico per l'interpretazione
+function buildInterpretazioneTesto(oroscopoAi) {
+  if (!oroscopoAi || typeof oroscopoAi !== "object") return "";
+
+  const pieces = [];
+
+  // 1) Sintesi principale / intro
+  const main =
+    oroscopoAi.sintesi_periodo ||
+    oroscopoAi.sintesi ||
+    oroscopoAi.summary ||       // es. campo "summary" nei premium
+    oroscopoAi.intro ||
+    "";
+  if (main && main.trim()) {
+    pieces.push(main.trim());
   }
 
-  const blocks = [];
-
-  // 1) Sintesi o intro
-  if (typeof oroscopo_ai.sintesi_periodo === "string") {
-    blocks.push(oroscopo_ai.sintesi_periodo.trim());
-  } else if (typeof oroscopo_ai.intro === "string") {
-    blocks.push(oroscopo_ai.intro.trim());
+  // 2) Periodi / capitoli (Periodo 1, 2, 3…) – usa cap.text nei macro_periods
+  let capitoli = [];
+  if (Array.isArray(oroscopoAi.capitoli) && oroscopoAi.capitoli.length > 0) {
+    capitoli = oroscopoAi.capitoli;
+  } else if (
+    Array.isArray(oroscopoAi.macro_periods) &&
+    oroscopoAi.macro_periods.length > 0
+  ) {
+    capitoli = oroscopoAi.macro_periods;
   }
 
-  // 2) Macro periodi (Periodo 1, 2, 3...)
-  if (Array.isArray(oroscopo_ai.macro_periods)) {
-    oroscopo_ai.macro_periods.forEach((p, idx) => {
-      const titolo =
-        p.titolo ||
-        p.label ||
-        p.nome ||
-        `Periodo ${idx + 1}`;
-      const testo =
-        p.testo_esteso ||
-        p.testo ||
-        p.sintesi ||
-        p.riassunto ||
-        "";
-      if (testo && testo.trim()) {
-        blocks.push(`${titolo}\n${testo.trim()}`);
-      }
+  capitoli.forEach((cap, idx) => {
+    const titolo =
+      cap.titolo || cap.title || cap.label || `Periodo ${idx + 1}`;
+
+    // 🔴 QUI IL FIX: consideriamo anche cap.text (macro_periods)
+    const testo =
+      cap.testo ||
+      cap.text ||
+      cap.testo_esteso ||
+      cap.testo_lungo ||
+      cap.sintesi ||
+      cap.riassunto ||
+      "";
+
+    if (!testo || !testo.trim()) return;
+
+    // se c'è un range date, lo aggiungiamo alla riga del titolo
+    const dateRange =
+      typeof cap.date_range === "string" && cap.date_range.trim()
+        ? ` (${cap.date_range.trim()})`
+        : "";
+
+    pieces.push(`${titolo}${dateRange}\n${testo.trim()}`);
+  });
+
+  // 3) Fallback per la versione free (sections) se NON ci sono capitoli veri
+  if (!capitoli.length && oroscopoAi.sections) {
+    const secObj = oroscopoAi.sections;
+    Object.entries(secObj).forEach(([key, val]) => {
+      if (typeof val !== "string" || !val.trim()) return;
+      const label =
+        key === "panorama"
+          ? "Panoramica generale"
+          : key.charAt(0).toUpperCase() + key.slice(1);
+      pieces.push(`${label}\n${val.trim()}`);
     });
   }
 
-  // 3) Capitoli (vecchia struttura “Periodo 1 / 2 / 3”)
-  if (Array.isArray(oroscopo_ai.capitoli)) {
-    oroscopo_ai.capitoli.forEach((cap, idx) => {
-      const titolo =
-        cap.titolo ||
-        cap.label ||
-        `Periodo ${idx + 1}`;
-      const testo =
-        cap.testo_esteso ||
-        cap.testo ||
-        cap.sintesi ||
-        cap.riassunto ||
-        "";
-      if (testo && testo.trim()) {
-        blocks.push(`${titolo}\n${testo.trim()}`);
-      }
-    });
+  if (!pieces.length) {
+    return "Interpretazione non disponibile.";
   }
 
-  // 4) Sezioni tematiche (panorama, emozioni, relazioni, lavoro, energia, opportunita)
-  if (oroscopo_ai.sections && typeof oroscopo_ai.sections === "object") {
-    const labels = {
-      panorama: "Panorama generale",
-      emozioni: "Emozioni",
-      relazioni: "Relazioni",
-      lavoro: "Lavoro e carriera",
-      energia: "Energia e benessere",
-      opportunita: "Opportunità e sviluppi",
-    };
-
-    const order = [
-      "panorama",
-      "emozioni",
-      "relazioni",
-      "lavoro",
-      "energia",
-      "opportunita",
-    ];
-
-    order.forEach((key) => {
-      const testo = oroscopo_ai.sections[key];
-      if (typeof testo === "string" && testo.trim()) {
-        const titolo = labels[key];
-        if (titolo) {
-          blocks.push(`${titolo}\n${testo.trim()}`);
-        } else {
-          blocks.push(testo.trim());
-        }
-      }
-    });
-  }
-
-  // 5) Messaggio premium (solo se non c'è altro testo)
-  if (blocks.length === 0 && typeof oroscopo_ai.premium_message === "string") {
-    blocks.push(oroscopo_ai.premium_message.trim());
-  }
-
-  return blocks.join("\n\n").trim();
+  return pieces.join("\n\n");
 }
 
 // ==========================
@@ -276,7 +251,7 @@ export default function OroscopoPage() {
   const [userCredits, setUserCredits] = useState(2);
   const [userIdForDyana, setUserIdForDyana] = useState("guest_oroscopo");
 
-  // Billing DAL BACKEND (ma NON mostrato in UI)
+  // Billing restituito da /oroscopo_ai/{periodo}
   const [billing, setBilling] = useState(null);
 
   // DYANA
@@ -311,7 +286,7 @@ export default function OroscopoPage() {
       setUserIdForDyana("guest_oroscopo");
     }
 
-    // Dummy credits (reali dal backend, qui solo per UI)
+    // dummy UI, i reali arrivano dalla dashboard/altro
     if (role === "premium") {
       setUserCredits(10);
     } else if (role === "free") {
@@ -322,7 +297,9 @@ export default function OroscopoPage() {
   }
 
   useEffect(() => {
+    // 1) Token login, se c'è
     refreshUserFromToken();
+    // 2) Inizializza guest token
     getGuestTokenSingleton();
   }, []);
 
@@ -353,7 +330,7 @@ export default function OroscopoPage() {
     setReadingId("");
     setReadingPayload(null);
     setKbTags([]);
-    setDiyanaOpen(false);
+    setDiyanaOpen(false); // chiudo DYANA quando rigenero
 
     try {
       const slug = mapPeriodoToSlug(form.periodo);
@@ -371,7 +348,7 @@ export default function OroscopoPage() {
       // 1) Token di login, se esiste
       let token = getToken();
 
-      // 2) Se non c'è login → usiamo il guest token SINGLETON
+      // 2) Se non c'è login → guest token
       if (!token) {
         const guest = await getGuestTokenSingleton();
         if (guest) {
@@ -379,7 +356,7 @@ export default function OroscopoPage() {
         }
       }
 
-      // 3) Fallback finale: JWT statico da .env
+      // 3) Fallback finale: JWT statico
       if (!token && ASTROBOT_JWT_TEMA) {
         token = ASTROBOT_JWT_TEMA;
       }
@@ -433,12 +410,12 @@ export default function OroscopoPage() {
       setRisultato(data);
 
       if (data && data.billing) {
-        setBilling(data.billing); // NON mostrato, solo debug eventuale
+        setBilling(data.billing);
       } else {
         setBilling(null);
       }
 
-      // Metadati lettura per DYANA
+      // Meta per DYANA
       const meta = data?.oroscopo_ai?.meta || {};
       const readingIdFromBackend =
         meta.reading_id ||
@@ -463,21 +440,20 @@ export default function OroscopoPage() {
   // ==========================
   // Derivate per UI
   // ==========================
-  const isPremium = form.tier === "premium";
-  const currentCost = isPremium ? PERIOD_COSTS[form.periodo] || 0 : 0;
-
   const periodoLabel =
     risultato?.engine_result?.periodo_ita || form.periodo || "giornaliero";
 
-  // Testo per il cliente (interpretazione) + per DYANA
-  const interpretazioneCompleta = risultato
-    ? buildInterpretazioneCompleta(risultato.oroscopo_ai)
+  const isPremium = form.tier === "premium";
+  const currentCost = isPremium ? PERIOD_COSTS[form.periodo] || 0 : 0; // NON mostrato, ma lasciato per coerenza
+
+  const testoInterpretazione = risultato
+    ? buildInterpretazioneTesto(risultato.oroscopo_ai)
     : "";
 
-  const hasReading = !!interpretazioneCompleta;
+  const hasReading = !!testoInterpretazione;
 
   // ==========================
-  // URL Typebot con parametri per il body (stile Tema)
+  // URL Typebot con parametri
   // ==========================
   const typebotUrl = useMemo(() => {
     const baseUrl = "https://typebot.co/dyana-ai";
@@ -500,15 +476,9 @@ export default function OroscopoPage() {
       }
 
       params.set("reading_type", "oroscopo_ai");
-      params.set(
-        "reading_label",
-        `Il tuo oroscopo (${periodoLabel})`
-      );
+      params.set("reading_label", `Il tuo oroscopo (${periodoLabel})`);
 
-      const safeReadingText = (interpretazioneCompleta || "").slice(
-        0,
-        6000
-      );
+      const safeReadingText = (testoInterpretazione || "").slice(0, 6000);
       if (safeReadingText) {
         params.set("reading_text", safeReadingText);
       }
@@ -520,13 +490,7 @@ export default function OroscopoPage() {
       console.error("[DYANA][OROSCOPO] errore build URL Typebot:", e);
       return baseUrl;
     }
-  }, [
-    userIdForDyana,
-    sessionId,
-    readingId,
-    interpretazioneCompleta,
-    periodoLabel,
-  ]);
+  }, [userIdForDyana, sessionId, readingId, testoInterpretazione, periodoLabel]);
 
   // ==========================
   // RENDER
@@ -540,14 +504,11 @@ export default function OroscopoPage() {
       />
 
       <section className="landing-wrapper">
-        {/* INTESTAZIONE (testo sexy lo hai già sistemato tu) */}
+        {/* INTESTAZIONE – l’hai già sistemata tu, qui solo struttura */}
         <header className="section">
           <h1 className="section-title">Genera il tuo Oroscopo</h1>
           <p className="section-subtitle">
-            {/* Qui tieni il testo che hai già scritto in stile sinastria */}
-			Qui puoi generare un oroscopo davvero personale, basato sui movimenti reali dei pianeti nel tuo cielo. 
-			DYANA ti aiuta a capire quali energie stanno emergendo, come influenzano la tua vita e quali opportunità puoi cogliere ora. 
-			La versione{" "}<strong>Premium</strong> include la lettura completa e l&apos;accesso alla chat con DYANA.
+            {/* testo descrittivo sexy, non tecnico – lo gestisci tu nel file */}
           </p>
         </header>
 
@@ -638,18 +599,7 @@ export default function OroscopoPage() {
                   <option value="free">Free (0 crediti)</option>
                   <option value="premium">Premium + DYANA</option>
                 </select>
-                <p
-                  className="card-text"
-                  style={{
-                    fontSize: "0.75rem",
-                    opacity: 0.75,
-                    marginTop: 4,
-                  }}
-                >
-                  Hai <strong>{userCredits}</strong> crediti disponibili.{" "}
-                  L&apos;opzione selezionata userà{" "}
-                  <strong>{currentCost}</strong> crediti.
-                </p>
+                {/* <<< QUI ABBIAMO ELIMINATO IL TESTO SU CREDITS/COSTO >>> */}
               </div>
 
               {/* Invio */}
@@ -668,11 +618,38 @@ export default function OroscopoPage() {
                   {errore}
                 </p>
               )}
+
+              {/* Billing info – ***RIMOSSA DALLA UI*** (la lasciamo commentata se ti serve in debug)
+              {billing && (
+                <div
+                  className="card-text"
+                  style={{ fontSize: "0.8rem", opacity: 0.8, marginTop: 8 }}
+                >
+                  <p>
+                    Billing: <strong>{billing.mode}</strong> • Tier:{" "}
+                    <strong>{billing.tier}</strong> • Scope:{" "}
+                    <strong>{billing.scope}</strong>
+                  </p>
+                  {typeof billing.remaining_credits === "number" && (
+                    <p>
+                      Crediti rimanenti:{" "}
+                      <strong>{billing.remaining_credits}</strong>
+                    </p>
+                  )}
+                  <p>
+                    Costo pagato:{" "}
+                    <strong>{billing.cost_paid_credits || 0}</strong> crediti
+                    pagati,{" "}
+                    <strong>{billing.cost_free_credits || 0}</strong> crediti
+                    free.
+                  </p>
+                </div>
+              )} */}
             </div>
           </div>
         </section>
 
-        {/* RISULTATO */}
+        {/* RISULTATO – SOLO TESTO, niente Panoramica tecnica / grafici / info motore / info payload */}
         {hasReading && (
           <section className="section">
             <div
@@ -681,21 +658,15 @@ export default function OroscopoPage() {
             >
               <h3 className="card-title">Il tuo Oroscopo</h3>
 
-              {/* INTERPRETAZIONE COMPLETA (intro + periodi + sezioni) */}
-              <div style={{ marginBottom: "16px", marginTop: "8px" }}>
-                <h4 className="card-subtitle">Interpretazione</h4>
-                <p
-                  className="card-text"
-                  style={{ whiteSpace: "pre-wrap", marginTop: 6 }}
-                >
-                  {interpretazioneCompleta}
-                </p>
-              </div>
+              <h4 className="card-subtitle">Interpretazione</h4>
+              <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
+                {testoInterpretazione}
+              </p>
             </div>
           </section>
         )}
 
-        {/* BLOCCO DYANA Q&A (solo se esiste una lettura testuale) */}
+        {/* BLOCCO DYANA – STESSA LOGICA DI TEMA/SINASTRIA */}
         {hasReading && (
           <section className="section">
             <div
@@ -813,8 +784,8 @@ export default function OroscopoPage() {
                     textAlign: "right",
                   }}
                 >
-                  DYANA risponde solo su questo oroscopo, non su altri argomenti
-                  generici.
+                  DYANA risponde solo su questo oroscopo, non su altri
+                  argomenti generici.
                 </p>
               </div>
             </div>
