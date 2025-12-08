@@ -156,7 +156,6 @@ function mapPeriodoToSlug(periodo) {
 }
 
 // Costruiamo UN TESTO LUNGO unico per l'interpretazione
-// Costruiamo UN TESTO LUNGO unico per l'interpretazione
 function buildInterpretazioneTesto(oroscopoAi) {
   if (!oroscopoAi || typeof oroscopoAi !== "object") return "";
 
@@ -166,14 +165,13 @@ function buildInterpretazioneTesto(oroscopoAi) {
   const main =
     oroscopoAi.sintesi_periodo ||
     oroscopoAi.sintesi ||
-    oroscopoAi.summary ||       // es. campo "summary" nei premium
     oroscopoAi.intro ||
     "";
   if (main && main.trim()) {
     pieces.push(main.trim());
   }
 
-  // 2) Periodi / capitoli (Periodo 1, 2, 3…) – usa cap.text nei macro_periods
+  // 2) Periodi / capitoli (Periodo 1, 2, 3…)
   let capitoli = [];
   if (Array.isArray(oroscopoAi.capitoli) && oroscopoAi.capitoli.length > 0) {
     capitoli = oroscopoAi.capitoli;
@@ -187,29 +185,19 @@ function buildInterpretazioneTesto(oroscopoAi) {
   capitoli.forEach((cap, idx) => {
     const titolo =
       cap.titolo || cap.title || cap.label || `Periodo ${idx + 1}`;
-
-    // 🔴 QUI IL FIX: consideriamo anche cap.text (macro_periods)
     const testo =
       cap.testo ||
-      cap.text ||
       cap.testo_esteso ||
       cap.testo_lungo ||
       cap.sintesi ||
       cap.riassunto ||
       "";
-
     if (!testo || !testo.trim()) return;
 
-    // se c'è un range date, lo aggiungiamo alla riga del titolo
-    const dateRange =
-      typeof cap.date_range === "string" && cap.date_range.trim()
-        ? ` (${cap.date_range.trim()})`
-        : "";
-
-    pieces.push(`${titolo}${dateRange}\n${testo.trim()}`);
+    pieces.push(`${titolo}\n${testo.trim()}`);
   });
 
-  // 3) Fallback per la versione free (sections) se NON ci sono capitoli veri
+  // 3) Fallback per la versione free (sections)
   if (!capitoli.length && oroscopoAi.sections) {
     const secObj = oroscopoAi.sections;
     Object.entries(secObj).forEach(([key, val]) => {
@@ -225,7 +213,6 @@ function buildInterpretazioneTesto(oroscopoAi) {
   if (!pieces.length) {
     return "Interpretazione non disponibile.";
   }
-
   return pieces.join("\n\n");
 }
 
@@ -504,11 +491,14 @@ export default function OroscopoPage() {
       />
 
       <section className="landing-wrapper">
-        {/* INTESTAZIONE – l’hai già sistemata tu, qui solo struttura */}
+        {/* INTESTAZIONE */}
         <header className="section">
           <h1 className="section-title">Genera il tuo Oroscopo</h1>
           <p className="section-subtitle">
-            {/* testo descrittivo sexy, non tecnico – lo gestisci tu nel file */}
+            Seleziona il periodo che ti interessa e inserisci i tuoi dati di
+            nascita: DYANA traduce il linguaggio dei pianeti in un oroscopo
+            personalizzato, per aiutarti a capire che aria tira davvero nel tuo
+            cielo in questo momento.
           </p>
         </header>
 
@@ -599,7 +589,7 @@ export default function OroscopoPage() {
                   <option value="free">Free (0 crediti)</option>
                   <option value="premium">Premium + DYANA</option>
                 </select>
-                {/* <<< QUI ABBIAMO ELIMINATO IL TESTO SU CREDITS/COSTO >>> */}
+                {/* testo su crediti/costo rimosso */}
               </div>
 
               {/* Invio */}
@@ -619,7 +609,8 @@ export default function OroscopoPage() {
                 </p>
               )}
 
-              {/* Billing info – ***RIMOSSA DALLA UI*** (la lasciamo commentata se ti serve in debug)
+              {/* Billing info – lasciata solo in commento se ti serve per debug */}
+              {/*
               {billing && (
                 <div
                   className="card-text"
@@ -644,12 +635,13 @@ export default function OroscopoPage() {
                     free.
                   </p>
                 </div>
-              )} */}
+              )}
+              */}
             </div>
           </div>
         </section>
 
-        {/* RISULTATO – SOLO TESTO, niente Panoramica tecnica / grafici / info motore / info payload */}
+        {/* RISULTATO – SOLO TESTO */}
         {hasReading && (
           <section className="section">
             <div
@@ -714,10 +706,9 @@ export default function OroscopoPage() {
                   className="card-text"
                   style={{ fontSize: "0.9rem", opacity: 0.8 }}
                 >
-                  Come per il Tema Natale e la Sinastria, hai un numero
-                  limitato di domande di chiarimento incluse con questo
-                  oroscopo. Poi potrai usare i tuoi crediti per sbloccare
-                  domande extra.
+                  Come per il Tema Natale e la Sinastria, hai un numero limitato
+                  di domande di chiarimento incluse con questo oroscopo. Poi
+                  potrai usare i tuoi crediti per sbloccare domande extra.
                 </p>
 
                 {/* Bottone con gating premium */}
