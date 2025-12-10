@@ -141,19 +141,18 @@ function formatAspettoLabel(asp) {
 
   return base + orbTxt;
 }
-// Restituisce una stringa tipo: "Sole in Leone 23.4°"
-function formatPianetaPosizione(info, nomePianeta) {
-  if (!info || typeof info !== "object") {
-    return nomePianeta;
-  }
 
+// Pianeta in legenda: "Sole in Leone 23.4° – Casa 10"
+function formatPianetaPosizione(info) {
+  if (!info || typeof info !== "object") return "";
+
+  const nome = info.nome || info.planet || info.pianeta || "?";
   const segno =
     info.segno ||
     info.segno_zodiacale ||
     info.sign ||
     info.segno_breve ||
     "";
-
   let gradiNum = null;
   if (typeof info.gradi_segno === "number") {
     gradiNum = info.gradi_segno;
@@ -163,20 +162,24 @@ function formatPianetaPosizione(info, nomePianeta) {
     gradiNum = info.degree;
   }
 
-  const gradiTxt =
-    gradiNum !== null ? `${gradiNum.toFixed(1)}°` : "";
+  const gradiTxt = gradiNum !== null ? `${gradiNum.toFixed(1)}°` : "";
+  const casa = typeof info.casa === "number" ? info.casa : null;
 
+  let base = nome;
   if (segno && gradiTxt) {
-    return `${nomePianeta} in ${segno} ${gradiTxt}`;
+    base = `${nome} in ${segno} ${gradiTxt}`;
+  } else if (segno) {
+    base = `${nome} in ${segno}`;
+  } else if (gradiTxt) {
+    base = `${nome} ${gradiTxt}`;
   }
-  if (segno) {
-    return `${nomePianeta} in ${segno}`;
+
+  if (casa !== null) {
+    return `${base} – Casa ${casa}`;
   }
-  if (gradiTxt) {
-    return `${nomePianeta} ${gradiTxt}`;
-  }
-  return nomePianeta;
+  return base;
 }
+
 // ==========================
 // COMPONENTE PRINCIPALE
 // ==========================
@@ -185,16 +188,19 @@ export default function CompatibilitaPage() {
     nomeA: "",
     dataA: "",
     oraA: "",
+    oraAIgnota: false,
     cittaA: "",
     nomeB: "",
     dataB: "",
     oraB: "",
+    oraBIgnota: false,
     cittaB: "",
     tier: "free", // free / premium
   });
 
   const [loading, setLoading] = useState(false);
   const [errore, setErrore] = useState("");
+  const [noCredits, setNoCredits] = useState(false);
 
   const [risultato, setRisultato] = useState(null); // JSON completo backend
   const [sinastriaAI, setSinastriaAI] = useState(null); // data.sinastria_ai
@@ -236,6 +242,7 @@ export default function CompatibilitaPage() {
       setUserIdForDyana("guest_compat");
     }
 
+    // Nota: i crediti reali arrivano dal backend (billing.remaining_credits).
     if (role === "premium") {
       setUserCredits(10);
     } else if (role === "free") {
@@ -297,6 +304,7 @@ export default function CompatibilitaPage() {
   async function generaCompatibilita() {
     setLoading(true);
     setErrore("");
+    setNoCredits(false);
     setRisultato(null);
     setSinastriaAI(null);
     setBilling(null);
@@ -310,14 +318,16 @@ export default function CompatibilitaPage() {
         A: {
           citta: form.cittaA,
           data: form.dataA,
-          ora: form.oraA,
+          ora: form.oraAIgnota ? "" : form.oraA,
           nome: form.nomeA || null,
+          ora_ignota: form.oraAIgnota,
         },
         B: {
           citta: form.cittaB,
           data: form.dataB,
-          ora: form.oraB,
+          ora: form.oraBIgnota ? "" : form.oraB,
           nome: form.nomeB || null,
+          ora_ignota: form.oraBIgnota,
         },
         tier: form.tier,
       };
@@ -372,6 +382,11 @@ export default function CompatibilitaPage() {
         console.log("[DYANA/COMPAT /sinastria_ai] status non OK:", res.status);
         console.log("[DYANA/COMPAT /sinastria_ai] body errore:", data);
         const message = normalizeErrorMessage(data, res.status);
+
+        const isNoCreditsError =
+          (res.status === 402 || res.status === 403) && form.tier === "premium";
+
+        setNoCredits(isNoCreditsError);
         setErrore(message);
         setLoading(false);
         return;
@@ -382,8 +397,37 @@ export default function CompatibilitaPage() {
       const sin = data?.sinastria_ai || null;
       setSinastriaAI(sin);
 
+      // Billing + aggiornamento crediti navbar + eventi globali
       if (data && data.billing) {
         setBilling(data.billing);
+
+        const remaining = data.billing.remaining_credits;
+        if (typeof remaining === "number") {
+          setUserCredits(remaining);
+
+          if (typeof window !== "undefined") {
+            // evento "storico"
+            window.dispatchEvent(
+              new CustomEvent("dyana-credits-updated", {
+                detail: {
+                  feature: "sinastria_ai",
+                  remaining_credits: remaining,
+                  billing_mode: data.billing.mode,
+                },
+              })
+            );
+            // nuovo evento richiesto
+            window.dispatchEvent(
+              new CustomEvent("dyana:refresh-credits", {
+                detail: {
+                  feature: "sinastria_ai",
+                  remaining_credits: remaining,
+                  billing_mode: data.billing.mode,
+                },
+              })
+            );
+          }
+        }
       } else {
         setBilling(null);
       }
@@ -411,19 +455,30 @@ export default function CompatibilitaPage() {
   }
 
   // ======================================================
-  // Estratti per grafico + 3 card
+  // Estratti per grafico + card (usa sinastria_vis)
   // ======================================================
-  const chartBase64 =
-    risultato?.chart_sinastria_base64 || null;
-  const sinRaw = risultato?.payload_ai?.sinastria || null;
-  const temaA = sinRaw?.A || null;
-  const temaB = sinRaw?.B || null;
-
-  const aspettiPrincipali = Array.isArray(sinRaw?.sinastria?.top_stretti)
-    ? sinRaw.sinastria.top_stretti
-    : Array.isArray(sinRaw?.sinastria?.aspetti_AB)
-    ? sinRaw.sinastria.aspetti_AB
+  const chartBase64 = risultato?.chart_sinastria_base64 || null;
+  const sinVis = risultato?.sinastria_vis || null;
+  const temaVisA = sinVis?.A || null;
+  const temaVisB = sinVis?.B || null;
+  const aspettiPrincipali = Array.isArray(sinVis?.aspetti_top)
+    ? sinVis.aspetti_top
     : [];
+
+  const nomeA =
+    temaVisA?.nome || form.nomeA || "Persona A";
+  const nomeB =
+    temaVisB?.nome || form.nomeB || "Persona B";
+
+  // Flag ora ignota da payload (se presente) o da form
+  const payloadMeta = risultato?.payload_ai?.meta || {};
+  const oraIgnotaAFromPayload = !!payloadMeta.ora_ignota_A;
+  const oraIgnotaBFromPayload = !!payloadMeta.ora_ignota_B;
+  const oraIgnotaGlobal =
+    oraIgnotaAFromPayload ||
+    oraIgnotaBFromPayload ||
+    form.oraAIgnota ||
+    form.oraBIgnota;
 
   // ======================================================
   // Testo da passare a DYANA Q&A
@@ -438,19 +493,29 @@ export default function CompatibilitaPage() {
       parts.push(`Sintesi generale:\n${sinastriaAI.sintesi_generale}`);
     }
 
+    // Nuova struttura: capitoli[]
     if (
+      Array.isArray(sinastriaAI.capitoli) &&
+      sinastriaAI.capitoli.length > 0
+    ) {
+      const blocchi = sinastriaAI.capitoli.map((cap, idx) => {
+        const titolo = cap.titolo || `Capitolo ${idx + 1}`;
+        const testo = cap.testo || "";
+        return testo ? `• ${titolo}\n${testo}` : `• ${titolo}`;
+      });
+      parts.push("Capitoli della relazione:\n" + blocchi.join("\n\n"));
+    } else if (
       Array.isArray(sinastriaAI.aree_relazione) &&
       sinastriaAI.aree_relazione.length
     ) {
+      // Fallback vecchia struttura
       const blocchi = sinastriaAI.aree_relazione.map((area) => {
         const titolo = area.titolo || area.id || "Area della relazione";
         const sintesi = area.sintesi || "";
         const header = `• ${titolo}`;
-        return sintesi
-          ? `${header}\n${sintesi}`
-          : header;
+        return sintesi ? `${header}\n${sintesi}` : header;
       });
-      parts.push("Capitoli della relazione:\n" + blocchi.join("\n\n"));
+      parts.push("Aree della relazione:\n" + blocchi.join("\n\n"));
     }
 
     if (
@@ -530,7 +595,6 @@ export default function CompatibilitaPage() {
         credits={userCredits}
         onLogout={handleLogout}
       />
-
       <section className="landing-wrapper">
         {/* INTESTAZIONE */}
         <header className="section">
@@ -541,6 +605,16 @@ export default function CompatibilitaPage() {
             natali per capire affinità, dinamiche e possibili sfide. DYANA
             traduce il linguaggio dei pianeti in indicazioni chiare e
             orientate alla relazione.
+            <br />
+            <br />
+            Compila i dati sotto e scegli se{" "}
+            <strong>free</strong> o <strong>premium</strong>.
+            <br />
+            <br />
+            ✨ <strong>Vuoi andare oltre la lettura base?</strong>
+            <br />
+            Con la versione <strong>premium</strong>, puoi fare domande a DYANA
+            e ottenere risposte personalizzate sulla vostra relazione.
           </p>
         </header>
 
@@ -613,7 +687,31 @@ export default function CompatibilitaPage() {
                         value={form.oraA}
                         onChange={handleChange}
                         className="form-input"
+                        disabled={form.oraAIgnota}
                       />
+                      <label
+                        className="card-text"
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          marginTop: 4,
+                          fontSize: "0.85rem",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={form.oraAIgnota}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              oraAIgnota: e.target.checked,
+                              oraA: e.target.checked ? "" : prev.oraA,
+                            }))
+                          }
+                        />
+                        Ora di nascita sconosciuta
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -669,7 +767,31 @@ export default function CompatibilitaPage() {
                         value={form.oraB}
                         onChange={handleChange}
                         className="form-input"
+                        disabled={form.oraBIgnota}
                       />
+                      <label
+                        className="card-text"
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          marginTop: 4,
+                          fontSize: "0.85rem",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={form.oraBIgnota}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              oraBIgnota: e.target.checked,
+                              oraB: e.target.checked ? "" : prev.oraB,
+                            }))
+                          }
+                        />
+                        Ora di nascita sconosciuta
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -701,15 +823,36 @@ export default function CompatibilitaPage() {
 
               {/* ERRORE */}
               {errore && (
-                <p className="card-text" style={{ color: "#ff9a9a" }}>
-                  {errore}
-                </p>
+                noCredits ? (
+                  <div className="card-text" style={{ color: "#ffdf9a" }}>
+                    <p>
+                      Hai finito i tuoi crediti. Per effettuare letture premium{" "}
+                      <Link href="/crediti" className="link">
+                        clicca qui
+                      </Link>
+                      .
+                    </p>
+                    <p
+                      style={{
+                        marginTop: 8,
+                        fontSize: "0.8rem",
+                        opacity: 0.8,
+                      }}
+                    >
+                      Dettagli: {errore}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="card-text" style={{ color: "#ff9a9a" }}>
+                    {errore}
+                  </p>
+                )
               )}
             </div>
           </div>
         </section>
 
-        {/* GRAFICO SINASTRIA + 3 CARD */}
+        {/* GRAFICO SINASTRIA + CARD DATI */}
         {chartBase64 && (
           <section className="section">
             <div
@@ -723,6 +866,16 @@ export default function CompatibilitaPage() {
               }}
             >
               <h3 className="card-title">Carta della vostra sinastria</h3>
+
+              <p
+                className="card-text"
+                style={{ fontSize: "0.85rem", opacity: 0.9 }}
+              >
+                Questo è il grafico che sovrappone i vostri pianeti: internamente
+                quelli di <strong>{nomeA}</strong> ed esternamente quelli di{" "}
+                <strong>{nomeB}</strong>. Le linee e i cerchi evidenziati
+                rappresentano gli aspetti tra i vostri pianeti.
+              </p>
 
               {/* grafico quadrato */}
               <div
@@ -757,149 +910,160 @@ export default function CompatibilitaPage() {
                 </div>
               </div>
 
-{/* 3 rettangoli: Tema A, Tema B, Aspetti */}
-<div
-  style={{
-    display: "flex",
-    flexWrap: "wrap",
-    gap: "16px",
-    marginTop: "24px",
-  }}
->
-  {/* TEMA A */}
-  {temaA && (
-    <div
-      style={{
-        flex: "0 0 24%",
-        minWidth: "200px",
-        backgroundColor: "#15191c",
-        borderRadius: "12px",
-        border: "1px solid #2c3238",
-        padding: "16px",
-      }}
-    >
-      <h4
-        className="card-text"
-        style={{ fontWeight: 600, marginBottom: 6 }}
-      >
-        Tema A
-      </h4>
+              <p
+                className="card-text"
+                style={{ fontSize: "0.85rem", opacity: 0.9, marginTop: 8 }}
+              >
+                Questi dati riportano la sintesi astrologica del grafico con i
+                dati specifici di <strong>{nomeA}</strong> e{" "}
+                <strong>{nomeB}</strong> e gli aspetti reciproci.
+              </p>
 
-      {temaA.pianeti_decod &&
-        typeof temaA.pianeti_decod === "object" && (
-          <ul
-            className="card-text"
-            style={{
-              marginTop: 6,
-              paddingLeft: "1.2rem",
-              fontSize: "0.8rem",
-            }}
-          >
-            {Object.entries(temaA.pianeti_decod).map(
-              ([nome, info]) => (
-                <li key={nome}>
-                  {formatPianetaPosizione(info, nome)}
-                </li>
-              )
-            )}
-          </ul>
-        )}
-    </div>
-  )}
+              {/* 3 rettangoli: Tema A, Tema B, Aspetti */}
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "16px",
+                  marginTop: "12px",
+                }}
+              >
+                {/* TEMA A */}
+                {temaVisA && Array.isArray(temaVisA.pianeti) && (
+                  <div
+                    style={{
+                      flex: "0 0 22%",
+                      minWidth: "200px",
+                      backgroundColor: "#15191c",
+                      borderRadius: "12px",
+                      border: "1px solid #2c3238",
+                      padding: "16px",
+                    }}
+                  >
+                    <h4
+                      className="card-text"
+                      style={{ fontWeight: 600, marginBottom: 6 }}
+                    >
+                      {nomeA}
+                    </h4>
+                    {temaVisA.citta && (
+                      <p
+                        className="card-text"
+                        style={{ fontSize: "0.75rem", opacity: 0.8 }}
+                      >
+                        {temaVisA.citta}
+                      </p>
+                    )}
 
-  {/* TEMA B */}
-  {temaB && (
-    <div
-      style={{
-        flex: "0 0 24%",
-        minWidth: "200px",
-        backgroundColor: "#15191c",
-        borderRadius: "12px",
-        border: "1px solid #2c3238",
-        padding: "16px",
-      }}
-    >
-      <h4
-        className="card-text"
-        style={{ fontWeight: 600, marginBottom: 6 }}
-      >
-        Tema B
-      </h4>
+                    <ul
+                      className="card-text"
+                      style={{
+                        marginTop: 6,
+                        paddingLeft: "1.2rem",
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      {temaVisA.pianeti.map((p, idx) => (
+                        <li key={idx}>{formatPianetaPosizione(p)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-      {temaB.pianeti_decod &&
-        typeof temaB.pianeti_decod === "object" && (
-          <ul
-            className="card-text"
-            style={{
-              marginTop: 6,
-              paddingLeft: "1.2rem",
-              fontSize: "0.8rem",
-            }}
-          >
-            {Object.entries(temaB.pianeti_decod).map(
-              ([nome, info]) => (
-                <li key={nome}>
-                  {formatPianetaPosizione(info, nome)}
-                </li>
-              )
-            )}
-          </ul>
-        )}
-    </div>
-  )}
+                {/* TEMA B */}
+                {temaVisB && Array.isArray(temaVisB.pianeti) && (
+                  <div
+                    style={{
+                      flex: "0 0 22%",
+                      minWidth: "200px",
+                      backgroundColor: "#15191c",
+                      borderRadius: "12px",
+                      border: "1px solid #2c3238",
+                      padding: "16px",
+                    }}
+                  >
+                    <h4
+                      className="card-text"
+                      style={{ fontWeight: 600, marginBottom: 6 }}
+                    >
+                      {nomeB}
+                    </h4>
+                    {temaVisB.citta && (
+                      <p
+                        className="card-text"
+                        style={{ fontSize: "0.75rem", opacity: 0.8 }}
+                      >
+                        {temaVisB.citta}
+                      </p>
+                    )}
 
-  {/* ASPETTI TRA I VOSTRI PIANETI */}
-  {aspettiPrincipali.length > 0 && (
-    <div
-      style={{
-        flex: "1 1 0%",
-        minWidth: "260px",
-        backgroundColor: "#15191c",
-        borderRadius: "12px",
-        border: "1px solid #2c3238",
-        padding: "16px",
-      }}
-    >
-      <h4
-        className="card-text"
-        style={{ fontWeight: 600, marginBottom: 6 }}
-      >
-        Aspetti tra i vostri pianeti
-      </h4>
-      <p
-        className="card-text"
-        style={{ fontSize: "0.8rem", opacity: 0.8 }}
-      >
-        Il motore AstroBot ha individuato{" "}
-        <strong>{aspettiPrincipali.length}</strong> aspetti
-        significativi tra i vostri temi natali. Qui sotto trovi una
-        selezione sintetica.
-      </p>
+                    <ul
+                      className="card-text"
+                      style={{
+                        marginTop: 6,
+                        paddingLeft: "1.2rem",
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      {temaVisB.pianeti.map((p, idx) => (
+                        <li key={idx}>{formatPianetaPosizione(p)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-      <ul
-        className="card-text"
-        style={{
-          marginTop: 6,
-          paddingLeft: "1.2rem",
-          fontSize: "0.8rem",
-        }}
-      >
-        {aspettiPrincipali.slice(0, 10).map((asp, idx) => {
-          const label =
-            asp.descrizione || formatAspettoLabel(asp) || "";
-          return <li key={idx}>{label}</li>;
-        })}
-      </ul>
-    </div>
-  )}
+                {/* ASPETTI TRA I VOSTRI PIANETI */}
+                {aspettiPrincipali.length > 0 && (
+                  <div
+                    style={{
+                      flex: "1 1 0%",
+                      minWidth: "260px",
+                      backgroundColor: "#15191c",
+                      borderRadius: "12px",
+                      border: "1px solid #2c3238",
+                      padding: "16px",
+                    }}
+                  >
+                    <h4
+                      className="card-text"
+                      style={{ fontWeight: 600, marginBottom: 6 }}
+                    >
+                      Aspetti tra i vostri pianeti
+                    </h4>
+                    <p
+                      className="card-text"
+                      style={{ fontSize: "0.8rem", opacity: 0.8 }}
+                    >
+                      Qui trovi gli aspetti principali che collegano il tema di{" "}
+                      <strong>{nomeA}</strong> con quello di{" "}
+                      <strong>{nomeB}</strong>.
+                    </p>
 
-
+                    <ul
+                      className="card-text"
+                      style={{
+                        marginTop: 6,
+                        paddingLeft: "1.2rem",
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      {aspettiPrincipali.slice(0, 10).map((asp, idx) => {
+                        const label =
+                          asp.descrizione ||
+                          asp.label ||
+                          formatAspettoLabel(asp) ||
+                          "";
+                        return <li key={idx}>{label}</li>;
+                      })}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
           </section>
         )}
 
-        {/* TESTO AI: SINTESI + AREE + PUNTI */}
+        {/* TESTO AI: SINTESI + CAPITOLI */}
         {sinastriaAI?.sintesi_generale && (
           <section className="section">
             <div
@@ -907,6 +1071,22 @@ export default function CompatibilitaPage() {
               style={{ maxWidth: "850px", margin: "0 auto" }}
             >
               <h3 className="card-title">Sintesi della relazione</h3>
+
+              {oraIgnotaGlobal && (
+                <p
+                  className="card-text"
+                  style={{
+                    marginTop: "6px",
+                    fontSize: "0.85rem",
+                    color: "#ffdf9a",
+                  }}
+                >
+                  Ascendente e case astrologiche non sono state calcolate e
+                  incluse nell&apos;analisi perché l&apos;ora di nascita non è
+                  stata indicata con precisione.
+                </p>
+              )}
+
               <p
                 className="card-text"
                 style={{ whiteSpace: "pre-wrap", marginTop: "8px" }}
@@ -917,7 +1097,55 @@ export default function CompatibilitaPage() {
           </section>
         )}
 
-        {sinastriaAI?.aree_relazione &&
+        {/* NUOVA STRUTTURA: CAPITOLI */}
+        {Array.isArray(sinastriaAI?.capitoli) &&
+          sinastriaAI.capitoli.length > 0 && (
+            <section className="section">
+              <div
+                className="card"
+                style={{ maxWidth: "850px", margin: "0 auto" }}
+              >
+                <h3 className="card-title">Capitoli di approfondimento</h3>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 16,
+                    marginTop: 8,
+                  }}
+                >
+                  {sinastriaAI.capitoli.map((cap, idx) => (
+                    <div key={idx}>
+                      <h4
+                        className="card-text"
+                        style={{ fontWeight: 600, marginBottom: 4 }}
+                      >
+                        {cap.titolo || `Capitolo ${idx + 1}`}
+                      </h4>
+                      {cap.testo && (
+                        <p
+                          className="card-text"
+                          style={{
+                            whiteSpace: "pre-wrap",
+                            marginBottom: 6,
+                          }}
+                        >
+                          {cap.testo}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+
+        {/* Fallback vecchia struttura: aree_relazione */}
+        {!(
+          Array.isArray(sinastriaAI?.capitoli) &&
+          sinastriaAI.capitoli.length > 0
+        ) &&
+          sinastriaAI?.aree_relazione &&
           sinastriaAI.aree_relazione.length > 0 && (
             <section className="section">
               <div
