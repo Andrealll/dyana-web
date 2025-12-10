@@ -22,12 +22,15 @@ export default function CreditiPage() {
   const [userRole, setUserRole] = useState("guest");
   const [userCredits] = useState(0); // per ora non leggiamo i crediti reali qui
 
-  // Recupero JWT dal client (localStorage)
+  // Recupero JWT dal client (localStorage) al mount
   useEffect(() => {
     const token = getToken();
     if (token) {
       setJwt(token);
       setUserRole("user");
+    } else {
+      setJwt(null);
+      setUserRole("guest");
     }
   }, []);
 
@@ -58,12 +61,18 @@ export default function CreditiPage() {
     setErrore("");
     setSuccess("");
 
-    if (!jwt) {
+    // 🔒 ricontrollo il token direttamente da localStorage
+    const currentToken = getToken();
+    if (!currentToken) {
+      setJwt(null);
+      setUserRole("guest");
       setErrore(
         "Per acquistare crediti devi prima effettuare il login con la tua email."
       );
       return;
     }
+
+    setJwt(currentToken);
 
     setLoadingPack(packId);
     try {
@@ -71,7 +80,7 @@ export default function CreditiPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${jwt}`, // 👈 JWT verso auth_pub
+          Authorization: `Bearer ${currentToken}`, // 👈 JWT fresco
         },
         body: JSON.stringify({ pack_id: packId }),
       });
@@ -101,17 +110,20 @@ export default function CreditiPage() {
     }
   }
 
+  function handleLogout() {
+    clearToken();
+    setJwt(null);
+    setUserRole("guest");
+    // volendo potresti anche fare un redirect alla home o a /login
+    // window.location.href = "/login";
+  }
+
   return (
     <main className="page-root">
       <DyanaNavbar
         userRole={userRole}
         credits={userCredits}
-        onLogout={() => {
-          // se in futuro vuoi gestire logout da qui, puoi usare clearToken()
-          // clearToken();
-          // setJwt(null);
-          // setUserRole("guest");
-        }}
+        onLogout={handleLogout}
       />
 
       <section className="landing-wrapper">
@@ -244,5 +256,3 @@ export default function CreditiPage() {
     </main>
   );
 }
-
-
