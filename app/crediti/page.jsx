@@ -7,22 +7,22 @@ import { useEffect, useState } from "react";
 import DyanaNavbar from "../../components/DyanaNavbar";
 import { getToken, clearToken } from "../../lib/authClient";
 
-
 // Se il path reale di DyanaNavbar nelle altre pagine è diverso (es. "../components/DyanaNavbar" vs "../../components"),
 // usa esattamente LO STESSO che hai usato in /tema e /login.
 const API_BASE = process.env.NEXT_PUBLIC_AUTH_BASE; // usiamo il servizio auth_pub
 
 export default function CreditiPage() {
-  const [packs, setPacks] = useState([]);
+  const [packs, setPacks] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [loadingPack, setLoadingPack] = useState(null);
+  const [loadingPack, setLoadingPack] = useState<string | null>(null);
   const [errore, setErrore] = useState("");
   const [success, setSuccess] = useState("");
-  const [jwt, setJwt] = useState(null);
+  const [jwt, setJwt] = useState<string | null>(null);
 
-  const [userRole, setUserRole] = useState("guest");
+  const [userRole, setUserRole] = useState<"guest" | "user">("guest");
   const [userCredits] = useState(0); // per ora non leggiamo i crediti reali qui
 
+  // Recupero JWT dal client (localStorage)
   useEffect(() => {
     const token = getToken();
     if (token) {
@@ -31,6 +31,7 @@ export default function CreditiPage() {
     }
   }, []);
 
+  // Carica i pacchetti crediti dal backend auth_pub
   useEffect(() => {
     async function fetchPacks() {
       setErrore("");
@@ -42,7 +43,7 @@ export default function CreditiPage() {
         }
         const data = await res.json();
         setPacks(data.packs || []);
-      } catch (err) {
+      } catch (err: any) {
         console.error("[CREDITI] Errore load packs:", err);
         setErrore(err.message || "Errore nel caricamento dei pacchetti.");
       } finally {
@@ -53,54 +54,52 @@ export default function CreditiPage() {
     fetchPacks();
   }, []);
 
-async function handleCompra(packId) {
-  setErrore("");
-  setSuccess("");
+  async function handleCompra(packId: string) {
+    setErrore("");
+    setSuccess("");
 
-  if (!jwt) {
-    setErrore(
-      "Per acquistare crediti devi prima effettuare il login con la tua email."
-    );
-    return;
-  }
-
-  setLoadingPack(packId);
-  try {
-    const res = await fetch(`${API_BASE}/payments/create-checkout-session`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        // Quando vorrai far leggere il JWT al backend, aggiungi:
-        // Authorization: `Bearer ${jwt}`,
-      },
-      body: JSON.stringify({ pack_id: packId }),
-    });
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(
-        data.detail || "Errore nella creazione della sessione di pagamento."
+    if (!jwt) {
+      setErrore(
+        "Per acquistare crediti devi prima effettuare il login con la tua email."
       );
+      return;
     }
 
-    const data = await res.json();
+    setLoadingPack(packId);
+    try {
+      const res = await fetch(`${API_BASE}/payments/create-checkout-session`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${jwt}`, // 👈 JWT verso auth_pub
+        },
+        body: JSON.stringify({ pack_id: packId }),
+      });
 
-    if (data.checkout_url) {
-      // Stripe Checkout reale: reindirizziamo l'utente alla pagina di pagamento
-      window.location.href = data.checkout_url;
-    } else {
-      setSuccess(
-        "Richiesta di pagamento creata, ma manca la checkout_url. Controlla il backend."
-      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(
+          data.detail || "Errore nella creazione della sessione di pagamento."
+        );
+      }
+
+      const data = await res.json();
+
+      if (data.checkout_url) {
+        // Stripe Checkout reale: reindirizziamo l'utente alla pagina di pagamento
+        window.location.href = data.checkout_url;
+      } else {
+        setSuccess(
+          "Richiesta di pagamento creata, ma manca la checkout_url. Controlla il backend."
+        );
+      }
+    } catch (err: any) {
+      console.error("[CREDITI] Errore acquisto:", err);
+      setErrore(err.message || "Errore inatteso durante l'acquisto.");
+    } finally {
+      setLoadingPack(null);
     }
-  } catch (err) {
-    console.error("[CREDITI] Errore acquisto:", err);
-    setErrore(err.message || "Errore inatteso durante l'acquisto.");
-  } finally {
-    setLoadingPack(null);
   }
-}
-
 
   return (
     <main className="page-root">
@@ -109,6 +108,9 @@ async function handleCompra(packId) {
         credits={userCredits}
         onLogout={() => {
           // se in futuro vuoi gestire logout da qui, puoi usare clearToken()
+          // clearToken();
+          // setJwt(null);
+          // setUserRole("guest");
         }}
       />
 
@@ -116,8 +118,8 @@ async function handleCompra(packId) {
         <header className="section">
           <h1 className="section-title">Ricarica i tuoi crediti</h1>
           <p className="section-subtitle">
-            Scegli un pacchetto crediti per sbloccare le letture premium di DYANA:
-            tema natale, sinastria, oroscopi avanzati e domande extra.
+            Scegli un pacchetto crediti per sbloccare le letture premium di
+            DYANA: tema natale, sinastria, oroscopi avanzati e domande extra.
           </p>
         </header>
 
@@ -227,7 +229,10 @@ async function handleCompra(packId) {
               </p>
             )}
 
-            <p className="card-text" style={{ fontSize: "0.85rem", opacity: 0.8 }}>
+            <p
+              className="card-text"
+              style={{ fontSize: "0.85rem", opacity: 0.8 }}
+            >
               I crediti ti permettono di acquistare letture premium (oroscopi
               giornalieri/settimanali/mensili/annuali, tema natale, sinastria e
               domande extra a DYANA). Nessun rinnovo automatico: ricarichi solo

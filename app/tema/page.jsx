@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { getToken, clearToken } from "../../lib/authClient";
 import DyanaNavbar from "../../components/DyanaNavbar";
 
@@ -49,6 +50,7 @@ if (typeof window !== "undefined") {
 // ==========================
 function decodeJwtPayload(token) {
   try {
+    if (!token) return null;
     const parts = token.split(".");
     if (parts.length !== 3) return null;
     const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
@@ -117,9 +119,34 @@ async function getGuestTokenSingleton() {
 }
 
 // ==========================
+// NORMALIZZAZIONE CAPITOLI
+// ==========================
+function normalizeCapitoli(capitoliRaw) {
+  if (!capitoliRaw) return [];
+
+  // Caso corretto: array di capitoli [{ titolo, testo, ... }]
+  if (Array.isArray(capitoliRaw)) {
+    return capitoliRaw;
+  }
+
+  // Caso oggetto: { "Titolo": "Testo", ... }
+  if (typeof capitoliRaw === "object") {
+    return Object.entries(capitoliRaw).map(([titolo, testo]) => ({
+      chiave: titolo.toLowerCase().replace(/\s+/g, "_"),
+      titolo,
+      testo,
+    }));
+  }
+
+  return [];
+}
+
+// ==========================
 // COMPONENTE PRINCIPALE
 // ==========================
 export default function TemaPage() {
+  const router = useRouter();
+
   const [form, setForm] = useState({
     nome: "",
     data: "",
@@ -149,6 +176,65 @@ export default function TemaPage() {
 
   const [sessionId] = useState(() => `tema_session_${Date.now()}`);
   const [diyanaOpen, setDiyanaOpen] = useState(false);
+
+  const [oraIgnota, setOraIgnota] = useState(false);
+
+  // ==========================
+  // Mappa sezioni (formato legacy)
+  // ==========================
+  const sectionLabels = {
+    psicologia_profonda: "Psicologia profonda",
+    amore_relazioni: "Amore e relazioni",
+    lavoro_carriera: "Lavoro e carriera",
+    fortuna_crescita: "Fortuna e crescita",
+    talenti: "Talenti",
+    sfide: "Sfide",
+    consigli: "Consigli",
+  };
+
+  const isPremium = form.tier === "premium";
+
+  // Capitoli normalizzati (supporta array o oggetto)
+  const capitoliArray = normalizeCapitoli(contenuto?.capitoli);
+
+  // ==========================
+  // Testo passato a DYANA (Q&A)
+  // ==========================
+  let readingTextForDyana = interpretazione || "";
+
+  if (contenuto) {
+    if (isPremium && capitoliArray.length > 0) {
+      const extraParts = [];
+      capitoliArray.forEach((cap, idx) => {
+        const titolo = cap.titolo || `Capitolo ${idx + 1}`;
+        const testo =
+          cap.testo ||
+          cap.contenuto ||
+          cap.testo_breve ||
+          "";
+        if (testo) {
+          extraParts.push(`${titolo}:\n${testo}`);
+        }
+      });
+      if (extraParts.length > 0) {
+        readingTextForDyana += (readingTextForDyana ? "\n\n" : "") + extraParts.join("\n\n");
+      }
+    } else if (isPremium) {
+      // Fallback legacy: usa le chiavi del vecchio schema
+      const extraParts = [];
+      Object.entries(sectionLabels).forEach(([key, label]) => {
+        const text = contenuto?.[key];
+        if (text) {
+          extraParts.push(`${label}:\n${text}`);
+        }
+      });
+      if (extraParts.length > 0) {
+        readingTextForDyana += (readingTextForDyana ? "\n\n" : "") + extraParts.join("\n\n");
+      }
+    }
+  }
+
+  const hasReading = !!interpretazione;
 
   // ======================================================
   // Token login (registrato) → aggiorna UI
@@ -206,15 +292,19 @@ export default function TemaPage() {
     setRisultato(null);
     setBilling(null);
     setTemaVis(null);
-    setDiyanaOpen(false); // chiudi eventualmente la chat quando rigeneri
+    setDiyanaOpen(false);
 
     try {
+      // Se l'ora è ignota → stringa vuota. Il backend usa ora_ignota per la logica interna.
+      const oraEffettiva = oraIgnota ? "" : (form.ora || "");
+
       const payload = {
         citta: form.citta,
-        data: form.data,
-        ora: form.ora,
+        data_nascita: form.data,
+        ora_nascita: oraEffettiva,
         nome: form.nome || null,
         tier: form.tier,
+        ora_ignota: oraIgnota,
       };
 
       let token = getToken();
@@ -266,10 +356,31 @@ export default function TemaPage() {
         console.log("[DYANA /tema_ai] status non OK:", res.status);
         console.log("[DYANA /tema_ai] body errore:", data);
 
-        setErrore(
-          (data && (data.error || data.detail)) ||
-            `Errore nella generazione del tema (status ${res.status}).`
-        );
+        const errorCode =
+          data?.error_code || data?.code || data?.error || data?.detail;
+
+        // Caso: crediti insufficienti per lettura premium
+        const isCreditsError =
+          res.status === 402 ||
+          (typeof errorCode === "string" &&
+            errorCode.toLowerCase().includes("credit"));
+
+        if (isCreditsError) {
+          // Portiamo l’utente alla pagina crediti
+          router.push("/crediti?reason=tema_premium");
+          setLoading(false);
+          return;
+        }
+
+        let errorMessage =
+          (data && (data.error || data.detail || data.message)) ||
+          `Errore nella generazione del tema (status ${res.status}).`;
+
+        if (typeof errorMessage !== "string") {
+          errorMessage = "Errore nella generazione del tema.";
+        }
+
+        setErrore(errorMessage);
         setLoading(false);
         return;
       }
@@ -278,6 +389,16 @@ export default function TemaPage() {
 
       if (data && data.billing) {
         setBilling(data.billing);
+
+        // 1) aggiorna il contatore locale della pagina
+        if (typeof data.billing.remaining_credits === "number") {
+          setUserCredits(data.billing.remaining_credits);
+        }
+
+        // 2) notifica la navbar di ricaricare i crediti da Supabase
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("dyana:refresh-credits"));
+        }
       } else {
         setBilling(null);
       }
@@ -346,37 +467,6 @@ export default function TemaPage() {
   }
 
   // ==========================
-  // Mappa sezioni
-  // ==========================
-  const sectionLabels = {
-    psicologia_profonda: "Psicologia profonda",
-    amore_relazioni: "Amore e relazioni",
-    lavoro_carriera: "Lavoro e carriera",
-    fortuna_crescita: "Fortuna e crescita",
-    talenti: "Talenti",
-    sfide: "Sfide",
-    consigli: "Consigli",
-  };
-
-  const isPremium = form.tier === "premium";
-
-  let readingTextForDyana = interpretazione || "";
-  if (isPremium && contenuto) {
-    const extraParts = [];
-    Object.entries(sectionLabels).forEach(([key, label]) => {
-      const text = contenuto?.[key];
-      if (text) {
-        extraParts.push(`${label}:\n${text}`);
-      }
-    });
-    if (extraParts.length > 0) {
-      readingTextForDyana += "\n\n" + extraParts.join("\n\n");
-    }
-  }
-
-  const hasReading = !!interpretazione;
-
-  // ==========================
   // URL Typebot con parametri per il body
   // ==========================
   const typebotUrl = useMemo(() => {
@@ -432,16 +522,27 @@ export default function TemaPage() {
         <header className="section">
           <h1 className="section-title">Calcola il tuo Tema Natale</h1>
           <p className="section-subtitle">
-            Inserisci i tuoi dati di nascita: DYANA userà il motore AI di
-            AstroBot (<code>/tema_ai</code>) per generare il tuo profilo
-            astrologico. Usa il campo Livello per testare le versioni free e
-            premium.
+            In questa pagina puoi esplorare il tuo <strong>Tema Natale</strong>:
+            compila i dati sotto e scegli se <strong>free</strong> o{" "}
+            <strong>premium</strong>.
+            <br />
+            DYANA traduce il linguaggio dei pianeti in indicazioni chiare e
+            utili per comprendere te stesso con più profondità.
+            <br />
+            <br />
+            ✨ <strong>Vuoi andare oltre la lettura base?</strong>
+            <br />
+            Con la versione <strong>premium</strong>, puoi fare domande a DYANA
+            e ottenere risposte personalizzate sulla tua mappa astrologica.
           </p>
         </header>
 
         {/* FORM */}
         <section className="section">
-          <div className="card" style={{ maxWidth: "650px", margin: "0 auto" }}>
+          <div
+            className="card"
+            style={{ maxWidth: "650px", margin: "0 auto" }}
+          >
             <div
               style={{
                 display: "flex",
@@ -450,36 +551,74 @@ export default function TemaPage() {
               }}
             >
               <div>
-                <label className="card-text">Nome</label>
+                <label className="card-text">Nome (opzionale)</label>
                 <input
                   type="text"
                   name="nome"
                   value={form.nome}
-                  onChange={(e) => setForm({ ...form, nome: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, nome: e.target.value })
+                  }
                   className="form-input"
+                  placeholder="Come vuoi che ti chiami DYANA?"
                 />
               </div>
 
-              <div>
-                <label className="card-text">Data di nascita</label>
-                <input
-                  type="date"
-                  name="data"
-                  value={form.data}
-                  onChange={(e) => setForm({ ...form, data: e.target.value })}
-                  className="form-input"
-                />
-              </div>
+              {/* RIGA DATA + ORA + ORA IGNOTA */}
+              <div className="form-row" style={{ display: "flex", gap: "16px" }}>
+                <div className="form-field" style={{ flex: 1 }}>
+                  <label htmlFor="data_nascita" className="card-text">
+                    Data di nascita
+                  </label>
+                  <input
+                    id="data_nascita"
+                    type="date"
+                    className="form-input"
+                    value={form.data}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, data: e.target.value }))
+                    }
+                    required
+                  />
+                </div>
 
-              <div>
-                <label className="card-text">Ora di nascita</label>
-                <input
-                  type="time"
-                  name="ora"
-                  value={form.ora}
-                  onChange={(e) => setForm({ ...form, ora: e.target.value })}
-                  className="form-input"
-                />
+                <div className="form-field" style={{ flex: 1 }}>
+                  <label htmlFor="ora_nascita" className="card-text">
+                    Ora di nascita
+                  </label>
+                  <input
+                    id="ora_nascita"
+                    type="time"
+                    className="form-input"
+                    value={oraIgnota ? "" : (form.ora || "")}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, ora: e.target.value }))
+                    }
+                    disabled={oraIgnota}
+                    required={!oraIgnota}
+                  />
+                </div>
+
+                <div
+                  className="form-field"
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-end",
+                    gap: "8px",
+                    paddingBottom: "4px",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <input
+                    id="ora_ignota"
+                    type="checkbox"
+                    checked={oraIgnota}
+                    onChange={(e) => setOraIgnota(e.target.checked)}
+                  />
+                  <label htmlFor="ora_ignota" className="card-text">
+                    Ora ignota
+                  </label>
+                </div>
               </div>
 
               <div>
@@ -488,7 +627,9 @@ export default function TemaPage() {
                   type="text"
                   name="citta"
                   value={form.citta}
-                  onChange={(e) => setForm({ ...form, citta: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, citta: e.target.value })
+                  }
                   className="form-input"
                   placeholder="Es. Napoli, IT"
                 />
@@ -505,7 +646,9 @@ export default function TemaPage() {
                   className="form-input"
                 >
                   <option value="free">Free (0 crediti)</option>
-                  <option value="premium">Premium + DYANA (2 crediti)</option>
+                  <option value="premium">
+                    Premium + DYANA (2 crediti)
+                  </option>
                 </select>
               </div>
 
@@ -519,13 +662,40 @@ export default function TemaPage() {
               </button>
 
               {errore && (
-                <p className="card-text" style={{ color: "#ff9a9a" }}>
+                <p
+                  className="card-text"
+                  style={{ color: "#ff9a9a" }}
+                >
                   {errore}
                 </p>
               )}
             </div>
           </div>
         </section>
+
+        {/* AVVISO ORA IGNOTA */}
+        {risultato?.input?.ora_ignota && (
+          <section className="section">
+            <div
+              className="card"
+              style={{
+                maxWidth: "850px",
+                margin: "0 auto",
+                border: "1px solid rgba(255,180,180,0.4)",
+                backgroundColor: "#2a1818",
+              }}
+            >
+              <p
+                className="card-text"
+                style={{ color: "#ffb4b4", whiteSpace: "pre-wrap" }}
+              >
+                Ascendente e case astrologiche non sono state calcolate e
+                incluse nell&apos;analisi perché l&apos;ora di nascita non è
+                stata indicata con precisione.
+              </p>
+            </div>
+          </section>
+        )}
 
         {/* GRAFICO TEMA NATALE + BOX PIANETI/ASPETTI */}
         {temaVis && temaVis.chart_png_base64 && (
@@ -541,6 +711,17 @@ export default function TemaPage() {
               }}
             >
               <h3 className="card-title">La tua carta del Tema Natale</h3>
+              <p
+                className="card-text"
+                style={{
+                  fontSize: "0.9rem",
+                  opacity: 0.9,
+                  marginBottom: "4px",
+                }}
+              >
+                Questa è la tua carta del cielo: rappresenta la posizione dei
+                pianeti al momento della tua nascita.
+              </p>
 
               {/* grafico quadrato */}
               <div
@@ -575,13 +756,25 @@ export default function TemaPage() {
                 </div>
               </div>
 
+              <p
+                className="card-text"
+                style={{
+                  fontSize: "0.9rem",
+                  opacity: 0.9,
+                  marginTop: "20px",
+                }}
+              >
+                Questi dati riportano la sintesi astrologica della carta del
+                cielo che vedi sopra.
+              </p>
+
               {/* BLOCCO PIANETI + ASPETTI AFFIANCATI */}
               <div
                 style={{
                   display: "flex",
                   flexWrap: "wrap",
                   gap: "16px",
-                  marginTop: "24px",
+                  marginTop: "12px",
                 }}
               >
                 {/* Card Pianeti */}
@@ -623,7 +816,11 @@ export default function TemaPage() {
                             fontSize: "0.9rem",
                           }}
                         >
-                          <span style={{ fontSize: "1.3rem" }}>
+                          <span
+                            style={{
+                              fontSize: "1.3rem",
+                            }}
+                          >
                             {p.glyph}
                           </span>
                           <span>{p.label}</span>
@@ -716,7 +913,6 @@ export default function TemaPage() {
                             fontSize: "0.9rem",
                           }}
                         >
-                          {/* simboli a sinistra */}
                           <div
                             style={{
                               display: "flex",
@@ -730,7 +926,6 @@ export default function TemaPage() {
                             <span>{a.g_asp}</span>
                             <span>{a.g2}</span>
                           </div>
-                          {/* testo completo: es. "Plutone trigono Lilith (orb 0,2°)" */}
                           <div style={{ flex: 1 }}>{a.label}</div>
                         </div>
                       ))}
@@ -759,7 +954,10 @@ export default function TemaPage() {
               style={{ maxWidth: "850px", margin: "0 auto" }}
             >
               <h3 className="card-title">Interpretazione principale</h3>
-              <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
+              <p
+                className="card-text"
+                style={{ whiteSpace: "pre-wrap" }}
+              >
                 {interpretazione}
               </p>
             </div>
@@ -775,30 +973,84 @@ export default function TemaPage() {
             >
               <h3 className="card-title">Sezioni dettagliate</h3>
 
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: 16 }}
-              >
-                {Object.entries(sectionLabels).map(([key, label]) => {
-                  const text = contenuto?.[key];
-                  if (!text) return null;
-                  return (
-                    <div key={key}>
-                      <h4
-                        className="card-text"
-                        style={{ fontWeight: 600, marginBottom: 4 }}
-                      >
-                        {label}
-                      </h4>
-                      <p
-                        className="card-text"
-                        style={{ whiteSpace: "pre-wrap", marginBottom: 8 }}
-                      >
-                        {text}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
+              {/* Se il backend espone capitoli[] o oggetto normalizzato */}
+              {capitoliArray.length > 0 ? (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 16,
+                  }}
+                >
+                  {capitoliArray.map((cap, idx) => {
+                    const titolo = cap.titolo || `Capitolo ${idx + 1}`;
+                    const testo =
+                      cap.testo ||
+                      cap.contenuto ||
+                      cap.testo_breve ||
+                      "";
+                    if (!testo) return null;
+                    return (
+                      <div key={`${titolo}-${idx}`}>
+                        <h4
+                          className="card-text"
+                          style={{
+                            fontWeight: 600,
+                            marginBottom: 4,
+                          }}
+                        >
+                          {titolo}
+                        </h4>
+                        <p
+                          className="card-text"
+                          style={{
+                            whiteSpace: "pre-wrap",
+                            marginBottom: 8,
+                          }}
+                        >
+                          {testo}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                // Fallback legacy: usa le chiavi del vecchio schema
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 16,
+                  }}
+                >
+                  {Object.entries(sectionLabels).map(([key, label]) => {
+                    const text = contenuto?.[key];
+                    if (!text) return null;
+                    return (
+                      <div key={key}>
+                        <h4
+                          className="card-text"
+                          style={{
+                            fontWeight: 600,
+                            marginBottom: 4,
+                          }}
+                        >
+                          {label}
+                        </h4>
+                        <p
+                          className="card-text"
+                          style={{
+                            whiteSpace: "pre-wrap",
+                            marginBottom: 8,
+                          }}
+                        >
+                          {text}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </section>
         )}
@@ -834,7 +1086,10 @@ export default function TemaPage() {
                   DYANA • Q&amp;A sul tuo Tema Natale
                 </p>
 
-                <h3 className="card-title" style={{ marginBottom: 6 }}>
+                <h3
+                  className="card-title"
+                  style={{ marginBottom: 6 }}
+                >
                   Hai domande su questa lettura?
                 </h3>
 
@@ -851,12 +1106,12 @@ export default function TemaPage() {
                   className="card-text"
                   style={{ fontSize: "0.9rem", opacity: 0.8 }}
                 >
-                  Hai a disposizione <strong>2 domande di chiarimento</strong>{" "}
-                  incluse con questo Tema. In seguito potrai usare i tuoi
-                  crediti per sbloccare ulteriori domande extra.
+                  Hai a disposizione{" "}
+                  <strong>2 domande di chiarimento</strong> incluse con questo
+                  Tema. In seguito potrai usare i tuoi crediti per sbloccare
+                  ulteriori domande extra.
                 </p>
 
-                {/* Bottone con gating premium */}
                 <button
                   type="button"
                   className="btn btn-primary"
@@ -870,7 +1125,6 @@ export default function TemaPage() {
                   {diyanaOpen ? "Chiudi DYANA" : "Chiedi a DYANA"}
                 </button>
 
-                {/* Messaggio se NON è premium */}
                 {!isPremium && (
                   <p
                     className="card-text"
@@ -886,7 +1140,6 @@ export default function TemaPage() {
                   </p>
                 )}
 
-                {/* IFRAME solo se premium + aperto */}
                 {diyanaOpen && isPremium && (
                   <div
                     style={{
