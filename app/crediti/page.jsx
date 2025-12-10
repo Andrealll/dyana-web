@@ -12,14 +12,14 @@ import { getToken, clearToken } from "../../lib/authClient";
 const API_BASE = process.env.NEXT_PUBLIC_AUTH_BASE; // usiamo il servizio auth_pub
 
 export default function CreditiPage() {
-  const [packs, setPacks] = useState<any[]>([]);
+  const [packs, setPacks] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [loadingPack, setLoadingPack] = useState<string | null>(null);
+  const [loadingPack, setLoadingPack] = useState(null);
   const [errore, setErrore] = useState("");
   const [success, setSuccess] = useState("");
-  const [jwt, setJwt] = useState<string | null>(null);
+  const [jwt, setJwt] = useState(null);
 
-  const [userRole, setUserRole] = useState<"guest" | "user">("guest");
+  const [userRole, setUserRole] = useState("guest");
   const [userCredits] = useState(0); // per ora non leggiamo i crediti reali qui
 
   // Recupero JWT dal client (localStorage)
@@ -43,7 +43,7 @@ export default function CreditiPage() {
         }
         const data = await res.json();
         setPacks(data.packs || []);
-      } catch (err: any) {
+      } catch (err) {
         console.error("[CREDITI] Errore load packs:", err);
         setErrore(err.message || "Errore nel caricamento dei pacchetti.");
       } finally {
@@ -54,7 +54,7 @@ export default function CreditiPage() {
     fetchPacks();
   }, []);
 
-  async function handleCompra(packId: string) {
+  async function handleCompra(packId) {
     setErrore("");
     setSuccess("");
 
@@ -93,7 +93,7 @@ export default function CreditiPage() {
           "Richiesta di pagamento creata, ma manca la checkout_url. Controlla il backend."
         );
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("[CREDITI] Errore acquisto:", err);
       setErrore(err.message || "Errore inatteso durante l'acquisto.");
     } finally {
