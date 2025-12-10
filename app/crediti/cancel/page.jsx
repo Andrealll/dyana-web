@@ -1,7 +1,7 @@
 // app/crediti/cancel/page.jsx
 "use client";
 
-import DyanaNavbar from "../../components/DyanaNavbar";
+import DyanaNavbar from "../../../components/DyanaNavbar";
 
 export default function CreditiCancelPage() {
   return (

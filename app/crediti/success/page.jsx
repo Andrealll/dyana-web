@@ -4,7 +4,8 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 // ATTENZIONE: usa lo stesso import path che hai in app/crediti/page.jsx
-import DyanaNavbar from "../../components/DyanaNavbar";
+import DyanaNavbar from "../../../components/DyanaNavbar";
+
 
 export default function CreditiSuccessPage() {
   const searchParams = useSearchParams();
