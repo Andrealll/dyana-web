@@ -44,8 +44,26 @@ function formatUsageFeature(feature, scope) {
     return labelByScope[scope] || "Oroscopo personalizzato";
   }
 
-  // fallback: chiave tecnica se non riconosciuta
+  // Alcuni record hanno feature tipo "oroscopo_ai_monthly"
+  if (feature && feature.startsWith("oroscopo_ai_")) {
+    const suffix = feature.replace("oroscopo_ai_", "");
+    const labelBySuffix = {
+      daily: "Oroscopo giornaliero",
+      weekly: "Oroscopo settimanale",
+      monthly: "Oroscopo mensile",
+      yearly: "Oroscopo annuale",
+    };
+    return labelBySuffix[suffix] || "Oroscopo personalizzato";
+  }
+
   return feature || "";
+}
+
+function formatPurchaseAmount(amount, currency) {
+  if (amount == null) return "";
+  const euros = amount / 100;
+  const curr = currency || "EUR";
+  return `${euros.toFixed(2)} ${curr}`;
 }
 
 export default function AreaPersonalePage() {
@@ -84,10 +102,10 @@ export default function AreaPersonalePage() {
         console.log("[AREA] credits state:", cs);
         setCreditsState(cs);
 
-        // aggiorna marketing
+        // marketing
         setMarketingConsent(Boolean(cs?.marketing_consent));
 
-        // 🔹 aggiorna dati per navbar
+        // navbar
         const role = cs?.role || "user";
         const total = cs?.total_available ?? 0;
         setUserRole(role);
@@ -107,20 +125,33 @@ export default function AreaPersonalePage() {
     loadData();
 
     // listener per aggiornare l'area quando cambiano i crediti (acquisti / consumi)
-    function handleCreditsUpdated() {
-      console.log("[AREA PERSONALE] Evento dyana-credits-updated → reload");
+    function handleCreditsRefresh() {
+      console.log("[AREA PERSONALE] Evento dyana:refresh-credits → reload");
+      loadData();
+    }
+
+    function handleLegacyCreditsUpdated() {
+      console.log("[AREA PERSONALE] Evento diyana-credits-updated → reload");
       loadData();
     }
 
     if (typeof window !== "undefined") {
-      window.addEventListener("diyana-credits-updated", handleCreditsUpdated);
+      window.addEventListener("dyana:refresh-credits", handleCreditsRefresh);
+      window.addEventListener(
+        "diyana-credits-updated",
+        handleLegacyCreditsUpdated
+      );
     }
 
     return () => {
       if (typeof window !== "undefined") {
         window.removeEventListener(
+          "dyana:refresh-credits",
+          handleCreditsRefresh
+        );
+        window.removeEventListener(
           "diyana-credits-updated",
-          handleCreditsUpdated
+          handleLegacyCreditsUpdated
         );
       }
     };
@@ -138,6 +169,17 @@ export default function AreaPersonalePage() {
 
     router.push("/");
   }
+
+function formatUsageMode(u) {
+  if (!u) return "";
+  if (u.billing_mode === "free") return "FREE";
+  if (u.billing_mode === "paid") return "PREMIUM";
+  // fallback se per qualche motivo billing_mode manca
+  if (u.tier === "free") return "FREE";
+  if (u.tier === "premium") return "PREMIUM";
+  return "";
+}
+
 
   async function handleToggleMarketing() {
     const token = getToken();
@@ -312,50 +354,67 @@ export default function AreaPersonalePage() {
             )}
           </div>
 
-          {/* ULTIME LETTURE PREMIUM */}
-          <div className="card">
-            <h2 className="card-title">Ultime letture premium</h2>
-            {loading && !usage.length ? (
-              <p className="card-text" style={{ marginTop: 8 }}>
-                Caricamento...
-              </p>
-            ) : usage.length === 0 ? (
-              <p
-                className="card-text"
-                style={{ opacity: 0.8, marginTop: 8 }}
-              >
-                Ancora nessuna lettura registrata.
-              </p>
-            ) : (
-              <ul
+{/* ULTIME LETTURE PREMIUM */}
+<div className="card">
+  <h2 className="card-title">Ultime letture premium</h2>
+  {loading && !usage.length ? (
+    <p className="card-text" style={{ marginTop: 8 }}>
+      Caricamento...
+    </p>
+  ) : usage.length === 0 ? (
+    <p className="card-text" style={{ opacity: 0.8, marginTop: 8 }}>
+      Ancora nessuna lettura registrata.
+    </p>
+  ) : (
+    <ul
+      style={{
+        listStyle: "none",
+        padding: 0,
+        margin: "8px 0 0 0",
+      }}
+    >
+      {usage.map((u) => {
+        const tierLabel = u.tier === "premium" ? "Premium" : "Free";
+        const paid = u.cost_paid_credits ?? 0;
+        const free = u.cost_free_credits ?? 0;
+
+        return (
+          <li
+            key={u.id}
+            className="card-text"
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              padding: "6px 0",
+              borderBottom: "1px solid rgba(255,255,255,0.06)",
+              fontSize: "0.9rem",
+            }}
+          >
+            <span>
+              {formatUsageDate(u.when)} –{" "}
+              {formatUsageFeature(u.feature, u.scope)}{" "}
+              <span
                 style={{
-                  listStyle: "none",
-                  padding: 0,
-                  margin: "8px 0 0 0",
+                  fontSize: "0.8rem",
+                  opacity: 0.8,
+                  marginLeft: 4,
                 }}
               >
-                {usage.map((u) => (
-                  <li
-                    key={u.id}
-                    className="card-text"
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      padding: "6px 0",
-                      borderBottom: "1px solid rgba(255,255,255,0.06)",
-                      fontSize: "0.9rem",
-                    }}
-                  >
-                    <span>
-                      {formatUsageDate(u.when)} –{" "}
-                      {formatUsageFeature(u.feature, u.scope)}
-                    </span>
-                    <span>-{u.credits_used} cr</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+                ({tierLabel})
+              </span>
+            </span>
+
+            <span>
+              {paid || free
+                ? `${paid} cr pagati / ${free} cr free`
+                : "0 crediti"}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  )}
+</div>
 
           {/* RICARICHE */}
           <div className="card">
@@ -392,11 +451,12 @@ export default function AreaPersonalePage() {
                     }}
                   >
                     <span>
-                      {p.when} – {p.product}
+                      {formatUsageDate(p.when)} – {p.product}
                     </span>
                     <span>
-                      {p.amount != null
-                        ? `${p.amount} ${p.currency || "EUR"}`
+                      {formatPurchaseAmount(p.amount, p.currency)}
+                      {p.credits_added
+                        ? ` • +${p.credits_added} crediti`
                         : ""}
                     </span>
                   </li>

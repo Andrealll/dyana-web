@@ -155,66 +155,430 @@ function mapPeriodoToSlug(periodo) {
   }
 }
 
-// Costruiamo UN TESTO LUNGO unico per l'interpretazione
-function buildInterpretazioneTesto(oroscopoAi) {
+// ==========================
+// Costruzione testo interpretazione (nuovo schema AI)
+// ==========================
+function buildInterpretazioneTesto(oroscopoAi, tierRaw) {
   if (!oroscopoAi || typeof oroscopoAi !== "object") return "";
 
+  const tier = (tierRaw || "free").toLowerCase();
+  const isPremium = tier === "premium";
   const pieces = [];
 
-  // 1) Sintesi principale / intro
-  const main =
-    oroscopoAi.sintesi_periodo ||
-    oroscopoAi.sintesi ||
-    oroscopoAi.intro ||
-    "";
-  if (main && main.trim()) {
-    pieces.push(main.trim());
+  // 1) Intro / sintesi
+  const intro =
+    (oroscopoAi.intro || oroscopoAi.sintesi_periodo || oroscopoAi.sintesi || "").trim();
+  if (intro) {
+    pieces.push(intro);
   }
 
-  // 2) Periodi / capitoli (Periodo 1, 2, 3…)
-  let capitoli = [];
-  if (Array.isArray(oroscopoAi.capitoli) && oroscopoAi.capitoli.length > 0) {
-    capitoli = oroscopoAi.capitoli;
-  } else if (
-    Array.isArray(oroscopoAi.macro_periods) &&
-    oroscopoAi.macro_periods.length > 0
-  ) {
-    capitoli = oroscopoAi.macro_periods;
+  // 2) Macro-periodi (sottoperiodi)
+  const macro =
+    Array.isArray(oroscopoAi.macro_periods) && oroscopoAi.macro_periods.length > 0
+      ? oroscopoAi.macro_periods
+      : [];
+
+  if (macro.length) {
+    if (isPremium) {
+      macro.forEach((mp, idx) => {
+        if (!mp || typeof mp !== "object") return;
+        const label =
+          mp.label || mp.titolo || mp.title || `Sottoperiodo ${idx + 1}`;
+        const range = mp.date_range;
+        let rangeText = "";
+
+        if (typeof range === "string") {
+          rangeText = range;
+        } else if (range && typeof range === "object") {
+          const start = range.start || range.inizio || range.from;
+          const end = range.end || range.fine || range.to;
+          if (start && end) {
+            rangeText = `${start} – ${end}`;
+          }
+        }
+
+        const text =
+          (mp.text || mp.testo || mp.testo_esteso || mp.sintesi || "").trim();
+        if (!text) return;
+
+        const header = rangeText ? `${label} (${rangeText})` : label;
+        pieces.push(`${header}\n${text}`);
+      });
+    } else {
+      // FREE → elenco dei sottoperiodi come “assaggio”
+      const labels = macro
+        .map((mp) => mp && (mp.label || mp.titolo || mp.title))
+        .filter(Boolean);
+      if (labels.length) {
+        pieces.push(
+          "Sottoperiodi principali:\n" +
+            labels.map((l) => `• ${l}`).join("\n")
+        );
+      }
+    }
   }
 
-  capitoli.forEach((cap, idx) => {
-    const titolo =
-      cap.titolo || cap.title || cap.label || `Periodo ${idx + 1}`;
-    const testo =
-      cap.testo ||
-      cap.testo_esteso ||
-      cap.testo_lungo ||
-      cap.sintesi ||
-      cap.riassunto ||
-      "";
-    if (!testo || !testo.trim()) return;
+  // 3) Sezioni tematiche
+  const sections = oroscopoAi.sections || {};
+  const SECTION_LABELS = {
+    panorama: "Panoramica generale",
+    emozioni: "Emozioni e mondo interiore",
+    relazioni: "Relazioni e vita affettiva",
+    lavoro: "Lavoro, studio e progetti",
+    energia: "Energia e benessere",
+    opportunita: "Opportunità, sfide e consigli",
+  };
+  const orderedKeys = [
+    "panorama",
+    "emozioni",
+    "relazioni",
+    "lavoro",
+    "energia",
+    "opportunita",
+  ];
 
-    pieces.push(`${titolo}\n${testo.trim()}`);
-  });
+  if (sections && typeof sections === "object") {
+    const secPieces = [];
 
-  // 3) Fallback per la versione free (sections)
-  if (!capitoli.length && oroscopoAi.sections) {
-    const secObj = oroscopoAi.sections;
-    Object.entries(secObj).forEach(([key, val]) => {
-      if (typeof val !== "string" || !val.trim()) return;
-      const label =
-        key === "panorama"
-          ? "Panoramica generale"
-          : key.charAt(0).toUpperCase() + key.slice(1);
-      pieces.push(`${label}\n${val.trim()}`);
+    orderedKeys.forEach((key) => {
+      const rawVal = sections[key];
+      if (!rawVal || typeof rawVal !== "string") return;
+      const val = rawVal.trim();
+      if (!val) return;
+      const label = SECTION_LABELS[key] || key;
+
+      if (isPremium) {
+        secPieces.push(`${label}\n${val}`);
+      } else {
+        // FREE → solo titoli sintetici
+        secPieces.push(`${label}: ${val}`);
+      }
     });
+
+    if (secPieces.length) {
+      pieces.push(secPieces.join("\n\n"));
+    }
+  }
+
+  // 4) Summary / CTA
+  if (isPremium) {
+    const summary = (oroscopoAi.summary || "").trim();
+    if (summary) {
+      pieces.push(summary);
+    }
+  } else {
+    const cta = (oroscopoAi.cta || "").trim();
+    const premiumMsg = (oroscopoAi.premium_message || "").trim();
+    if (cta) pieces.push(cta);
+    if (premiumMsg) pieces.push(premiumMsg);
   }
 
   if (!pieces.length) {
     return "Interpretazione non disponibile.";
   }
+
   return pieces.join("\n\n");
 }
+
+// ==========================
+// COMPONENTI DI SUPPORTO: GRAFICO + TABELLA ASPETTI
+// ==========================
+function MetricheGrafico({ metriche }) {
+  if (
+    !metriche ||
+    typeof metriche !== "object" ||
+    !Array.isArray(metriche.samples) ||
+    metriche.samples.length === 0
+  ) {
+    return null;
+  }
+
+  const first = metriche.samples[0] || {};
+  const firstMetrics = first.metrics || {};
+  const ambiti =
+    (firstMetrics.intensities && Object.keys(firstMetrics.intensities)) ||
+    (firstMetrics.raw_scores && Object.keys(firstMetrics.raw_scores)) ||
+    [];
+
+  if (!ambiti.length) return null;
+
+  const LABELS = {
+    emozioni: "Emozioni",
+    relazioni: "Relazioni",
+    lavoro: "Lavoro / progetti",
+    energia: "Energia",
+  };
+
+  const normalize = (val) => {
+    if (typeof val !== "number" || !isFinite(val)) return 0;
+    // assumiamo range [-1,1] → [0,100]
+    const clamped = Math.max(-1, Math.min(1, val));
+    return Math.round(((clamped + 1) / 2) * 100);
+  };
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <h4 className="card-subtitle">Andamento del periodo</h4>
+      <p
+        className="card-text"
+        style={{ fontSize: "0.8rem", opacity: 0.8, marginBottom: 8 }}
+      >
+        Ogni riga rappresenta un sottoperiodo del periodo scelto; i rettangoli
+        mostrano l&apos;intensità media di emozioni, relazioni ed energia.
+      </p>
+
+      <div style={{ overflowX: "auto" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: "0.85rem",
+          }}
+        >
+          <thead>
+            <tr>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "6px 8px",
+                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Sottoperiodo
+              </th>
+              {ambiti.map((a) => (
+                <th
+                  key={a}
+                  style={{
+                    textAlign: "left",
+                    padding: "6px 8px",
+                    borderBottom: "1px solid rgba(255,255,255,0.08)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {LABELS[a] || a}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {metriche.samples.map((s, idx) => {
+              const label = s.label || `Fase ${idx + 1}`;
+              const metrics = s.metrics || {};
+              const intensities =
+                metrics.intensities || metrics.raw_scores || {};
+
+              return (
+                <tr key={idx}>
+                  <td
+                    style={{
+                      padding: "6px 8px",
+                      borderBottom: "1px solid rgba(255,255,255,0.05)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {label}
+                  </td>
+                  {ambiti.map((a) => {
+                    const val = intensities[a];
+                    const perc = normalize(val);
+
+                    return (
+                      <td
+                        key={a}
+                        style={{
+                          padding: "6px 8px",
+                          borderBottom: "1px solid rgba(255,255,255,0.05)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            position: "relative",
+                            height: 12,
+                            borderRadius: 999,
+                            background:
+                              "linear-gradient(to right, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
+                            overflow: "hidden",
+                          }}
+                        >
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: 0,
+                              left: 0,
+                              bottom: 0,
+                              width: `${perc}%`,
+                              borderRadius: 999,
+                              background: "rgba(255,255,255,0.75)",
+                            }}
+                          />
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+function AspettiTable({ aspetti }) {
+  if (!Array.isArray(aspetti) || aspetti.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      <h4 className="card-subtitle">Aspetti chiave del periodo</h4>
+      <p
+        className="card-text"
+        style={{ fontSize: "0.8rem", opacity: 0.8, marginBottom: 8 }}
+      >
+        Una selezione compatta degli aspetti più rilevanti che colorano questo
+        periodo.
+      </p>
+
+      <div style={{ overflowX: "auto" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: "0.85rem",
+          }}
+        >
+          <thead>
+            <tr>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "6px 8px",
+                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                }}
+              >
+                Aspetto
+              </th>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "6px 8px",
+                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Intensità
+              </th>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "6px 8px",
+                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Durata
+              </th>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "6px 8px",
+                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Prima attivazione
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {aspetti.map((a, idx) => {
+              let tr = a.pianeta_transito || a.transit_planet || "";
+              let nat = a.pianeta_natale || a.natal_planet || "";
+              let asp = a.aspetto || a.tipo || "";
+              const chiave = a.chiave || a.key || "";
+
+              // Fallback: parsiamo la chiave tipo "Sole_congiunzione_Urano"
+              if ((!tr || !nat || !asp) && typeof chiave === "string" && chiave) {
+                const parts = chiave.split("_").filter(Boolean);
+                if (parts.length >= 3) {
+                  if (!tr) tr = parts[0];
+                  if (!asp) asp = parts[1];
+                  if (!nat) nat = parts[2];
+                }
+              }
+
+              if (!tr) tr = "?";
+              if (!asp) asp = "?";
+              if (!nat) nat = "?";
+
+              const intensita =
+                a.intensita_discreta ||
+                a.intensita ||
+                a.intensity ||
+                null;
+
+              const pers = a.persistenza || {};
+              const durataGiorni =
+                pers.durata_giorni ??
+                pers.durata ??
+                pers.days ??
+                null;
+              const first =
+                a.prima_occorrenza ||
+                pers.data_inizio ||
+                pers.start ||
+                null;
+
+              return (
+                <tr key={idx}>
+                  <td
+                    style={{
+                      padding: "6px 8px",
+                      borderBottom: "1px solid rgba(255,255,255,0.05)",
+                    }}
+                  >
+                    {tr} {asp} {nat}
+                  </td>
+                  <td
+                    style={{
+                      padding: "6px 8px",
+                      borderBottom: "1px solid rgba(255,255,255,0.05)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {intensita || "-"}
+                  </td>
+                  <td
+                    style={{
+                      padding: "6px 8px",
+                      borderBottom: "1px solid rgba(255,255,255,0.05)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {durataGiorni != null
+                      ? `${durataGiorni} giorno${durataGiorni === 1 ? "" : "i"}`
+                      : "-"}
+                  </td>
+                  <td
+                    style={{
+                      padding: "6px 8px",
+                      borderBottom: "1px solid rgba(255,255,255,0.05)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {first || "-"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 
 // ==========================
 // COMPONENTE PRINCIPALE
@@ -228,6 +592,8 @@ export default function OroscopoPage() {
     periodo: "giornaliero",
     tier: "free",
   });
+
+  const [oraIgnota, setOraIgnota] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [risultato, setRisultato] = useState(null);
@@ -306,6 +672,15 @@ export default function OroscopoPage() {
     }));
   }
 
+  function handleOraIgnotaChange(e) {
+    const checked = e.target.checked;
+    setOraIgnota(checked);
+    setForm((prev) => ({
+      ...prev,
+      ora: checked ? "" : prev.ora,
+    }));
+  }
+
   // ======================================================
   // Chiamata principale a /oroscopo_ai/{periodo}
   // ======================================================
@@ -326,7 +701,7 @@ export default function OroscopoPage() {
         nome: form.nome || null,
         citta: form.citta,
         data: form.data, // "YYYY-MM-DD"
-        ora: form.ora, // "HH:MM"
+        ora: oraIgnota ? null : form.ora, // "HH:MM" o null se ora ignota
         email: null,
         domanda: null,
         tier: form.tier, // "free" o "premium"
@@ -427,17 +802,42 @@ export default function OroscopoPage() {
   // ==========================
   // Derivate per UI
   // ==========================
-  const periodoLabel =
+  const periodoKey =
     risultato?.engine_result?.periodo_ita || form.periodo || "giornaliero";
 
   const isPremium = form.tier === "premium";
-  const currentCost = isPremium ? PERIOD_COSTS[form.periodo] || 0 : 0; // NON mostrato, ma lasciato per coerenza
+  const currentCost =
+    PERIOD_COSTS[form.periodo] != null ? PERIOD_COSTS[form.periodo] : 0;
+  const premiumOptionLabel =
+    currentCost > 0
+      ? `Premium (${currentCost} credito${currentCost === 1 ? "" : "i"})`
+      : "Premium";
+
+  const tierFromResult =
+    risultato?.oroscopo_ai?.meta?.tier || form.tier || "free";
 
   const testoInterpretazione = risultato
-    ? buildInterpretazioneTesto(risultato.oroscopo_ai)
+    ? buildInterpretazioneTesto(risultato.oroscopo_ai, tierFromResult)
     : "";
 
   const hasReading = !!testoInterpretazione;
+
+  // Blocchi per grafico e tabella (dal payload_ai "light")
+  const periodBlock =
+    risultato?.payload_ai?.periodi &&
+    risultato.payload_ai.periodi[periodoKey]
+      ? risultato.payload_ai.periodi[periodoKey]
+      : null;
+
+  const metricheGrafico =
+    periodBlock && periodBlock.metriche_grafico
+      ? periodBlock.metriche_grafico
+      : null;
+
+  const aspettiRilevanti =
+    periodBlock && Array.isArray(periodBlock.aspetti_rilevanti)
+      ? periodBlock.aspetti_rilevanti
+      : [];
 
   // ==========================
   // URL Typebot con parametri
@@ -463,7 +863,10 @@ export default function OroscopoPage() {
       }
 
       params.set("reading_type", "oroscopo_ai");
-      params.set("reading_label", `Il tuo oroscopo (${periodoLabel})`);
+      params.set(
+        "reading_label",
+        `Il tuo oroscopo (${periodoKey || "giorno"})`
+      );
 
       const safeReadingText = (testoInterpretazione || "").slice(0, 6000);
       if (safeReadingText) {
@@ -477,7 +880,7 @@ export default function OroscopoPage() {
       console.error("[DYANA][OROSCOPO] errore build URL Typebot:", e);
       return baseUrl;
     }
-  }, [userIdForDyana, sessionId, readingId, testoInterpretazione, periodoLabel]);
+  }, [userIdForDyana, sessionId, readingId, testoInterpretazione, periodoKey]);
 
   // ==========================
   // RENDER
@@ -491,20 +894,33 @@ export default function OroscopoPage() {
       />
 
       <section className="landing-wrapper">
-        {/* INTESTAZIONE */}
+        {/* INTESTAZIONE RICCA */}
+
         <header className="section">
-          <h1 className="section-title">Genera il tuo Oroscopo</h1>
+          <h1 className="section-title">Oroscopo dinamico: giorno, settimana, mese, anno.</h1>
           <p className="section-subtitle">
-            Seleziona il periodo che ti interessa e inserisci i tuoi dati di
-            nascita: DYANA traduce il linguaggio dei pianeti in un oroscopo
-            personalizzato, per aiutarti a capire che aria tira davvero nel tuo
-            cielo in questo momento.
+            In questa pagina puoi esplorare il tuo{" "}
+    <strong>Oroscopo personalizzato</strong>: inserisci i tuoi dati di
+    nascita, scegli il <strong>periodo</strong> che ti interessa e decidi
+    se usare la versione <strong>free</strong> o{" "}
+    <strong>premium</strong>.
+            <br />
+            DYANA traduce il linguaggio dei pianeti in indicazioni chiare e
+            utili per comprendere te stesso con più profondità.
+            <br />
+            <br />
+            ✨ <strong>Vuoi andare oltre la lettura base?</strong>
+            <br />
+            Con la versione <strong>premium</strong>, puoi fare domande a DYANA
+            e ottenere risposte personalizzate sulla tua mappa astrologica.
           </p>
         </header>
-
         {/* FORM */}
         <section className="section">
-          <div className="card" style={{ maxWidth: "650px", margin: "0 auto" }}>
+          <div
+            className="card"
+            style={{ maxWidth: "650px", margin: "0 auto" }}
+          >
             <div
               style={{
                 display: "flex",
@@ -514,13 +930,27 @@ export default function OroscopoPage() {
             >
               {/* Nome */}
               <div>
-                <label className="card-text">Nome</label>
+                <label className="card-text">Nome (opzionale)</label>
                 <input
                   type="text"
                   name="nome"
                   value={form.nome}
                   onChange={handleChange}
                   className="form-input"
+                  placeholder="Come vuoi essere chiamato"
+                />
+              </div>
+
+              {/* Città */}
+              <div>
+                <label className="card-text">Città di nascita</label>
+                <input
+                  type="text"
+                  name="citta"
+                  value={form.citta}
+                  onChange={handleChange}
+                  className="form-input"
+                  placeholder="Es. Milano, Roma, Napoli…"
                 />
               </div>
 
@@ -536,29 +966,52 @@ export default function OroscopoPage() {
                 />
               </div>
 
-              {/* Ora */}
+              {/* Ora + flag ora ignota */}
               <div>
                 <label className="card-text">Ora di nascita</label>
-                <input
-                  type="time"
-                  name="ora"
-                  value={form.ora}
-                  onChange={handleChange}
-                  className="form-input"
-                />
-              </div>
-
-              {/* Città */}
-              <div>
-                <label className="card-text">Luogo di nascita</label>
-                <input
-                  type="text"
-                  name="citta"
-                  value={form.citta}
-                  onChange={handleChange}
-                  className="form-input"
-                  placeholder="Es. Napoli, IT"
-                />
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "8px",
+                    alignItems: "center",
+                  }}
+                >
+                  <input
+                    type="time"
+                    name="ora"
+                    value={form.ora}
+                    onChange={handleChange}
+                    className="form-input"
+                    disabled={oraIgnota}
+                    style={
+                      oraIgnota
+                        ? { opacity: 0.4, pointerEvents: "none" }
+                        : undefined
+                    }
+                  />
+                  <label
+                    className="card-text"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      fontSize: "0.85rem",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={oraIgnota}
+                      onChange={handleOraIgnotaChange}
+                      style={{ width: 14, height: 14 }}
+                    />
+                    <span>
+                      Non conosco l&apos;ora esatta (uso un oroscopo con ora
+                      neutra)
+                    </span>
+                  </label>
+                </div>
               </div>
 
               {/* PERIODO */}
@@ -575,11 +1028,18 @@ export default function OroscopoPage() {
                   <option value="mensile">Mensile</option>
                   <option value="annuale">Annuale</option>
                 </select>
+                <p
+                  className="card-text"
+                  style={{ fontSize: "0.8rem", opacity: 0.75, marginTop: 4 }}
+                >
+                  Scegli se vuoi una fotografia della giornata, della settimana,
+                  del mese o dell&apos;anno.
+                </p>
               </div>
 
               {/* TIER */}
               <div>
-                <label className="card-text">Livello</label>
+                <label className="card-text">Versione</label>
                 <select
                   name="tier"
                   value={form.tier}
@@ -587,9 +1047,30 @@ export default function OroscopoPage() {
                   className="form-input"
                 >
                   <option value="free">Free (0 crediti)</option>
-                  <option value="premium">Premium + DYANA</option>
+                  <option value="premium">{premiumOptionLabel}</option>
                 </select>
-                {/* testo su crediti/costo rimosso */}
+                <p
+                  className="card-text"
+                  style={{ fontSize: "0.8rem", opacity: 0.75, marginTop: 4 }}
+                >
+                  {form.tier === "premium" ? (
+                    <>
+                      Questa lettura{" "}
+                      <strong>Premium</strong> per il periodo selezionato
+                      richiede{" "}
+                      <strong>
+                        {currentCost} credito
+                        {currentCost === 1 ? "" : "i"}
+                      </strong>
+                      .
+                    </>
+                  ) : (
+                    <>
+                      La versione <strong>Free</strong> non consuma crediti ed è
+                      pensata come anteprima sintetica della lettura Premium.
+                    </>
+                  )}
+                </p>
               </div>
 
               {/* Invio */}
@@ -599,7 +1080,7 @@ export default function OroscopoPage() {
                 disabled={loading}
                 style={{ marginTop: "14px" }}
               >
-                {loading ? "Generazione..." : "Genera Oroscopo"}
+                {loading ? "Generazione..." : "Genera oroscopo con DYANA"}
               </button>
 
               {/* Errore */}
@@ -608,40 +1089,11 @@ export default function OroscopoPage() {
                   {errore}
                 </p>
               )}
-
-              {/* Billing info – lasciata solo in commento se ti serve per debug */}
-              {/*
-              {billing && (
-                <div
-                  className="card-text"
-                  style={{ fontSize: "0.8rem", opacity: 0.8, marginTop: 8 }}
-                >
-                  <p>
-                    Billing: <strong>{billing.mode}</strong> • Tier:{" "}
-                    <strong>{billing.tier}</strong> • Scope:{" "}
-                    <strong>{billing.scope}</strong>
-                  </p>
-                  {typeof billing.remaining_credits === "number" && (
-                    <p>
-                      Crediti rimanenti:{" "}
-                      <strong>{billing.remaining_credits}</strong>
-                    </p>
-                  )}
-                  <p>
-                    Costo pagato:{" "}
-                    <strong>{billing.cost_paid_credits || 0}</strong> crediti
-                    pagati,{" "}
-                    <strong>{billing.cost_free_credits || 0}</strong> crediti
-                    free.
-                  </p>
-                </div>
-              )}
-              */}
             </div>
           </div>
         </section>
 
-        {/* RISULTATO – SOLO TESTO */}
+        {/* RISULTATO – TESTO + GRAFICO + ASPETTI */}
         {hasReading && (
           <section className="section">
             <div
@@ -650,7 +1102,18 @@ export default function OroscopoPage() {
             >
               <h3 className="card-title">Il tuo Oroscopo</h3>
 
-              <h4 className="card-subtitle">Interpretazione</h4>
+              {/* Grafico + tabella aspetti (se disponibili) */}
+              {metricheGrafico && (
+                <MetricheGrafico metriche={metricheGrafico} />
+              )}
+
+              {aspettiRilevanti && aspettiRilevanti.length > 0 && (
+                <AspettiTable aspetti={aspettiRilevanti} />
+              )}
+
+              <h4 className="card-subtitle" style={{ marginTop: 24 }}>
+                Interpretazione
+              </h4>
               <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
                 {testoInterpretazione}
               </p>
@@ -658,7 +1121,7 @@ export default function OroscopoPage() {
           </section>
         )}
 
-        {/* BLOCCO DYANA – STESSA LOGICA DI TEMA/SINASTRIA */}
+        {/* BLOCCO DYANA */}
         {hasReading && (
           <section className="section">
             <div
@@ -689,95 +1152,94 @@ export default function OroscopoPage() {
                   DYANA • Q&amp;A sul tuo Oroscopo
                 </p>
 
-                <h3 className="card-title" style={{ marginBottom: 6 }}>
-                  Hai domande su questa lettura?
-                </h3>
+                {form.tier === "premium" ? (
+                  <>
+                    <h3 className="card-title" style={{ marginBottom: 6 }}>
+                      Hai domande su questa lettura?
+                    </h3>
 
-                <p
-                  className="card-text"
-                  style={{ marginBottom: 4, opacity: 0.9 }}
-                >
-                  DYANA conosce già l&apos;oroscopo che hai appena generato e
-                  può aiutarti a capire meglio cosa sta succedendo in questo
-                  periodo.
-                </p>
+                    <p
+                      className="card-text"
+                      style={{ marginBottom: 4, opacity: 0.9 }}
+                    >
+                      DYANA conosce già l&apos;oroscopo che hai appena generato
+                      e può aiutarti a capire meglio cosa sta emergendo nel tuo
+                      cielo in questo periodo.
+                    </p>
 
-                <p
-                  className="card-text"
-                  style={{ fontSize: "0.9rem", opacity: 0.8 }}
-                >
-                  Come per il Tema Natale e la Sinastria, hai un numero limitato
-                  di domande di chiarimento incluse con questo oroscopo. Poi
-                  potrai usare i tuoi crediti per sbloccare domande extra.
-                </p>
+                    <p
+                      className="card-text"
+                      style={{ fontSize: "0.9rem", opacity: 0.8 }}
+                    >
+                      Con questa lettura <strong>Premium</strong> hai a
+                      disposizione{" "}
+                      <strong>2 domande di chiarimento</strong> incluse.
+                      Successivamente potrai usare i tuoi crediti per sbloccare
+                      altre domande extra.
+                    </p>
 
-                {/* Bottone con gating premium */}
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ marginTop: 16 }}
-                  onClick={() => {
-                    if (!isPremium) return;
-                    setDiyanaOpen((prev) => !prev);
-                  }}
-                  disabled={!isPremium}
-                >
-                  {diyanaOpen ? "Chiudi DYANA" : "Chiedi a DYANA"}
-                </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ marginTop: 16 }}
+                      onClick={() => {
+                        setDiyanaOpen((prev) => !prev);
+                      }}
+                    >
+                      {diyanaOpen ? "Chiudi DYANA" : "Chiedi a DYANA"}
+                    </button>
 
-                {/* Messaggio se NON è premium */}
-                {!isPremium && (
+                    {diyanaOpen && (
+                      <div
+                        style={{
+                          marginTop: 16,
+                          width: "100%",
+                          height: "600px",
+                          borderRadius: "14px",
+                          overflow: "hidden",
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          boxShadow: "0 22px 48px rgba(0,0,0,0.75)",
+                        }}
+                      >
+                        <iframe
+                          src={typebotUrl}
+                          style={{
+                            border: "none",
+                            width: "100%",
+                            height: "100%",
+                          }}
+                          allow="clipboard-write; microphone; camera"
+                        />
+                      </div>
+                    )}
+
+                    <p
+                      className="card-text"
+                      style={{
+                        marginTop: 8,
+                        fontSize: "0.75rem",
+                        opacity: 0.65,
+                        textAlign: "right",
+                      }}
+                    >
+                      DYANA risponde solo su questo oroscopo, non su altri
+                      argomenti generici.
+                    </p>
+                  </>
+                ) : (
                   <p
                     className="card-text"
                     style={{
                       marginTop: 8,
                       fontSize: "0.9rem",
-                      opacity: 0.85,
+                      opacity: 0.9,
                     }}
                   >
-                    La chat con DYANA è disponibile solo per le letture{" "}
-                    <strong>Premium</strong>, che includono domande di
-                    approfondimento sul tuo oroscopo.
+                    Hai domande su questa lettura? Effettua una lettura{" "}
+                    <strong>Premium</strong> per fare domande a DYANA e ottenere
+                    risposte personalizzate sul tuo oroscopo.
                   </p>
                 )}
-
-                {/* IFRAME solo se premium + aperto */}
-                {diyanaOpen && isPremium && (
-                  <div
-                    style={{
-                      marginTop: 16,
-                      width: "100%",
-                      height: "600px",
-                      borderRadius: "14px",
-                      overflow: "hidden",
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      boxShadow: "0 22px 48px rgba(0,0,0,0.75)",
-                    }}
-                  >
-                    <iframe
-                      src={typebotUrl}
-                      style={{
-                        border: "none",
-                        width: "100%",
-                        height: "100%",
-                      }}
-                      allow="clipboard-write; microphone; camera"
-                    />
-                  </div>
-                )}
-
-                <p
-                  className="card-text"
-                  style={{
-                    marginTop: 8,
-                    fontSize: "0.75rem",
-                    opacity: 0.65,
-                    textAlign: "right",
-                  }}
-                >
-                  DYANA risponde solo su questo oroscopo, non su altri
-                  argomenti generici.
-                </p>
               </div>
             </div>
           </section>

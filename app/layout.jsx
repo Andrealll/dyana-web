@@ -17,3 +17,40 @@ export default function RootLayout({ children }) {
     </html>
   );
 }
+
+
+// app/layout.jsx
+import "./globals.css";
+import Script from "next/script";
+
+export const metadata = {
+  title: "DYANA",
+  description: "Astrologia personalizzata con AI",
+};
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="it">
+      <head>
+        {/* Google Analytics */}
+        <Script
+          async
+          src="https://www.googletagmanager.com/gtag/js?id=G-FP10KYRWX5"
+          strategy="afterInteractive"
+        />
+        <Script
+          id="gtag-init"
+          strategy="afterInteractive"
+        >{`
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FP10KYRWX5');
+        `}</Script>
+      </head>
+      <body>
+        {children}
+      </body>
+    </html>
+  );
+}
