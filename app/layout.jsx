@@ -1,5 +1,6 @@
 // app/layout.jsx
 import "./globals.css";
+import Script from "next/script";
 import CookieBanner from "../components/CookieBanner";
 
 export const metadata = {
@@ -11,27 +12,6 @@ export default function RootLayout({ children }) {
   return (
     <html lang="it">
       <body>
-        {children}
-        <CookieBanner />
-      </body>
-    </html>
-  );
-}
-
-
-// app/layout.jsx
-import "./globals.css";
-import Script from "next/script";
-
-export const metadata = {
-  title: "DYANA",
-  description: "Astrologia personalizzata con AI",
-};
-
-export default function RootLayout({ children }) {
-  return (
-    <html lang="it">
-      <head>
         {/* Google Analytics */}
         <Script
           async
@@ -39,18 +19,3 @@ export default function RootLayout({ children }) {
           strategy="afterInteractive"
         />
         <Script
-          id="gtag-init"
-          strategy="afterInteractive"
-        >{`
-          window.dataLayer = window.dataLayer || [];
-          function gtag(){dataLayer.push(arguments);}
-          gtag('js', new Date());
-          gtag('config', 'G-FP10KYRWX5');
-        `}</Script>
-      </head>
-      <body>
-        {children}
-      </body>
-    </html>
-  );
-}
