@@ -2,6 +2,7 @@
 import "./globals.css";
 import Script from "next/script";
 import CookieBanner from "../components/CookieBanner";
+import DyanaFooter from "../components/DyanaFooter";
 
 export const metadata = {
   title: "DYANA",
@@ -13,6 +14,8 @@ export default function RootLayout({ children }) {
     <html lang="it">
       <body>
         {children}
+
+        <DyanaFooter />
         <CookieBanner />
 
         {/* Google Analytics */}
@@ -20,7 +23,6 @@ export default function RootLayout({ children }) {
           src="https://www.googletagmanager.com/gtag/js?id=G-FP10KYRWX5"
           strategy="afterInteractive"
         />
-
         <Script id="gtag-init" strategy="afterInteractive">
           {`
             window.dataLayer = window.dataLayer || [];

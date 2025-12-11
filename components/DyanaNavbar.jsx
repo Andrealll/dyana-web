@@ -15,6 +15,7 @@ export default function DyanaNavbar({
   const [email, setEmail] = useState(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [logoutInProgress, setLogoutInProgress] = useState(false);
+
   const isGuest = userRole === "guest";
 
   // --- CARICAMENTO CREDITS / RUOLO ----------------------------------------
@@ -29,10 +30,44 @@ export default function DyanaNavbar({
       }
 
       const cs = await fetchCreditsState(token);
-      const role = cs.paid > 0 ? "user" : "free";
+
+      // Ruolo dal backend (preferito), con fallback
+      const backendRole = cs.role || null;
+      const role =
+        backendRole && typeof backendRole === "string"
+          ? backendRole
+          : cs.paid > 0
+          ? "user"
+          : "guest";
+
+      const isGuestRole = role === "guest";
+
+      // Calcolo crediti da mostrare in navbar
+      let creditsForNavbar = 0;
+
+      if (isGuestRole) {
+        // GUEST: mostra i crediti gratuiti rimasti
+        if (typeof cs.free_left === "number") {
+          creditsForNavbar = cs.free_left;
+        } else if (typeof cs.total_available === "number") {
+          // fallback se il backend usa già total_available per i guest
+          creditsForNavbar = cs.total_available;
+        } else {
+          creditsForNavbar = 0;
+        }
+      } else {
+        // UTENTE REGISTRATO: mostra il totale disponibile (paid + free)
+        if (typeof cs.total_available === "number") {
+          creditsForNavbar = cs.total_available;
+        } else if (typeof cs.paid === "number") {
+          creditsForNavbar = cs.paid;
+        } else {
+          creditsForNavbar = 0;
+        }
+      }
 
       setUserRole(role);
-      setCredits(cs.total_available ?? 0);
+      setCredits(creditsForNavbar);
       setEmail(cs.email || null);
     } catch (err) {
       console.error("[NAVBAR] errore caricamento stato utente:", err);
@@ -61,30 +96,30 @@ export default function DyanaNavbar({
       }
     };
   }, [loadNavbarState]);
-function handleLogoutClick() {
-  if (logoutInProgress) return; // evita doppi click
-  setLogoutInProgress(true);
 
-  // Aggiorna SUBITO la UI
-  setUserRole("guest");
-  setCredits(0);
-  setEmail(null);
+  function handleLogoutClick() {
+    if (logoutInProgress) return; // evita doppi click
+    setLogoutInProgress(true);
 
-  // Chiudi eventualmente il menu mobile
-  setIsMenuOpen(false);
+    // Aggiorna SUBITO la UI
+    setUserRole("guest");
+    setCredits(0);
+    setEmail(null);
 
-  if (onLogout) {
-    onLogout();
-    return;
+    // Chiudi eventualmente il menu mobile
+    setIsMenuOpen(false);
+
+    if (onLogout) {
+      onLogout();
+      return;
+    }
+
+    clearToken();
+
+    if (typeof window !== "undefined") {
+      window.location.href = "/";
+    }
   }
-
-  clearToken();
-
-  if (typeof window !== "undefined") {
-    window.location.href = "/";
-  }
-}
-
 
   function handleAreaPersonaleClick(e) {
     e.preventDefault();
@@ -114,25 +149,25 @@ function handleLogoutClick() {
         {/* RIGA SUPERIORE: logo + menu / hamburger */}
         <div className="dyana-navbar-top">
           <Link href="/" className="dyana-navbar-logo-link">
-<Image
-  src="/dyana-logo-NAV.png"
-  alt="DYANA"
-  width={32}
-  height={32}
-  className="dyana-navbar-logo"
-/>
-
+            <Image
+              src="/dyana-logo-NAV.png"
+              alt="DYANA"
+              width={32}
+              height={32}
+              className="dyana-navbar-logo"
+            />
             <span className="dyana-navbar-logo-text">DYANA</span>
           </Link>
 
           {/* Menu desktop + mobile (a tendina) */}
           <div className="dyana-navbar-menu-wrapper">
-            {/* Hamburger solo su mobile (CSS) */}
+            {/* Hamburger solo su mobile (gestito da CSS) */}
             <button
               type="button"
               className="dyana-navbar-toggle"
               onClick={() => setIsMenuOpen((v) => !v)}
               aria-label="Apri menu"
+              aria-expanded={isMenuOpen}
             >
               ☰
             </button>
@@ -141,6 +176,7 @@ function handleLogoutClick() {
               className={`dyana-navbar-links ${
                 isMenuOpen ? "open" : ""
               }`}
+              aria-hidden={!isMenuOpen}
             >
               {navItems.map((item) => (
                 <Link
@@ -165,18 +201,18 @@ function handleLogoutClick() {
               </a>
 
               {!isGuest && (
-  <button
-    type="button"
-    className="dyana-navbar-logout"
-    onClick={() => {
-      handleLogoutClick();
-      setIsMenuOpen(false);
-    }}
-    disabled={logoutInProgress}
-  >
-    {logoutInProgress ? "Logout..." : "Logout"}
-  </button>
-)}
+                <button
+                  type="button"
+                  className="dyana-navbar-logout"
+                  onClick={() => {
+                    handleLogoutClick();
+                    setIsMenuOpen(false);
+                  }}
+                  disabled={logoutInProgress}
+                >
+                  {logoutInProgress ? "Logout..." : "Logout"}
+                </button>
+              )}
             </nav>
           </div>
         </div>
