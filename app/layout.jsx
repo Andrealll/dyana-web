@@ -18,4 +18,4 @@ export default function RootLayout({ children }) {
           src="https://www.googletagmanager.com/gtag/js?id=G-FP10KYRWX5"
           strategy="afterInteractive"
         />
-        <Script
+        <Script>
