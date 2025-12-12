@@ -1,9 +1,17 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { getToken, fetchCreditsState, clearToken } from "../lib/authClient";
+import {
+  getToken,
+  getGuestToken,
+  getAnyAuthToken,        // <-- USA SYNC
+  getAnyAuthTokenAsync,   // <-- solo per primo load
+  fetchCreditsState,
+  clearToken,
+  clearGuestToken,
+} from "../lib/authClient";
 
 export default function DyanaNavbar({
   userRole: userRoleProp,
@@ -18,57 +26,117 @@ export default function DyanaNavbar({
 
   const isGuest = userRole === "guest";
 
-  // --- CARICAMENTO CREDITS / RUOLO ----------------------------------------
-  const loadNavbarState = useCallback(async () => {
+  // --- anti race
+  const refreshInFlightRef = useRef(false);
+
+  // --- per log e per evitare stale overwrite
+  const creditsRef = useRef(credits);
+  useEffect(() => {
+    creditsRef.current = credits;
+  }, [credits]);
+
+  // --- se un evento aggiorna crediti, blocco per un po’ l’overwrite da /credits/state
+  const freezeUntilRef = useRef(0);
+  const FREEZE_MS = 2500; // 2.5s: basta per evitare overwrite con stato backend “in ritardo”
+
+  // ======================================================
+  // Sync props -> state (se passi valori dalla pagina)
+  // ======================================================
+  useEffect(() => {
+    if (typeof userRoleProp === "string") setUserRole(userRoleProp);
+  }, [userRoleProp]);
+
+  useEffect(() => {
+    if (typeof creditsProp === "number") setCredits(creditsProp);
+  }, [creditsProp]);
+
+  // ======================================================
+  // Normalizza crediti da /credits/state in modo robusto
+  // ======================================================
+  function pickCreditsToShow(cs, backendRole) {
+    if (typeof cs?.remaining_credits === "number") return cs.remaining_credits;
+
+    if (backendRole === "guest") {
+      if (typeof cs?.free_left === "number") return cs.free_left;
+      if (typeof cs?.guest_free_left === "number") return cs.guest_free_left;
+      if (typeof cs?.credits === "number") return cs.credits;
+      return 0;
+    }
+
+    if (typeof cs?.total_available === "number") return cs.total_available;
+    if (typeof cs?.paid === "number") return cs.paid;
+    if (typeof cs?.credits === "number") return cs.credits;
+
+    return 0;
+  }
+
+  // ======================================================
+  // Source of truth: /credits/state
+  // Nota: NON deve sovrascrivere subito dopo un evento billing
+  // ======================================================
+  const loadNavbarState = useCallback(async (reason = "manual") => {
     try {
-      const token = getToken();
-      if (!token) {
+      const now = Date.now();
+
+      // se siamo nella finestra di freeze, NON aggiornare i crediti dal backend
+      const freezeActive = now < freezeUntilRef.current;
+
+      // 1) token: primo load può creare guest se serve, ma durante refresh usiamo sync
+      const anyToken =
+        reason === "initial"
+          ? await getAnyAuthTokenAsync()
+          : getAnyAuthToken(); // sync: non creare nuovi guest in refresh
+
+      if (!anyToken) {
         setUserRole("guest");
         setCredits(0);
         setEmail(null);
         return;
       }
 
-      const cs = await fetchCreditsState(token);
+      const cs = await fetchCreditsState(anyToken);
 
-      // Ruolo dal backend (preferito), con fallback
-      const backendRole = cs.role || null;
-      const role =
-        backendRole && typeof backendRole === "string"
-          ? backendRole
-          : cs.paid > 0
-          ? "user"
-          : "guest";
+      const loginToken = getToken();
+      const backendRole = cs?.role || (loginToken ? "free" : "guest");
+      const normalizedRole = backendRole === "user" ? "free" : backendRole;
 
-      const isGuestRole = role === "guest";
+      const computedCredits = pickCreditsToShow(cs, backendRole);
 
-      // Calcolo crediti da mostrare in navbar
-      let creditsForNavbar = 0;
+      console.log(
+        "[NAVBAR] loadNavbarState JSON:",
+        JSON.stringify(
+          {
+            reason,
+            freezeActive,
+            backendRole,
+            normalizedRole,
+            computedCredits,
+            credits_before: creditsRef.current,
+            cs_remaining_credits: cs?.remaining_credits,
+            cs_free_left: cs?.free_left,
+            cs_total_available: cs?.total_available,
+            cs_paid: cs?.paid,
+            cs_credits: cs?.credits,
+            cs_role: cs?.role,
+            cs_email: cs?.email,
+          },
+          null,
+          2
+        )
+      );
 
-      if (isGuestRole) {
-        // GUEST: mostra i crediti gratuiti rimasti
-        if (typeof cs.free_left === "number") {
-          creditsForNavbar = cs.free_left;
-        } else if (typeof cs.total_available === "number") {
-          // fallback se il backend usa già total_available per i guest
-          creditsForNavbar = cs.total_available;
-        } else {
-          creditsForNavbar = 0;
-        }
+      setUserRole(normalizedRole);
+      setEmail(cs?.email || null);
+
+      // QUI la differenza: se freeze è attivo, NON sovrascrivere credits
+      if (!freezeActive) {
+        setCredits(computedCredits);
       } else {
-        // UTENTE REGISTRATO: mostra il totale disponibile (paid + free)
-        if (typeof cs.total_available === "number") {
-          creditsForNavbar = cs.total_available;
-        } else if (typeof cs.paid === "number") {
-          creditsForNavbar = cs.paid;
-        } else {
-          creditsForNavbar = 0;
-        }
+        console.log(
+          "[NAVBAR] skip credits overwrite (freeze active). credits stays:",
+          creditsRef.current
+        );
       }
-
-      setUserRole(role);
-      setCredits(creditsForNavbar);
-      setEmail(cs.email || null);
     } catch (err) {
       console.error("[NAVBAR] errore caricamento stato utente:", err);
       setUserRole("guest");
@@ -77,36 +145,96 @@ export default function DyanaNavbar({
     }
   }, []);
 
+  // Primo load
   useEffect(() => {
-    loadNavbarState();
+    loadNavbarState("initial");
   }, [loadNavbarState]);
 
-  // Ricarica crediti quando fai:
-  // window.dispatchEvent(new Event("dyana:refresh-credits"))
+  // ======================================================
+  // Refresh crediti via eventi globali (con log + freeze)
+  // ======================================================
   useEffect(() => {
-    function handleRefresh() {
-      loadNavbarState();
-    }
-    if (typeof window !== "undefined") {
-      window.addEventListener("dyana:refresh-credits", handleRefresh);
-    }
-    return () => {
-      if (typeof window !== "undefined") {
-        window.removeEventListener("dyana:refresh-credits", handleRefresh);
+    function handleRefresh(e) {
+      const userTok = getToken() || "";
+      const guestTok = getGuestToken() || "";
+
+      console.log(
+        "[NAVBAR] evento refresh JSON:",
+        JSON.stringify(
+          {
+            type: e?.type,
+            detail: e?.detail,
+            credits_before: creditsRef.current,
+            token_user: userTok ? userTok.slice(0, 20) + "…" : null,
+            token_guest: guestTok ? guestTok.slice(0, 20) + "…" : null,
+          },
+          null,
+          2
+        )
+      );
+
+      const remaining =
+        e?.detail && typeof e.detail.remaining_credits === "number"
+          ? e.detail.remaining_credits
+          : null;
+
+      // 1) update immediato da billing
+      if (remaining !== null) {
+        freezeUntilRef.current = Date.now() + FREEZE_MS; // blocca overwrite backend per un po'
+        setCredits(remaining);
       }
+
+      // 2) riallineamento: lo facciamo SOLO per ruolo/email e per crediti DOPO freeze
+      if (refreshInFlightRef.current) return;
+      refreshInFlightRef.current = true;
+
+      // se c'è remaining, aspetta fine freeze prima di rileggerli
+      const delay = remaining !== null ? FREEZE_MS : 0;
+
+      setTimeout(() => {
+        Promise.resolve(loadNavbarState("event")).finally(() => {
+          refreshInFlightRef.current = false;
+        });
+      }, delay);
+    }
+
+    if (typeof window === "undefined") return;
+
+    window.addEventListener("dyana:refresh-credits", handleRefresh);
+    window.addEventListener("dyana-credits-updated", handleRefresh);
+
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        handleRefresh({ type: "visibilitychange", detail: {} });
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+
+    const onStorage = (ev) => {
+      if (ev.key === "dyana_jwt" || ev.key === "diyana_guest_jwt") {
+        handleRefresh({ type: "storage", detail: {} });
+      }
+    };
+    window.addEventListener("storage", onStorage);
+
+    return () => {
+      window.removeEventListener("dyana:refresh-credits", handleRefresh);
+      window.removeEventListener("dyana-credits-updated", handleRefresh);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("storage", onStorage);
     };
   }, [loadNavbarState]);
 
+  // ======================================================
+  // Logout
+  // ======================================================
   function handleLogoutClick() {
-    if (logoutInProgress) return; // evita doppi click
+    if (logoutInProgress) return;
     setLogoutInProgress(true);
 
-    // Aggiorna SUBITO la UI
     setUserRole("guest");
     setCredits(0);
     setEmail(null);
-
-    // Chiudi eventualmente il menu mobile
     setIsMenuOpen(false);
 
     if (onLogout) {
@@ -115,6 +243,7 @@ export default function DyanaNavbar({
     }
 
     clearToken();
+    clearGuestToken?.();
 
     if (typeof window !== "undefined") {
       window.location.href = "/";
@@ -125,11 +254,8 @@ export default function DyanaNavbar({
     e.preventDefault();
     if (typeof window === "undefined") return;
 
-    if (isGuest) {
-      window.location.href = "/login";
-    } else {
-      window.location.href = "/area-personale";
-    }
+    if (isGuest) window.location.href = "/login";
+    else window.location.href = "/area-personale";
   }
 
   const topLineText = isGuest
@@ -146,7 +272,6 @@ export default function DyanaNavbar({
   return (
     <header className="dyana-navbar">
       <div className="dyana-navbar-inner">
-        {/* RIGA SUPERIORE: logo + menu / hamburger */}
         <div className="dyana-navbar-top">
           <Link href="/" className="dyana-navbar-logo-link">
             <Image
@@ -159,9 +284,7 @@ export default function DyanaNavbar({
             <span className="dyana-navbar-logo-text">DYANA</span>
           </Link>
 
-          {/* Menu desktop + mobile (a tendina) */}
           <div className="dyana-navbar-menu-wrapper">
-            {/* Hamburger solo su mobile (gestito da CSS) */}
             <button
               type="button"
               className="dyana-navbar-toggle"
@@ -173,9 +296,7 @@ export default function DyanaNavbar({
             </button>
 
             <nav
-              className={`dyana-navbar-links ${
-                isMenuOpen ? "open" : ""
-              }`}
+              className={`dyana-navbar-links ${isMenuOpen ? "open" : ""}`}
               aria-hidden={!isMenuOpen}
             >
               {navItems.map((item) => (
@@ -217,7 +338,6 @@ export default function DyanaNavbar({
           </div>
         </div>
 
-        {/* RIGA INFERIORE: stato utente + crediti */}
         <div className="dyana-navbar-bottom">
           <div className="dyana-navbar-status">
             <span className="dyana-navbar-status-top">{topLineText}</span>

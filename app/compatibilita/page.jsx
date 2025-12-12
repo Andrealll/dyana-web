@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { getToken, clearToken } from "../../lib/authClient";
+import { getToken, clearToken, getAnyAuthToken } from "../../lib/authClient";
 import DyanaNavbar from "../../components/DyanaNavbar";
 
 // ==========================
@@ -21,27 +21,11 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE
   ? "http://127.0.0.1:8001"
   : "https://chatbot-test-0h4o.onrender.com";
 
-// Base URL del servizio auth (astrobot_auth_pub, Render → fallback locale)
-const AUTH_BASE = process.env.NEXT_PUBLIC_AUTH_BASE
-  ? process.env.NEXT_PUBLIC_AUTH_BASE
-  : (typeof window !== "undefined" &&
-      (window.location.hostname === "localhost" ||
-        window.location.hostname === "127.0.0.1"))
-  ? "http://127.0.0.1:8002"
-  : "https://astrobot-auth-pub.onrender.com";
-
-// Storage key per il JWT guest
-const GUEST_TOKEN_STORAGE_KEY = "diyana_guest_jwt";
-
 // JWT di fallback (stesso di Tema)
 const ASTROBOT_JWT_TEMA = process.env.NEXT_PUBLIC_ASTROBOT_JWT_TEMA || "";
 
-// Singleton per evitare più chiamate parallele a /auth/anonymous
-let guestTokenPromise = null;
-
 if (typeof window !== "undefined") {
   console.log("[DYANA/COMPAT] API_BASE runtime:", API_BASE);
-  console.log("[DYANA/COMPAT] AUTH_BASE runtime:", AUTH_BASE);
 }
 
 // ==========================
@@ -58,68 +42,6 @@ function decodeJwtPayload(token) {
     console.error("[DYANA/COMPAT] Errore decode JWT:", e);
     return null;
   }
-}
-
-// ==========================
-// FUNZIONE GUEST TOKEN SINGLETON
-// ==========================
-async function getGuestTokenSingleton() {
-  if (typeof window === "undefined") return null;
-
-  const stored = window.localStorage.getItem(GUEST_TOKEN_STORAGE_KEY);
-  if (stored) {
-    console.log(
-      "[DYANA/COMPAT][GUEST] Uso token guest da localStorage:",
-      stored.slice(0, 25)
-    );
-    return stored;
-  }
-
-  if (guestTokenPromise) {
-    console.log("[DYANA/COMPAT][GUEST] Riuso guestTokenPromise esistente");
-    return guestTokenPromise;
-  }
-
-  const base = AUTH_BASE.replace(/\/+$/, "");
-  const url = `${base}/auth/anonymous`;
-  console.log("[DYANA/COMPAT][GUEST] Nessun token LS, chiamo /auth/anonymous:", url);
-
-  guestTokenPromise = (async () => {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) {
-        console.error(
-          "[DYANA/COMPAT][GUEST] /auth/anonymous non OK:",
-          res.status
-        );
-        return null;
-      }
-      const data = await res.json();
-      const token = data?.access_token || data?.token;
-      if (!token) {
-        console.error(
-          "[DYANA/COMPAT][GUEST] /auth/anonymous: token mancante nella risposta",
-          data
-        );
-        return null;
-      }
-      window.localStorage.setItem(GUEST_TOKEN_STORAGE_KEY, token);
-      console.log(
-        "[DYANA/COMPAT][GUEST] Guest token inizializzato e salvato in LS:",
-        token.slice(0, 25)
-      );
-      return token;
-    } catch (err) {
-      console.error(
-        "[DYANA/COMPAT][GUEST] Errore chiamando /auth/anonymous:",
-        err
-      );
-      return null;
-    }
-  })();
-
-  const token = await guestTokenPromise;
-  return token;
 }
 
 // ==========================
@@ -254,7 +176,6 @@ export default function CompatibilitaPage() {
 
   useEffect(() => {
     refreshUserFromToken();
-    getGuestTokenSingleton();
   }, []);
 
   function handleLogout() {
@@ -332,14 +253,7 @@ export default function CompatibilitaPage() {
         tier: form.tier,
       };
 
-      let token = getToken();
-
-      if (!token) {
-        const guest = await getGuestTokenSingleton();
-        if (guest) {
-          token = guest;
-        }
-      }
+      let token = getAnyAuthToken();
 
       if (!token && ASTROBOT_JWT_TEMA) {
         token = ASTROBOT_JWT_TEMA;
@@ -465,10 +379,8 @@ export default function CompatibilitaPage() {
     ? sinVis.aspetti_top
     : [];
 
-  const nomeA =
-    temaVisA?.nome || form.nomeA || "Persona A";
-  const nomeB =
-    temaVisB?.nome || form.nomeB || "Persona B";
+  const nomeA = temaVisA?.nome || form.nomeA || "Persona A";
+  const nomeB = temaVisB?.nome || form.nomeB || "Persona B";
 
   // Flag ora ignota da payload (se presente) o da form
   const payloadMeta = risultato?.payload_ai?.meta || {};
@@ -825,13 +737,29 @@ export default function CompatibilitaPage() {
               {errore && (
                 noCredits ? (
                   <div className="card-text" style={{ color: "#ffdf9a" }}>
-                    <p>
-                      Hai finito i tuoi crediti. Per effettuare letture premium{" "}
-                      <Link href="/crediti" className="link">
-                        clicca qui
-                      </Link>
-                      .
-                    </p>
+                    {userRole === "guest" ? (
+                      <>
+                        <p>
+                          Hai usato i tuoi crediti di prova. Per continuare con
+                          le letture premium{" "}
+                          <Link href="/iscriviti" className="link">
+                            iscriviti e ottieni altri crediti gratuiti
+                          </Link>
+                          .
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p>
+                          Hai finito i tuoi crediti. Per effettuare altre
+                          letture premium{" "}
+                          <Link href="/crediti" className="link">
+                            vai alla pagina crediti
+                          </Link>
+                          .
+                        </p>
+                      </>
+                    )}
                     <p
                       style={{
                         marginTop: 8,

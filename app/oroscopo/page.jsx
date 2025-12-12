@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import DyanaNavbar from "../../components/DyanaNavbar";
-import { getToken, clearToken } from "../../lib/authClient";
+import { getToken, clearToken, getAnyAuthTokenAsync, ensureGuestToken } from "../../lib/authClient";
 
 // ==========================
 // COSTANTI GLOBALI
@@ -21,18 +21,6 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE
   ? "http://127.0.0.1:8001"
   : "https://chatbot-test-0h4o.onrender.com";
 
-// Base URL del servizio auth (astrobot_auth_pub, Render → fallback locale)
-const AUTH_BASE = process.env.NEXT_PUBLIC_AUTH_BASE
-  ? process.env.NEXT_PUBLIC_AUTH_BASE
-  : (typeof window !== "undefined" &&
-      (window.location.hostname === "localhost" ||
-        window.location.hostname === "127.0.0.1"))
-  ? "http://127.0.0.1:8002"
-  : "https://astrobot-auth-pub.onrender.com";
-
-// Storage key per il JWT guest
-const GUEST_TOKEN_STORAGE_KEY = "diyana_guest_jwt";
-
 // JWT di fallback (stesso del Tema)
 const ASTROBOT_JWT_TEMA = process.env.NEXT_PUBLIC_ASTROBOT_JWT_TEMA || "";
 
@@ -44,12 +32,8 @@ const PERIOD_COSTS = {
   annuale: 5,
 };
 
-// Singleton per evitare più chiamate parallele a /auth/anonymous
-let guestTokenPromise = null;
-
 if (typeof window !== "undefined") {
   console.log("[DYANA][OROSCOPO] API_BASE runtime:", API_BASE);
-  console.log("[DYANA][OROSCOPO] AUTH_BASE runtime:", AUTH_BASE);
 }
 
 // ==========================
@@ -67,74 +51,6 @@ function decodeJwtPayload(token) {
     console.error("[DYANA][OROSCOPO] Errore decode JWT:", e);
     return null;
   }
-}
-
-// ==========================
-// FUNZIONE GUEST TOKEN SINGLETON
-// ==========================
-async function getGuestTokenSingleton() {
-  if (typeof window === "undefined") return null;
-
-  // 1) Se esiste in localStorage → lo usiamo
-  const stored = window.localStorage.getItem(GUEST_TOKEN_STORAGE_KEY);
-  if (stored) {
-    console.log(
-      "[DYANA][OROSCOPO][GUEST] Uso token guest da localStorage:",
-      stored.slice(0, 25)
-    );
-    return stored;
-  }
-
-  // 2) Se una richiesta è già in corso → riusiamo la stessa Promise
-  if (guestTokenPromise) {
-    console.log("[DYANA][OROSCOPO][GUEST] Riuso guestTokenPromise esistente");
-    return guestTokenPromise;
-  }
-
-  // 3) Creiamo la promise una sola volta
-  const base = AUTH_BASE.replace(/\/+$/, "");
-  const url = `${base}/auth/anonymous`;
-  console.log(
-    "[DYANA][OROSCOPO][GUEST] Nessun token LS, chiamo /auth/anonymous:",
-    url
-  );
-
-  guestTokenPromise = (async () => {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) {
-        console.error(
-          "[DYANA][OROSCOPO][GUEST] /auth/anonymous non OK:",
-          res.status
-        );
-        return null;
-      }
-      const data = await res.json();
-      const token = data?.access_token || data?.token;
-      if (!token) {
-        console.error(
-          "[DYANA][OROSCOPO][GUEST] /auth/anonymous: token mancante nella risposta",
-          data
-        );
-        return null;
-      }
-      window.localStorage.setItem(GUEST_TOKEN_STORAGE_KEY, token);
-      console.log(
-        "[DYANA][OROSCOPO][GUEST] Guest token inizializzato e salvato in LS:",
-        token.slice(0, 25)
-      );
-      return token;
-    } catch (err) {
-      console.error(
-        "[DYANA][OROSCOPO][GUEST] Errore chiamando /auth/anonymous:",
-        err
-      );
-      return null;
-    }
-  })();
-
-  const token = await guestTokenPromise;
-  return token;
 }
 
 // ==========================
@@ -167,7 +83,10 @@ function buildInterpretazioneTesto(oroscopoAi, tierRaw) {
 
   // 1) Intro / sintesi
   const intro =
-    (oroscopoAi.intro || oroscopoAi.sintesi_periodo || oroscopoAi.sintesi || "").trim();
+    (oroscopoAi.intro ||
+      oroscopoAi.sintesi_periodo ||
+      oroscopoAi.sintesi ||
+      "").trim();
   if (intro) {
     pieces.push(intro);
   }
@@ -426,6 +345,7 @@ function MetricheGrafico({ metriche }) {
     </div>
   );
 }
+
 function AspettiTable({ aspetti }) {
   if (!Array.isArray(aspetti) || aspetti.length === 0) return null;
 
@@ -579,7 +499,6 @@ function AspettiTable({ aspetti }) {
   );
 }
 
-
 // ==========================
 // COMPONENTE PRINCIPALE
 // ==========================
@@ -598,6 +517,8 @@ export default function OroscopoPage() {
   const [loading, setLoading] = useState(false);
   const [risultato, setRisultato] = useState(null);
   const [errore, setErrore] = useState("");
+  // ⇨ flag per errore "nessun credito"
+  const [noCredits, setNoCredits] = useState(false);
 
   // Stato utente "globale"
   const [userRole, setUserRole] = useState("guest");
@@ -621,9 +542,10 @@ export default function OroscopoPage() {
   // ======================================================
   function refreshUserFromToken() {
     const token = getToken();
+
+    // 👉 se NON c'è token login, NON forziamo i crediti
     if (!token) {
       setUserRole("guest");
-      setUserCredits(2);
       setUserIdForDyana("guest_oroscopo");
       return;
     }
@@ -633,17 +555,11 @@ export default function OroscopoPage() {
     setUserRole(role);
 
     const sub = payload?.sub;
-    if (sub) {
-      setUserIdForDyana(sub);
-    } else {
-      setUserIdForDyana("guest_oroscopo");
-    }
+    setUserIdForDyana(sub || "guest_oroscopo");
 
-    // dummy UI, i reali arrivano dalla dashboard/altro
+    // solo UI placeholder per utenti loggati
     if (role === "premium") {
       setUserCredits(10);
-    } else if (role === "free") {
-      setUserCredits(2);
     } else {
       setUserCredits(2);
     }
@@ -652,9 +568,11 @@ export default function OroscopoPage() {
   useEffect(() => {
     // 1) Token login, se c'è
     refreshUserFromToken();
-    // 2) Inizializza guest token
-    getGuestTokenSingleton();
+
+   // 2) Assicura token guest (se non loggato)
+  ensureGuestToken();
   }, []);
+
 
   function handleLogout() {
     clearToken();
@@ -687,13 +605,15 @@ export default function OroscopoPage() {
   async function generaOroscopo() {
     setLoading(true);
     setErrore("");
+    setNoCredits(false);
     setRisultato(null);
     setBilling(null);
     setReadingId("");
     setReadingPayload(null);
     setKbTags([]);
     setDiyanaOpen(false); // chiudo DYANA quando rigenero
-
+    // ⇨ azzero il flag noCredits a ogni nuova richiesta
+    setNoCredits(false);
     try {
       const slug = mapPeriodoToSlug(form.periodo);
 
@@ -707,16 +627,8 @@ export default function OroscopoPage() {
         tier: form.tier, // "free" o "premium"
       };
 
-      // 1) Token di login, se esiste
-      let token = getToken();
-
-      // 2) Se non c'è login → guest token
-      if (!token) {
-        const guest = await getGuestTokenSingleton();
-        if (guest) {
-          token = guest;
-        }
-      }
+      // ✅ Token unico gestito da authClient.js (login o guest)
+      let token = await getAnyAuthTokenAsync();
 
       // 3) Fallback finale: JWT statico
       if (!token && ASTROBOT_JWT_TEMA) {
@@ -761,10 +673,34 @@ export default function OroscopoPage() {
         console.log("[DYANA /oroscopo_ai] status non OK:", res.status);
         console.log("[DYANA /oroscopo_ai] body errore:", data);
 
-        setErrore(
-          (data && (data.error || data.detail)) ||
-            `Errore nella generazione dell'oroscopo (status ${res.status}).`
-        );
+        const errorCode =
+          data?.error_code || data?.code || data?.error || data?.detail;
+
+        const isCreditsError =
+          res.status === 402 ||
+          res.status === 403 ||
+          (typeof errorCode === "string" &&
+            errorCode.toLowerCase().includes("credit"));
+
+        let message =
+          (data && (data.error || data.detail || data.message)) ||
+          `Errore nella generazione dell'oroscopo (status ${res.status}).`;
+
+        if (typeof message !== "string") {
+          message =
+            "Errore nella generazione dell'oroscopo. Riprova più tardi.";
+        }
+
+        // ⇨ caso specifico: nessun credito per lettura premium
+        if (isCreditsError && form.tier === "premium") {
+          setNoCredits(true);
+          setErrore(message);
+          setLoading(false);
+          return;
+        }
+
+        // ⇨ errore generico
+        setErrore(message);
         setLoading(false);
         return;
       }
@@ -773,6 +709,23 @@ export default function OroscopoPage() {
 
       if (data && data.billing) {
         setBilling(data.billing);
+
+        const remaining = data.billing.remaining_credits;
+        if (typeof remaining === "number") {
+          setUserCredits(remaining);
+
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("dyana:refresh-credits", {
+                detail: {
+                  feature: "oroscopo_ai",
+                  remaining_credits: remaining,
+                  billing_mode: data.billing.mode,
+                },
+              })
+            );
+          }
+        }
       } else {
         setBilling(null);
       }
@@ -897,13 +850,15 @@ export default function OroscopoPage() {
         {/* INTESTAZIONE RICCA */}
 
         <header className="section">
-          <h1 className="section-title">Oroscopo dinamico: giorno, settimana, mese, anno.</h1>
+          <h1 className="section-title">
+            Oroscopo dinamico: giorno, settimana, mese, anno.
+          </h1>
           <p className="section-subtitle">
             In questa pagina puoi esplorare il tuo{" "}
-    <strong>Oroscopo personalizzato</strong>: inserisci i tuoi dati di
-    nascita, scegli il <strong>periodo</strong> che ti interessa e decidi
-    se usare la versione <strong>free</strong> o{" "}
-    <strong>premium</strong>.
+            <strong>Oroscopo personalizzato</strong>: inserisci i tuoi dati di
+            nascita, scegli il <strong>periodo</strong> che ti interessa e
+            decidi se usare la versione <strong>free</strong> o{" "}
+            <strong>premium</strong>.
             <br />
             DYANA traduce il linguaggio dei pianeti in indicazioni chiare e
             utili per comprendere te stesso con più profondità.
@@ -1085,9 +1040,46 @@ export default function OroscopoPage() {
 
               {/* Errore */}
               {errore && (
-                <p className="card-text" style={{ color: "#ff9a9a" }}>
-                  {errore}
-                </p>
+                noCredits ? (
+                  <div className="card-text" style={{ color: "#ffdf9a" }}>
+                    {userRole === "guest" ? (
+                      <>
+                        <p>
+                          Hai usato i tuoi crediti di prova. Per continuare con
+                          le letture premium{" "}
+                          <Link href="/login" className="link">
+                            iscriviti e ottieni altri crediti gratuiti
+                          </Link>
+                          .
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p>
+                          Hai finito i tuoi crediti. Per effettuare altre
+                          letture premium{" "}
+                          <Link href="/crediti" className="link">
+                            vai alla pagina crediti
+                          </Link>
+                          .
+                        </p>
+                      </>
+                    )}
+                    <p
+                      style={{
+                        marginTop: 8,
+                        fontSize: "0.8rem",
+                        opacity: 0.8,
+                      }}
+                    >
+                      Dettagli: {errore}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="card-text" style={{ color: "#ff9a9a" }}>
+                    {errore}
+                  </p>
+                )
               )}
             </div>
           </div>

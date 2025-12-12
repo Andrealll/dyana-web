@@ -3,8 +3,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { getToken, clearToken } from "../../lib/authClient";
+import { getToken, clearToken, getAnyAuthToken } from "../../lib/authClient";
 import DyanaNavbar from "../../components/DyanaNavbar";
 
 // ==========================
@@ -22,27 +21,11 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE
   ? "http://127.0.0.1:8001"
   : "https://chatbot-test-0h4o.onrender.com";
 
-// Base URL del servizio auth (astrobot_auth_pub, Render → fallback locale)
-const AUTH_BASE = process.env.NEXT_PUBLIC_AUTH_BASE
-  ? process.env.NEXT_PUBLIC_AUTH_BASE
-  : (typeof window !== "undefined" &&
-      (window.location.hostname === "localhost" ||
-        window.location.hostname === "127.0.0.1"))
-  ? "http://127.0.0.1:8002"
-  : "https://astrobot-auth-pub.onrender.com";
-
-// Storage key per il JWT guest
-const GUEST_TOKEN_STORAGE_KEY = "diyana_guest_jwt";
-
 // JWT di fallback
 const ASTROBOT_JWT_TEMA = process.env.NEXT_PUBLIC_ASTROBOT_JWT_TEMA || "";
 
-// Singleton per evitare più chiamate parallele a /auth/anonymous
-let guestTokenPromise = null;
-
 if (typeof window !== "undefined") {
   console.log("[DYANA] API_BASE runtime:", API_BASE);
-  console.log("[DYANA] AUTH_BASE runtime:", AUTH_BASE);
 }
 
 // ==========================
@@ -60,62 +43,6 @@ function decodeJwtPayload(token) {
     console.error("[DYANA] Errore decode JWT:", e);
     return null;
   }
-}
-
-// ==========================
-// FUNZIONE GUEST TOKEN SINGLETON
-// ==========================
-async function getGuestTokenSingleton() {
-  if (typeof window === "undefined") return null;
-
-  const stored = window.localStorage.getItem(GUEST_TOKEN_STORAGE_KEY);
-  if (stored) {
-    console.log(
-      "[DYANA][GUEST] Uso token guest da localStorage:",
-      stored.slice(0, 25)
-    );
-    return stored;
-  }
-
-  if (guestTokenPromise) {
-    console.log("[DYANA][GUEST] Riuso guestTokenPromise esistente");
-    return guestTokenPromise;
-  }
-
-  const base = AUTH_BASE.replace(/\/+$/, "");
-  const url = `${base}/auth/anonymous`;
-  console.log("[DYANA][GUEST] Nessun token LS, chiamo /auth/anonymous:", url);
-
-  guestTokenPromise = (async () => {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) {
-        console.error("[DYANA][GUEST] /auth/anonymous non OK:", res.status);
-        return null;
-      }
-      const data = await res.json();
-      const token = data?.access_token || data?.token;
-      if (!token) {
-        console.error(
-          "[DYANA][GUEST] /auth/anonymous: token mancante nella risposta",
-          data
-        );
-        return null;
-      }
-      window.localStorage.setItem(GUEST_TOKEN_STORAGE_KEY, token);
-      console.log(
-        "[DYANA][GUEST] Guest token inizializzato e salvato in LS:",
-        token.slice(0, 25)
-      );
-      return token;
-    } catch (err) {
-      console.error("[DYANA][GUEST] Errore chiamando /auth/anonymous:", err);
-      return null;
-    }
-  })();
-
-  const token = await guestTokenPromise;
-  return token;
 }
 
 // ==========================
@@ -145,8 +72,6 @@ function normalizeCapitoli(capitoliRaw) {
 // COMPONENTE PRINCIPALE
 // ==========================
 export default function TemaPage() {
-  const router = useRouter();
-
   const [form, setForm] = useState({
     nome: "",
     data: "",
@@ -160,12 +85,12 @@ export default function TemaPage() {
   const [contenuto, setContenuto] = useState(null);
   const [risultato, setRisultato] = useState(null);
   const [errore, setErrore] = useState("");
+  const [noCredits, setNoCredits] = useState(false);
 
   const [temaVis, setTemaVis] = useState(null);
 
   const [userRole, setUserRole] = useState("guest");
   const [userCredits, setUserCredits] = useState(2);
-
   const [userIdForDyana, setUserIdForDyana] = useState("guest_tema");
 
   const [billing, setBilling] = useState(null);
@@ -217,7 +142,8 @@ export default function TemaPage() {
         }
       });
       if (extraParts.length > 0) {
-        readingTextForDyana += (readingTextForDyana ? "\n\n" : "") + extraParts.join("\n\n");
+        readingTextForDyana +=
+          (readingTextForDyana ? "\n\n" : "") + extraParts.join("\n\n");
       }
     } else if (isPremium) {
       // Fallback legacy: usa le chiavi del vecchio schema
@@ -229,7 +155,8 @@ export default function TemaPage() {
         }
       });
       if (extraParts.length > 0) {
-        readingTextForDyana += (readingTextForDyana ? "\n\n" : "") + extraParts.join("\n\n");
+        readingTextForDyana +=
+          (readingTextForDyana ? "\n\n" : "") + extraParts.join("\n\n");
       }
     }
   }
@@ -237,7 +164,7 @@ export default function TemaPage() {
   const hasReading = !!interpretazione;
 
   // ======================================================
-  // Token login (registrato) → aggiorna UI
+  // Token login (registrato) → aggiorna UI locale
   // ======================================================
   function refreshUserFromToken() {
     const token = getToken();
@@ -270,7 +197,6 @@ export default function TemaPage() {
 
   useEffect(() => {
     refreshUserFromToken();
-    getGuestTokenSingleton();
   }, []);
 
   function handleLogout() {
@@ -287,13 +213,15 @@ export default function TemaPage() {
   async function generaTema() {
     setLoading(true);
     setErrore("");
+    setNoCredits(false);
     setInterpretazione("");
     setContenuto(null);
     setRisultato(null);
     setBilling(null);
     setTemaVis(null);
     setDiyanaOpen(false);
-
+    // ⇨ azzero il flag noCredits a ogni nuova richiesta
+    setNoCredits(false);
     try {
       // Se l'ora è ignota → stringa vuota. Il backend usa ora_ignota per la logica interna.
       const oraEffettiva = oraIgnota ? "" : (form.ora || "");
@@ -307,14 +235,7 @@ export default function TemaPage() {
         ora_ignota: oraIgnota,
       };
 
-      let token = getToken();
-
-      if (!token) {
-        const guest = await getGuestTokenSingleton();
-        if (guest) {
-          token = guest;
-        }
-      }
+      let token = getAnyAuthToken();
 
       if (!token && ASTROBOT_JWT_TEMA) {
         token = ASTROBOT_JWT_TEMA;
@@ -352,25 +273,18 @@ export default function TemaPage() {
         data = { raw: text };
       }
 
-      if (!res.ok) {
+          if (!res.ok) {
         console.log("[DYANA /tema_ai] status non OK:", res.status);
         console.log("[DYANA /tema_ai] body errore:", data);
 
         const errorCode =
           data?.error_code || data?.code || data?.error || data?.detail;
 
-        // Caso: crediti insufficienti per lettura premium
         const isCreditsError =
           res.status === 402 ||
+          res.status === 403 ||
           (typeof errorCode === "string" &&
             errorCode.toLowerCase().includes("credit"));
-
-        if (isCreditsError) {
-          // Portiamo l’utente alla pagina crediti
-          router.push("/crediti?reason=tema_premium");
-          setLoading(false);
-          return;
-        }
 
         let errorMessage =
           (data && (data.error || data.detail || data.message)) ||
@@ -380,24 +294,52 @@ export default function TemaPage() {
           errorMessage = "Errore nella generazione del tema.";
         }
 
+        // ⇨ caso specifico: nessun credito per lettura premium
+        if (isCreditsError && form.tier === "premium") {
+          setNoCredits(true);
+          setErrore(errorMessage);
+          setLoading(false);
+          return;
+        }
+
+        // ⇨ errore generico
         setErrore(errorMessage);
         setLoading(false);
         return;
       }
+
 
       setRisultato(data);
 
       if (data && data.billing) {
         setBilling(data.billing);
 
-        // 1) aggiorna il contatore locale della pagina
-        if (typeof data.billing.remaining_credits === "number") {
-          setUserCredits(data.billing.remaining_credits);
-        }
+        const remaining = data.billing.remaining_credits;
+        if (typeof remaining === "number") {
+          // 1) aggiorna il contatore locale della pagina
+          setUserCredits(remaining);
 
-        // 2) notifica la navbar di ricaricare i crediti da Supabase
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new Event("dyana:refresh-credits"));
+          // 2) notifica la navbar / altri listener
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("dyana-credits-updated", {
+                detail: {
+                  feature: "tema_ai",
+                  remaining_credits: remaining,
+                  billing_mode: data.billing.mode,
+                },
+              })
+            );
+            window.dispatchEvent(
+              new CustomEvent("dyana:refresh-credits", {
+                detail: {
+                  feature: "tema_ai",
+                  remaining_credits: remaining,
+                  billing_mode: data.billing.mode,
+                },
+              })
+            );
+          }
         }
       } else {
         setBilling(null);
@@ -565,7 +507,10 @@ export default function TemaPage() {
               </div>
 
               {/* RIGA DATA + ORA + ORA IGNOTA */}
-              <div className="form-row" style={{ display: "flex", gap: "16px" }}>
+              <div
+                className="form-row"
+                style={{ display: "flex", gap: "16px" }}
+              >
                 <div className="form-field" style={{ flex: 1 }}>
                   <label htmlFor="data_nascita" className="card-text">
                     Data di nascita
@@ -646,9 +591,7 @@ export default function TemaPage() {
                   className="form-input"
                 >
                   <option value="free">Free (0 crediti)</option>
-                  <option value="premium">
-                    Premium + DYANA (2 crediti)
-                  </option>
+                  <option value="premium">Premium + DYANA (2 crediti)</option>
                 </select>
               </div>
 
@@ -661,13 +604,50 @@ export default function TemaPage() {
                 {loading ? "Generazione..." : "Calcola Tema"}
               </button>
 
+              {/* ERRORE + CTA CREDITS / ISCRIZIONE */}
               {errore && (
-                <p
-                  className="card-text"
-                  style={{ color: "#ff9a9a" }}
-                >
-                  {errore}
-                </p>
+                noCredits ? (
+                  <div className="card-text" style={{ color: "#ffdf9a" }}>
+                    {userRole === "guest" ? (
+                      <>
+                        <p>
+                          Hai terminato le prove gratuite.{" "}
+                          <strong>Registrati</strong> per ottenere altri crediti
+                          free e continuare a usare la versione Premium.
+                        </p>
+                        <p style={{ marginTop: 4 }}>
+                          <Link href="/iscriviti" className="link">
+                            Iscriviti e ottieni altri crediti gratuiti
+                          </Link>
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p>
+                          Hai finito i tuoi crediti. Per effettuare altre
+                          letture Premium{" "}
+                          <Link href="/crediti" className="link">
+                            vai alla pagina crediti
+                          </Link>
+                          .
+                        </p>
+                      </>
+                    )}
+                    <p
+                      style={{
+                        marginTop: 8,
+                        fontSize: "0.8rem",
+                        opacity: 0.8,
+                      }}
+                    >
+                      Dettagli: {errore}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="card-text" style={{ color: "#ff9a9a" }}>
+                    {errore}
+                  </p>
+                )
               )}
             </div>
           </div>
@@ -1210,10 +1190,14 @@ export default function TemaPage() {
                 ) : (
                   <p
                     className="card-text"
-                    style={{ marginTop: 8, fontSize: "0.9rem", opacity: 0.9 }}
+                    style={{
+                      marginTop: 8,
+                      fontSize: "0.9rem",
+                      opacity: 0.9,
+                    }}
                   >
-                    Hai domande su questa lettura? Seleziona premium nel menu in alto
-                    per fare 2 domande a Dyana.
+                    Hai domande su questa lettura? Seleziona premium nel menu in
+                    alto per fare 2 domande a Dyana.
                   </p>
                 )}
               </div>

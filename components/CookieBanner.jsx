@@ -49,13 +49,12 @@ export default function CookieBanner() {
       <div className="cookie-modal">
         <h2 className="cookie-title">DYANA e i cookie</h2>
         <p className="cookie-text">
-          DYANA utilizza cookie tecnici e strumenti simili per funzionare
-          correttamente e per offrirti funzionalità aggiuntive, come i crediti
-          gratuiti di benvenuto.
+          DYANA ti da il benvenuto! Ti regaleremo ogni giorno dei crediti gratuiti
+		  per scoprire di più del mondo dell'astrologia.
           <br />
           <br />
-          Puoi accettare per abilitare questi vantaggi, oppure rifiutare e
-          continuare ad usare il servizio senza crediti gratuiti.
+          Ti ricordiamo che questo sito utilizza cookie tecnici e strumenti simili per funzionare
+          correttamente e per offrirti funzionalità aggiuntive.
         </p>
 
         <div
