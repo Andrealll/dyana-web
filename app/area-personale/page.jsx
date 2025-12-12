@@ -340,7 +340,7 @@ function formatUsageMode(u) {
                   Pagati: {creditsState.paid} • Free rimanenti oggi:{" "}
                   {creditsState.free_left}
                 </p>
-                <Link href="/ricarica" className="btn btn-primary">
+                <Link href="/crediti" className="btn btn-primary">
                   Ricarica crediti
                 </Link>
               </div>
