@@ -37,7 +37,7 @@ export default function DyanaNavbar({
 
   // --- se un evento aggiorna crediti, blocco per un po’ l’overwrite da /credits/state
   const freezeUntilRef = useRef(0);
-  const FREEZE_MS = 2500; // 2.5s: basta per evitare overwrite con stato backend “in ritardo”
+  const FREEZE_MS = 2500; // 2.5s
 
   // ======================================================
   // Sync props -> state (se passi valori dalla pagina)
@@ -54,15 +54,18 @@ export default function DyanaNavbar({
   // Normalizza crediti da /credits/state in modo robusto
   // ======================================================
   function pickCreditsToShow(cs, backendRole) {
+    // GUEST: mostra SOLO prova residua (= free_left)
+if (backendRole === "guest") {
+  // Source of truth per guest: free_left (trial residuo sul device)
+  if (typeof cs?.free_left === "number") return cs.free_left;
+
+  // fallback compat
+  if (typeof cs?.trial_available === "number") return cs.trial_available;
+
+  return 0;
+}
+    // USER: qui remaining_credits ha senso
     if (typeof cs?.remaining_credits === "number") return cs.remaining_credits;
-
-    if (backendRole === "guest") {
-      if (typeof cs?.free_left === "number") return cs.free_left;
-      if (typeof cs?.guest_free_left === "number") return cs.guest_free_left;
-      if (typeof cs?.credits === "number") return cs.credits;
-      return 0;
-    }
-
     if (typeof cs?.total_available === "number") return cs.total_available;
     if (typeof cs?.paid === "number") return cs.paid;
     if (typeof cs?.credits === "number") return cs.credits;
@@ -72,20 +75,17 @@ export default function DyanaNavbar({
 
   // ======================================================
   // Source of truth: /credits/state
-  // Nota: NON deve sovrascrivere subito dopo un evento billing
   // ======================================================
   const loadNavbarState = useCallback(async (reason = "manual") => {
     try {
       const now = Date.now();
-
-      // se siamo nella finestra di freeze, NON aggiornare i crediti dal backend
       const freezeActive = now < freezeUntilRef.current;
 
-      // 1) token: primo load può creare guest se serve, ma durante refresh usiamo sync
+      // 1) token
       const anyToken =
         reason === "initial"
           ? await getAnyAuthTokenAsync()
-          : getAnyAuthToken(); // sync: non creare nuovi guest in refresh
+          : getAnyAuthToken(); // sync
 
       if (!anyToken) {
         setUserRole("guest");
@@ -96,8 +96,10 @@ export default function DyanaNavbar({
 
       const cs = await fetchCreditsState(anyToken);
 
-      const loginToken = getToken();
-      const backendRole = cs?.role || (loginToken ? "free" : "guest");
+      // 2) ruolo
+      // priorità: flag is_guest se presente, altrimenti role
+      const backendRole = cs?.is_guest ? "guest" : (cs?.role || "free");
+      // normalizzazione (manteniamo guest / free)
       const normalizedRole = backendRole === "user" ? "free" : backendRole;
 
       const computedCredits = pickCreditsToShow(cs, backendRole);
@@ -128,7 +130,6 @@ export default function DyanaNavbar({
       setUserRole(normalizedRole);
       setEmail(cs?.email || null);
 
-      // QUI la differenza: se freeze è attivo, NON sovrascrivere credits
       if (!freezeActive) {
         setCredits(computedCredits);
       } else {
@@ -180,15 +181,14 @@ export default function DyanaNavbar({
 
       // 1) update immediato da billing
       if (remaining !== null) {
-        freezeUntilRef.current = Date.now() + FREEZE_MS; // blocca overwrite backend per un po'
+        freezeUntilRef.current = Date.now() + FREEZE_MS;
         setCredits(remaining);
       }
 
-      // 2) riallineamento: lo facciamo SOLO per ruolo/email e per crediti DOPO freeze
+      // 2) riallineamento
       if (refreshInFlightRef.current) return;
       refreshInFlightRef.current = true;
 
-      // se c'è remaining, aspetta fine freeze prima di rileggerli
       const delay = remaining !== null ? FREEZE_MS : 0;
 
       setTimeout(() => {
@@ -342,7 +342,15 @@ export default function DyanaNavbar({
           <div className="dyana-navbar-status">
             <span className="dyana-navbar-status-top">{topLineText}</span>
             <span className="dyana-navbar-status-credits">
-              Crediti: <strong>{credits}</strong>
+              {isGuest ? (
+                <>
+                  Prova: <strong>{credits > 0 ? "Disponibile" : "Esaurita"}</strong>
+                </>
+              ) : (
+                <>
+                  Crediti: <strong>{credits}</strong>
+                </>
+              )}
             </span>
           </div>
         </div>

@@ -1,20 +1,21 @@
-import type { NextConfig } from "next";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   turbopack: {
-    // forza la root del workspace al folder di dyana-web
     root: __dirname,
   },
 
+  // Importante: usa hostnames, non URL completi
   allowedDevOrigins: [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://172.20.10.2:3000",
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "172.20.10.2",
   ],
 };
 
