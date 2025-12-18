@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { verifyMagicLink } from "../../lib/authClient";
+import { verifyMagicLink } from "../../../lib/authClient";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
