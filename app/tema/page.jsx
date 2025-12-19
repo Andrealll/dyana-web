@@ -251,8 +251,13 @@ async function onAuthDone() {
   let action = null;
   try { action = localStorage.getItem(POST_LOGIN_ACTION_KEY); } catch {}
 
-  if (action === "tema_premium") {
-    try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
+if (action === "tema_premium") {
+  // login completato: NON far partire premium automaticamente
+  try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
+
+  // opzionale: messaggio UI per dire "ora puoi approfondire"
+  setGateMsg("Accesso completato. Ora puoi cliccare 'Approfondisci con DYANA' quando vuoi.");
+}
 
     // NON bloccare nulla se manca interpretazione: lascia che l’utente clicchi Approfondisci
     if (interpretazione) {
