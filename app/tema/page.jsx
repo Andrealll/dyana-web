@@ -137,6 +137,11 @@ const [gatePass2, setGatePass2] = useState("");
 const [gateMsg, setGateMsg] = useState("");
 const [gateErr, setGateErr] = useState("");
 const [gateLoading, setGateLoading] = useState(false);
+// UX: feedback chiaro post-login e loading Premium
+const [justLoggedIn, setJustLoggedIn] = useState(false);
+const [postAuthToast, setPostAuthToast] = useState("");
+const [premiumCtaLoading, setPremiumCtaLoading] = useState(false);
+const [slowLoading, setSlowLoading] = useState(false);
 
   // Consenso marketing: prefleggato a sì
   const [gateMarketing, setGateMarketing] = useState(true);
@@ -245,16 +250,17 @@ async function onAuthDone() {
   // riallinea subito lo state (questo triggera rerender)
   refreshUserFromToken();
   await refreshCreditsUI();
-
   setEmailGateOpen(false);
   setGateErr("");
   setGateMsg("");
 
-  let action = null;
-  try { action = localStorage.getItem(POST_LOGIN_ACTION_KEY); } catch {}
+  // Banner post-login (NO auto-scalo crediti)
+  setJustLoggedIn(true);
+  setPostAuthToast("Accesso completato. Ora puoi continuare: clicca “Approfondisci con DYANA” per la lettura Premium.");
+  setTimeout(() => setJustLoggedIn(false), 6000);
 
-  if (action === "tema_premium") {
-    try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
+  // Non auto-eseguire premium: l’utente deve scegliere
+  try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
 
     // ✅ NON auto-eseguire il premium: deve scegliere l'utente cliccando "Approfondisci"
     setGateMsg("Accesso completato. Ora puoi cliccare “Approfondisci con DYANA” quando vuoi.");
@@ -504,7 +510,9 @@ setKbTags(kbFromBackend);
     } catch (e) {
       setErrore("Impossibile comunicare con il server. Controlla la connessione e riprova.");
     } finally {
-      setLoading(false);
+		setPremiumCtaLoading(false);
+		setSlowLoading(false);
+		setLoading(false);
     }
   }
 
@@ -576,29 +584,35 @@ if (trial === 0) {
 
   }
 
-  async function handleApprofondisciClick() {
-  console.log("[TEMA][APPROFONDISCI] click", {
-    premiumLoaded,
-    userRole,
-    isLoggedIn,
-    guestTrialLeft,
-    loading,
-    hasInterpretazione: !!interpretazione,
-  });
+async function handleApprofondisciClick() {
+  setErrore("");
+  setNoCredits(false);
 
-    setErrore("");
-    setNoCredits(false);
+  if (premiumLoaded) return;
 
-    if (premiumLoaded) return;
-    console.log("[TEMA][APPROFONDISCI] skip: premiumLoaded");
+  // UX loading immediato
+  setPremiumCtaLoading(true);
+  setSlowLoading(false);
+  const slowTimer = setTimeout(() => setSlowLoading(true), 12000);
+
+  try {
     if (isLoggedIn) {
-		    console.log("[TEMA][APPROFONDISCI] logged in -> generaPremium()");
       await generaPremium();
       return;
     }
-  console.log("[TEMA][APPROFONDISCI] guest -> openEmailGate()");
+
+    // guest: apri gate, NON stai caricando premium => spegni loading
+    clearTimeout(slowTimer);
+    setPremiumCtaLoading(false);
+    setSlowLoading(false);
     openEmailGate();
+  } catch (e) {
+    clearTimeout(slowTimer);
+    setPremiumCtaLoading(false);
+    setSlowLoading(false);
   }
+}
+
 
   // ======================================================
   // Submit gate
@@ -637,7 +651,7 @@ if (gateMode === "magic") {
 
   await sendAuthMagicLink(email, redirectUrl);
 
-  setGateMsg("Link inviato. Apri l’email e clicca il link di accesso. Poi torna qui e clicca “Approfondisci con DYANA”.");
+  setGateMsg("Link inviato. Apri l’email e clicca il link di accesso per completare. Poi torna qui e premi “Approfondisci con DYANA”.");
   setGateLoading(false);
   return;
 
@@ -752,6 +766,50 @@ if (gateMode === "magic") {
   return (
     <main className="page-root">
       <DyanaNavbar userRole={userRole} credits={userCredits} onLogout={handleLogout} />
+{/* Banner post-login */}
+{justLoggedIn && (
+  <section className="section" style={{ paddingTop: 12, paddingBottom: 0 }}>
+    <div
+      className="card"
+      style={{
+        maxWidth: 850,
+        margin: "0 auto",
+        border: "1px solid rgba(255,255,255,0.14)",
+        background: "rgba(0,0,0,0.25)",
+      }}
+    >
+      <h4 className="card-subtitle" style={{ marginBottom: 6 }}>
+        Accesso completato
+      </h4>
+      <p className="card-text" style={{ opacity: 0.9 }}>
+        {postAuthToast}
+      </p>
+
+      <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => {
+            setJustLoggedIn(false);
+            const el = document.getElementById("dyana-approfondisci");
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+            if (el && typeof el.focus === "function") el.focus();
+          }}
+        >
+          Continua
+        </button>
+
+        <button
+          type="button"
+          className="btn"
+          onClick={() => setJustLoggedIn(false)}
+        >
+          Chiudi
+        </button>
+      </div>
+    </div>
+  </section>
+)}
 
       <section className="landing-wrapper">
         <header className="section">
@@ -1033,14 +1091,28 @@ if (gateMode === "magic") {
 
               {!premiumLoaded && (
                 <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={handleApprofondisciClick}
-                    disabled={loading}
-                  >
-                    ✨ Approfondisci con DYANA
-                  </button>
+<button
+  id="dyana-approfondisci"
+  type="button"
+  className="btn btn-primary"
+  onClick={handleApprofondisciClick}
+  disabled={loading || premiumCtaLoading}
+>
+  {premiumCtaLoading ? "Attendi… sto preparando la lettura Premium" : "✨ Approfondisci con DYANA"}
+</button>
+
+{premiumCtaLoading && (
+  <p className="card-text" style={{ fontSize: "0.85rem", opacity: 0.85, marginTop: 10 }}>
+    Non chiudere la pagina: la lettura comparirà qui sotto appena pronta.
+  </p>
+)}
+
+{slowLoading && (
+  <p className="card-text" style={{ fontSize: "0.85rem", opacity: 0.85, marginTop: 8 }}>
+    Sta impiegando più del previsto. Rimani su questa pagina: appena pronta, si aggiorna automaticamente.
+  </p>
+)}
+
 
                   {isLoggedIn && (
                     <span
