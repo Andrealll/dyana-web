@@ -141,7 +141,7 @@ const [gateLoading, setGateLoading] = useState(false);
   // Consenso marketing: prefleggato a sì
   const [gateMarketing, setGateMarketing] = useState(true);
 
-  const isLoggedIn = !!getToken();
+const isLoggedIn = userRole !== "guest" && !!getToken();
   const isPremium = premiumLoaded;
 
   // ==========================
@@ -238,35 +238,29 @@ useEffect(() => {
   if (typeof window === "undefined") return;
 
 async function onAuthDone() {
-  // 1) Consuma AUTH_DONE (evita loop/stati incastrati)
   try { localStorage.removeItem(AUTH_DONE_KEY); } catch {}
 
-  // 2) Riallinea UI
+  // riallinea subito lo state (questo triggera rerender)
   refreshUserFromToken();
   await refreshCreditsUI();
 
-  // 3) Chiudi gate e reset messaggi
   setEmailGateOpen(false);
   setGateErr("");
   setGateMsg("");
 
-  // 4) Se era richiesto premium post-login, fallo SOLO se hai già una lettura free pronta.
   let action = null;
   try { action = localStorage.getItem(POST_LOGIN_ACTION_KEY); } catch {}
 
   if (action === "tema_premium") {
-    // consumiamo sempre l’azione (così il bottone non resta bloccato)
     try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
 
-    // se hai già interpretazione (lettura free presente), allora fai premium
+    // NON bloccare nulla se manca interpretazione: lascia che l’utente clicchi Approfondisci
     if (interpretazione) {
       await generaPremium();
-    } else {
-      // altrimenti non bloccare: l’utente clicca Approfondisci quando ha la free
-      console.warn("[TEMA][AUTH_DONE] action=tema_premium ma manca interpretazione; non lancio premium ora.");
     }
   }
 }
+
 
 
   const storageHandler = (e) => {
@@ -614,6 +608,7 @@ if (trial === 0) {
 if (guestTrialLeft === 0) {
   // 1) Se sceglie magic link: invio link e basta.
 if (gateMode === "magic") {
+  setGateErr("");
   setGateErr("");
 
   const siteBase = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
