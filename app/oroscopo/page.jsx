@@ -371,7 +371,7 @@ export default function OroscopoPage() {
 
   // Email gate inline
   const [emailGateOpen, setEmailGateOpen] = useState(false);
-  const [gateMode, setGateMode] = useState("register"); // ✅ register | login | magic
+  const [gateMode, setGateMode] = useState("magic"); // ✅ register | login | magic
   const [gateEmail, setGateEmail] = useState("");
   const [gatePass, setGatePass] = useState("");
   const [gatePass2, setGatePass2] = useState("");
@@ -582,7 +582,7 @@ export default function OroscopoPage() {
 
     const trial = guestTrialLeft;
     if (trial === 0) {
-      setGateMsg("Hai finito la tua prova gratuita. Iscriviti, accedi o usa Magic Link per continuare.");
+      setGateMsg("Hai finito la tua prova gratuita. Iscriviti, accedi o usa la tua email per continuare.");
     } else {
       setGateMsg(
         "Inserisci la tua email per continuare. Ti invieremo anche un link per salvare l’accesso (controlla spam)."
@@ -979,6 +979,13 @@ export default function OroscopoPage() {
                   <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
                     {guestTrialLeft === 0 && (
                       <>
+					     <button
+                          type="button"
+                          className={gateMode === "magic" ? "btn btn-primary" : "btn"}
+                          onClick={() => setGateMode("magic")}
+                        >
+                          Email+Link
+                        </button>
                         <button
                           type="button"
                           className={gateMode === "register" ? "btn btn-primary" : "btn"}
@@ -993,13 +1000,7 @@ export default function OroscopoPage() {
                         >
                           Accedi
                         </button>
-                        <button
-                          type="button"
-                          className={gateMode === "magic" ? "btn btn-primary" : "btn"}
-                          onClick={() => setGateMode("magic")}
-                        >
-                          Magic Link
-                        </button>
+ 
                       </>
                     )}
 
