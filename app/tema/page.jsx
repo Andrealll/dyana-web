@@ -1140,9 +1140,15 @@ if (guestTrialLeft === 0) {
                     <button type="submit" className="btn btn-primary" disabled={gateLoading || loading}>
                       {gateLoading
                         ? "Attendi... Sto generando il tuo Tema"
-                        : guestTrialLeft === 0
-                        ? (gateMode === "login" ? "Accedi e continua" : "Iscriviti e continua")
-                        : "Continua"}
+                        {gateLoading
+  ? "Attendi... Sto generando il tuo Tema"
+  : guestTrialLeft === 0
+  ? (gateMode === "magic"
+      ? "Invia link e continua"
+      : gateMode === "login"
+      ? "Accedi e continua"
+      : "Iscriviti e continua")
+  : "Continua"}
                     </button>
 
                     {gateErr && <p className="card-text" style={{ color: "#ff9a9a" }}>{gateErr}</p>}
