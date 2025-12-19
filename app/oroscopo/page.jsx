@@ -649,15 +649,8 @@ const redirectUrl =
 
         // ✅ MAGIC LINK LOGIN (passwordless)
 if (gateMode === "magic") {
-  try {
-    console.info("[INLINE-AUTH] sendAuthMagicLink() [trial=0 magic]");
-    setGateMsg("Ti ho inviato un link di accesso via email. Controlla anche spam/promozioni.");
-    await sendAuthMagicLink(email, redirectUrl);
-    console.info("[INLINE-AUTH] magic link inviato (trial=0 magic)");
-  } catch (err) {
-    console.warn("[INLINE-AUTH] magic link FAIL (trial=0 magic):", err?.message || err);
-    setGateErr("Non riesco a inviare il magic link. Riprova tra poco.");
-  }
+  setGateMsg("Ti ho inviato un link di accesso via email...");
+  await sendAuthMagicLink(email, redirectUrl);
   return;
 }
 

@@ -2,34 +2,24 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { exchangeSupabaseTokenForDyanaJwt } from "../../../lib/authClient";
+import {
+  exchangeSupabaseTokenForDyanaJwt,
+  clearToken,
+} from "../../../lib/authClient";
 
-function safeReadHashToken() {
+function readResumeTarget() {
   try {
-    const hash = typeof window !== "undefined" ? window.location.hash : "";
-    if (!hash || hash.length < 2) return null;
-    const sp = new URLSearchParams(hash.replace("#", ""));
-    return sp.get("access_token");
+    const path = localStorage.getItem("dyana_resume_path") || "/";
+    const qs = localStorage.getItem("dyana_resume_qs") || "";
+    const ts = parseInt(localStorage.getItem("dyana_resume_ts") || "0", 10);
+
+    // opzionale: scadenza resume 30 minuti
+    if (ts && Date.now() - ts > 30 * 60 * 1000) return { path: "/" };
+
+    return { path, qs };
   } catch {
-    return null;
+    return { path: "/" };
   }
-}
-
-function readResumePath() {
-  try {
-    const p = localStorage.getItem("dyana_resume_path");
-    return p && typeof p === "string" ? p : "/";
-  } catch {
-    return "/";
-  }
-}
-
-function clearResume() {
-  try {
-    localStorage.removeItem("dyana_resume_path");
-    localStorage.removeItem("dyana_resume_qs");
-    localStorage.removeItem("dyana_resume_ts");
-  } catch {}
 }
 
 export default function CallbackClient() {
@@ -38,26 +28,36 @@ export default function CallbackClient() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    (async () => {
+    async function run() {
       try {
-        const sbAccessToken = safeReadHashToken();
+        // 1) Leggi access_token dal fragment (come reset password)
+        const hash = typeof window !== "undefined" ? window.location.hash : "";
+        const params = new URLSearchParams(hash.replace("#", ""));
+
+        const sbAccessToken = params.get("access_token");
+        const type = params.get("type"); // "magiclink" | "recovery" | ...
+
         if (!sbAccessToken) {
-          throw new Error("Token mancante nel link. Richiedi un nuovo accesso via email.");
+          throw new Error("Token mancante nel link. Richiedi un nuovo magic link.");
         }
 
-        // 1) Exchange → salva dyana_jwt in localStorage (saveToken dentro authClient)
+        // 2) Exchange: Supabase token -> JWT DYANA (astrobot_access_token)
         await exchangeSupabaseTokenForDyanaJwt(sbAccessToken);
 
-        // 2) Torna dove eri
-        const resumePath = readResumePath();
-        clearResume();
+        // 3) Resume: torna dove era l’utente (pagina compilata)
+        const { path, qs } = readResumeTarget();
+        const target = qs ? `${path}?${qs}` : path;
 
-        router.replace(resumePath || "/");
+        router.replace(target);
       } catch (e) {
+        // fallback: pulizia e messaggio
+        try { clearToken(); } catch {}
         setStatus("error");
         setError(e?.message || "Impossibile completare l’accesso.");
       }
-    })();
+    }
+
+    run();
   }, [router]);
 
   if (status === "error") {
