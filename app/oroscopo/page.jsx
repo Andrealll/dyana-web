@@ -796,7 +796,28 @@ if (gateMode === "magic") {
       return baseUrl;
     }
   }, [userIdForDyana, sessionId, premiumResult, premiumText, premiumPeriodoKey]);
+const OROSCOPO_DRAFT_KEY = "dyana_oroscopo_draft_v1";
 
+function loadOroscopoDraft() {
+  try {
+    const raw = localStorage.getItem(OROSCOPO_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveOroscopoDraft(draft) {
+  try {
+    localStorage.setItem(OROSCOPO_DRAFT_KEY, JSON.stringify(draft));
+  } catch {}
+}
+
+function clearOroscopoDraft() {
+  try {
+    localStorage.removeItem(OROSCOPO_DRAFT_KEY);
+  } catch {}
+}
   // ==========================
   // RENDER
   // ==========================
