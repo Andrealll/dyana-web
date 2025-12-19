@@ -1120,53 +1120,126 @@ setKbTags(kbFromBackend);
         {/* BLOCCO DYANA Q&A: solo se premium presente */}
         {premiumLoaded && hasReading && readingTextForDyana && (
  <section className="section">
-            <div style={{ display: "flex", justifyContent: "center", marginTop: 32 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                marginTop: 32,
+              }}
+            >
               <div
                 className="card"
                 style={{
-                  maxWidth: 950,
                   width: "100%",
+                  maxWidth: "960px",
+                  padding: "22px 24px",
                   border: "1px solid rgba(255,255,255,0.08)",
                   boxShadow: "0 18px 40px rgba(0,0,0,0.75)",
                 }}
               >
-                <p className="card-text" style={{ fontSize: "0.8rem", opacity: 0.8, marginBottom: 4 }}>
+                <p
+                  className="card-text"
+                  style={{
+                    fontSize: "0.8rem",
+                    opacity: 0.8,
+                    marginBottom: 4,
+                  }}
+                >
                   DYANA • Q&amp;A sul tuo Oroscopo
                 </p>
 
-                <h3 className="card-title" style={{ marginBottom: 6 }}>
-                  Hai domande su questa lettura?
-                </h3>
+                {form.tier === "premium" ? (
+                  <>
+                    <h3 className="card-title" style={{ marginBottom: 6 }}>
+                      Hai domande su questa lettura?
+                    </h3>
 
-                <p className="card-text" style={{ marginBottom: 4, opacity: 0.9 }}>
-                  DYANA conosce già l&apos;oroscopo che hai appena generato e può aiutarti a interpretarlo meglio.
-                </p>
+                    <p
+                      className="card-text"
+                      style={{ marginBottom: 4, opacity: 0.9 }}
+                    >
+                      DYANA conosce già l&apos;oroscopo che hai appena generato
+                      e può aiutarti a capire meglio cosa sta emergendo nel tuo
+                      cielo in questo periodo.
+                    </p>
 
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ marginTop: 16 }}
-                  onClick={() => setDiyanaOpen((prev) => !prev)}
-                >
-                  {diyanaOpen ? "Chiudi DYANA" : "Chiedi a DYANA"}
-                </button>
+                    <p
+                      className="card-text"
+                      style={{ fontSize: "0.9rem", opacity: 0.8 }}
+                    >
+                      Con questa lettura <strong>Premium</strong> hai a
+                      disposizione{" "}
+                      <strong>2 domande di chiarimento</strong> incluse.
+                      Successivamente potrai usare i tuoi crediti per sbloccare
+                      altre domande extra.
+                    </p>
 
-                {diyanaOpen && (
-                  <div style={{ marginTop: 16, width: "100%", height: 560, borderRadius: 18, overflow: "hidden" }}>
-                    <iframe
-                      src={typebotUrl}
-                      style={{ border: "none", width: "100%", height: "100%" }}
-                      allow="clipboard-write; microphone; camera"
-                    />
-                  </div>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ marginTop: 16 }}
+                      onClick={() => {
+                        setDiyanaOpen((prev) => !prev);
+                      }}
+                    >
+                      {diyanaOpen ? "Chiudi DYANA" : "Chiedi a DYANA"}
+                    </button>
+
+                    {diyanaOpen && (
+                      <div
+                        style={{
+                          marginTop: 16,
+                          width: "100%",
+                          height: "600px",
+                          borderRadius: "14px",
+                          overflow: "hidden",
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          boxShadow: "0 22px 48px rgba(0,0,0,0.75)",
+                        }}
+                      >
+                        <iframe
+                          src={typebotUrl}
+                          style={{
+                            border: "none",
+                            width: "100%",
+                            height: "100%",
+                          }}
+                          allow="clipboard-write; microphone; camera"
+                        />
+                      </div>
+                    )}
+
+                    <p
+                      className="card-text"
+                      style={{
+                        marginTop: 8,
+                        fontSize: "0.75rem",
+                        opacity: 0.65,
+                        textAlign: "right",
+                      }}
+                    >
+                      DYANA risponde solo su questo oroscopo, non su altri
+                      argomenti generici.
+                    </p>
+                  </>
+                ) : (
+                  <p
+                    className="card-text"
+                    style={{
+                      marginTop: 8,
+                      fontSize: "0.9rem",
+                      opacity: 0.9,
+                    }}
+                  >
+                    Hai domande su questa lettura? Effettua una lettura{" "}
+                    <strong>Premium</strong> per fare domande a DYANA e ottenere
+                    risposte personalizzate sul tuo oroscopo.
+                  </p>
                 )}
-
-                <p className="card-text" style={{ marginTop: 8, fontSize: "0.75rem", opacity: 0.65, textAlign: "right" }}>
-                  DYANA risponde solo su questo oroscopo, non su argomenti generici.
-                </p>
               </div>
             </div>
           </section>
+
         )}
       </section>
     </main>
