@@ -21,7 +21,7 @@ import {
 // ==========================
 // COSTANTI
 // ==========================
-const TYPEBOT_DYANA_ID = "diyana-ai";
+const TYPEBOT_DYANA_ID = "dyana-ai";
 
 // Base URL backend AstroBot
 const API_BASE =
@@ -1193,22 +1193,7 @@ function clearOroscopoDraft() {
           </section>
         )}
 
-        {/* BLOCCO PREMIUM */}
-        {hasPremium && (
-          <section className="section">
-            <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
-              <h3 className="card-title">La tua lettura completa</h3>
-
-              {premiumMetriche && <MetricheGrafico metriche={premiumMetriche} />}
-              {premiumAspetti.length > 0 && <AspettiTable aspetti={premiumAspetti} />}
-
-              <h4 className="card-subtitle" style={{ marginTop: 24 }}>Interpretazione</h4>
-              <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>{premiumText}</p>
-            </div>
-          </section>
-        )}
-
-        {/* BLOCCO DYANA Q&A: solo se premium presente */}
+    {/* BLOCCO DYANA Q&A: solo se premium presente */}
         {hasPremium && (
           <section className="section">
             <div style={{ display: "flex", justifyContent: "center", marginTop: 32 }}>
@@ -1260,7 +1245,6 @@ function clearOroscopoDraft() {
           </section>
         )}
       </section>
-
     </main>
   );
 }

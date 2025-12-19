@@ -21,7 +21,7 @@ import {
 // ==========================
 // COSTANTI GLOBALI
 // ==========================
-const TYPEBOT_DYANA_ID = "diyana-ai";
+const TYPEBOT_DYANA_ID = "dyana-ai";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ||
@@ -212,9 +212,9 @@ export default function CompatibilitaPage() {
   // trial guest 1/0 (o null se non disponibile)
   const [guestTrialLeft, setGuestTrialLeft] = useState(null);
 
-  // Email gate inline (allineato Oroscopo/Tema)
+  // Email gate inline
   const [emailGateOpen, setEmailGateOpen] = useState(false);
-  const [gateMode, setGateMode] = useState("register"); // register | login
+  const [gateMode, setGateMode] = useState("magic"); // ✅ magic | register | login
   const [gateEmail, setGateEmail] = useState("");
   const [gatePass, setGatePass] = useState("");
   const [gatePass2, setGatePass2] = useState("");
@@ -232,7 +232,7 @@ export default function CompatibilitaPage() {
   const isLoggedIn = !!getToken();
 
   // ======================================================
-  // Refresh user/credits (allineato)
+  // Refresh user/credits
   // ======================================================
   const refreshUserFromToken = useCallback(() => {
     const token = getToken();
@@ -396,7 +396,7 @@ export default function CompatibilitaPage() {
   }
 
   // ======================================================
-  // FREE (sempre primo step)
+  // FREE
   // ======================================================
   async function generaFree() {
     setLoading(true);
@@ -431,7 +431,7 @@ export default function CompatibilitaPage() {
   }
 
   // ======================================================
-  // PREMIUM (secondo step via CTA)
+  // PREMIUM
   // ======================================================
   async function generaPremium() {
     setLoading(true);
@@ -483,12 +483,15 @@ export default function CompatibilitaPage() {
   function openEmailGate() {
     setGateErr("");
     setGateLoading(false);
-    setGateMode("register");
+
+    // ✅ default: magic link preselezionato
+    setGateMode("magic");
+
     setEmailGateOpen(true);
 
     const trial = guestTrialLeft;
     if (trial === 0) {
-      setGateMsg("Hai finito la tua prova gratuita. Iscriviti o accedi per continuare.");
+      setGateMsg("Hai finito la tua prova gratuita. Puoi entrare con Email+Link, oppure accedere/iscriverti.");
     } else {
       setGateMsg("Inserisci la tua email per continuare. Ti invieremo anche un link per salvare l’accesso (controlla spam).");
     }
@@ -509,7 +512,7 @@ export default function CompatibilitaPage() {
   }
 
   // ======================================================
-  // Submit gate (identico pattern Tema/Oroscopo)
+  // Submit gate
   // ======================================================
   async function submitInlineAuth(e) {
     e.preventDefault();
@@ -530,8 +533,28 @@ export default function CompatibilitaPage() {
 
       setResumeTarget({ path: "/compatibilita", readingId: "sinastria_inline" });
 
-      // TRIAL ESAURITO → login/register password
+      const redirectUrl =
+        (typeof window !== "undefined" && window.location?.origin)
+          ? `${window.location.origin.replace(/\/+$/, "")}/auth/callback`
+          : "https://dyana.app/auth/callback";
+
+      // --------------------------------------------------
+      // TRIAL ESAURITO → MAGIC LINK / LOGIN / REGISTER
+      // --------------------------------------------------
       if (guestTrialLeft === 0) {
+        // ✅ MAGIC LINK
+        if (gateMode === "magic") {
+          try {
+            setGateMsg("Ti ho inviato un link via email. Aprilo per entrare. Controlla anche spam/promozioni.");
+            await sendAuthMagicLink(email, redirectUrl);
+          } catch (err) {
+            console.warn("[COMPAT][INLINE-AUTH] magic link FAIL:", err?.message || err);
+            setGateErr("Non riesco a inviare il link. Riprova tra poco.");
+          }
+          return; // non fare login/register e non generare premium
+        }
+
+        // LOGIN / REGISTER con password
         if (gateMode === "login") {
           if (!gatePass) {
             setGateErr("Inserisci la password per accedere.");
@@ -556,11 +579,10 @@ export default function CompatibilitaPage() {
         return;
       }
 
-      // TRIAL DISPONIBILE → premium subito + magic link best-effort
-      setGateMsg("Attendi, sto generando la compatibilità…");
-
-      const siteBase = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
-      const redirectUrl = `${siteBase}/auth/callback`;
+      // --------------------------------------------------
+      // TRIAL DISPONIBILE → premium subito + invio link best-effort
+      // --------------------------------------------------
+      setGateMsg("Attendi, sto generando…");
 
       // marketing consent: SOLO se token utente registrato valido
       try {
@@ -644,7 +666,10 @@ export default function CompatibilitaPage() {
   // ==========================
   // TYPEBOT URL (solo premium)
   // ==========================
-  const premiumReadingTextForDyana = useMemo(() => buildSinastriaReadingText(premiumSinastriaAI), [premiumSinastriaAI]);
+  const premiumReadingTextForDyana = useMemo(
+    () => buildSinastriaReadingText(premiumSinastriaAI),
+    [premiumSinastriaAI]
+  );
 
   const typebotUrl = useMemo(() => {
     const baseUrl = `https://typebot.co/${TYPEBOT_DYANA_ID}`;
@@ -693,7 +718,7 @@ export default function CompatibilitaPage() {
           </p>
         </header>
 
-        {/* FORM (solo dati) */}
+        {/* FORM */}
         <section className="section">
           <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
@@ -821,9 +846,14 @@ export default function CompatibilitaPage() {
                 </div>
               </div>
 
-              {/* CTA primaria: genera SEMPRE FREE */}
-              <button onClick={generaFree} className="btn btn-primary" disabled={loading} style={{ marginTop: "14px" }}>
-                {loading ? "Calcolo in corso..." : "🔮 Inizia la lettura"}
+              {/* CTA primaria: genera FREE */}
+              <button
+                onClick={generaFree}
+                className="btn btn-primary"
+                disabled={loading || gateLoading}
+                style={{ marginTop: "14px" }}
+              >
+                {(loading || gateLoading) ? "Attendi, sto generando…" : "🔮 Inizia la lettura"}
               </button>
 
               {/* Errori */}
@@ -844,7 +874,7 @@ export default function CompatibilitaPage() {
                       <>
                         <p>Hai finito la tua prova gratuita.</p>
                         <p style={{ marginTop: 8, fontSize: "0.9rem", opacity: 0.9 }}>
-                          Iscriviti o accedi per continuare.
+                          Usa Email+Link, oppure accedi/iscriviti per continuare.
                         </p>
                       </>
                     )}
@@ -991,51 +1021,55 @@ export default function CompatibilitaPage() {
                   <p className="card-text" style={{ whiteSpace: "pre-wrap", marginTop: "8px" }}>
                     {freeSinastriaAI.sintesi_generale}
                   </p>
-{/* CAPITOLI (FREE): mostra almeno i titoli */}
-{Array.isArray(freeSinastriaAI?.capitoli) && freeSinastriaAI.capitoli.length > 0 && (
-  <div style={{ marginTop: 16 }}>
-    <h4 className="card-subtitle">Capitoli (anteprima)</h4>
-    <ul className="card-text" style={{ paddingLeft: "1.2rem", marginTop: 6 }}>
-      {freeSinastriaAI.capitoli.map((cap, idx) => (
-        <li key={idx}>
-          {cap?.titolo || `Capitolo ${idx + 1}`}
-        </li>
-      ))}
-    </ul>
-  </div>
-)}
 
-{/* CTA testuale dal backend (FREE) */}
-{freeSinastriaAI?.cta && (
-  <p className="card-text" style={{ marginTop: 12, color: "#ffdf9a", whiteSpace: "pre-wrap" }}>
-    {freeSinastriaAI.cta}
-  </p>
-)}
-
-                  {/* CTA Approfondisci (solo se NON ho già premium) */}
-                  {!hasPremium && (
-                    <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                      <button type="button" className="btn btn-primary" onClick={handleApprofondisciClick} disabled={loading}>
-                        ✨ Approfondisci con DYANA
-                      </button>
-
-                      {isLoggedIn && (
-                        <span
-                          className="card-text"
-                          style={{
-                            fontSize: "0.8rem",
-                            opacity: 0.85,
-                            border: "1px solid rgba(255,255,255,0.12)",
-                            padding: "6px 10px",
-                            borderRadius: 999,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          Costo: {PREMIUM_COST} credit{PREMIUM_COST === 1 ? "o" : "i"}
-                        </span>
-                      )}
+                  {/* CAPITOLI (FREE): mostra almeno i titoli */}
+                  {Array.isArray(freeSinastriaAI?.capitoli) && freeSinastriaAI.capitoli.length > 0 && (
+                    <div style={{ marginTop: 16 }}>
+                      <h4 className="card-subtitle">Capitoli (anteprima)</h4>
+                      <ul className="card-text" style={{ paddingLeft: "1.2rem", marginTop: 6 }}>
+                        {freeSinastriaAI.capitoli.map((cap, idx) => (
+                          <li key={idx}>
+                            {cap?.titolo || `Capitolo ${idx + 1}`}
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   )}
+
+                  {/* CTA testuale dal backend (FREE) */}
+                  {freeSinastriaAI?.cta && (
+                    <p className="card-text" style={{ marginTop: 12, color: "#ffdf9a", whiteSpace: "pre-wrap" }}>
+                      {freeSinastriaAI.cta}
+                    </p>
+                  )}
+
+                  {/* CTA Approfondisci */}
+                  <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={handleApprofondisciClick}
+                      disabled={loading || gateLoading}
+                    >
+                      {(loading || gateLoading) ? "Attendi, sto generando…" : "✨ Approfondisci con DYANA"}
+                    </button>
+
+                    {isLoggedIn && (
+                      <span
+                        className="card-text"
+                        style={{
+                          fontSize: "0.8rem",
+                          opacity: 0.85,
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          padding: "6px 10px",
+                          borderRadius: 999,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Costo: {PREMIUM_COST} credit{PREMIUM_COST === 1 ? "o" : "i"}
+                      </span>
+                    )}
+                  </div>
 
                   {/* EMAIL GATE INLINE */}
                   {emailGateOpen && !hasPremium && (
@@ -1050,11 +1084,21 @@ export default function CompatibilitaPage() {
                       <h4 className="card-subtitle" style={{ marginBottom: 6 }}>
                         {guestTrialLeft === 0 ? "Hai finito la tua prova gratuita." : "Continua con la tua email"}
                       </h4>
+
                       <p className="card-text" style={{ opacity: 0.9 }}>{gateMsg}</p>
 
                       <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
                         {guestTrialLeft === 0 && (
                           <>
+                            {/* ✅ Primo e preselezionato */}
+                            <button
+                              type="button"
+                              className={gateMode === "magic" ? "btn btn-primary" : "btn"}
+                              onClick={() => setGateMode("magic")}
+                            >
+                              Email+Link
+                            </button>
+
                             <button
                               type="button"
                               className={gateMode === "register" ? "btn btn-primary" : "btn"}
@@ -1062,6 +1106,7 @@ export default function CompatibilitaPage() {
                             >
                               Iscriviti
                             </button>
+
                             <button
                               type="button"
                               className={gateMode === "login" ? "btn btn-primary" : "btn"}
@@ -1072,7 +1117,12 @@ export default function CompatibilitaPage() {
                           </>
                         )}
 
-                        <button type="button" className="btn" onClick={() => setEmailGateOpen(false)} style={{ marginLeft: "auto" }}>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => setEmailGateOpen(false)}
+                          style={{ marginLeft: "auto" }}
+                        >
                           Chiudi
                         </button>
                       </div>
@@ -1084,6 +1134,7 @@ export default function CompatibilitaPage() {
                           placeholder="La tua email"
                           value={gateEmail}
                           onChange={(e) => setGateEmail(e.target.value)}
+                          disabled={gateLoading || loading}
                         />
 
                         {/* Consenso marketing + link condizioni solo con trial disponibile */}
@@ -1116,7 +1167,8 @@ export default function CompatibilitaPage() {
                           </div>
                         )}
 
-                        {guestTrialLeft === 0 && (
+                        {/* Password solo se trial=0 e non magic */}
+                        {guestTrialLeft === 0 && gateMode !== "magic" && (
                           <>
                             <input
                               className="form-input"
@@ -1125,6 +1177,7 @@ export default function CompatibilitaPage() {
                               value={gatePass}
                               onChange={(e) => setGatePass(e.target.value)}
                               autoComplete="current-password"
+                              disabled={gateLoading || loading}
                             />
                             {gateMode === "register" && (
                               <input
@@ -1134,16 +1187,19 @@ export default function CompatibilitaPage() {
                                 value={gatePass2}
                                 onChange={(e) => setGatePass2(e.target.value)}
                                 autoComplete="new-password"
+                                disabled={gateLoading || loading}
                               />
                             )}
                           </>
                         )}
 
                         <button type="submit" className="btn btn-primary" disabled={gateLoading || loading}>
-                          {gateLoading
-                            ? "Attendi... Sto generando la compatibilità"
+                          {(gateLoading || loading)
+                            ? "Attendi, sto generando…"
                             : guestTrialLeft === 0
-                            ? (gateMode === "login" ? "Accedi e continua" : "Iscriviti e continua")
+                            ? (gateMode === "magic"
+                                ? "Invia link su email e aprilo per entrare"
+                                : (gateMode === "login" ? "Accedi e continua" : "Iscriviti e continua"))
                             : "Continua"}
                         </button>
 
@@ -1168,7 +1224,7 @@ export default function CompatibilitaPage() {
            ========================== */}
         {hasPremium && (
           <>
-            {/* GRAFICO + DATI PREMIUM (se disponibile) */}
+            {/* GRAFICO + DATI PREMIUM */}
             {premiumChartBase64 && (
               <section className="section">
                 <div
@@ -1281,7 +1337,7 @@ export default function CompatibilitaPage() {
               </section>
             )}
 
-            {/* TESTO PREMIUM: sintesi + capitoli/aree + focus */}
+            {/* TESTO PREMIUM: sintesi */}
             {premiumSinastriaAI?.sintesi_generale && (
               <section className="section">
                 <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
@@ -1300,6 +1356,7 @@ export default function CompatibilitaPage() {
               </section>
             )}
 
+            {/* CAPITOLI PREMIUM */}
             {Array.isArray(premiumSinastriaAI?.capitoli) && premiumSinastriaAI.capitoli.length > 0 && (
               <section className="section">
                 <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
@@ -1323,6 +1380,7 @@ export default function CompatibilitaPage() {
               </section>
             )}
 
+            {/* AREE RELAZIONE (fallback se niente capitoli) */}
             {!(
               Array.isArray(premiumSinastriaAI?.capitoli) &&
               premiumSinastriaAI.capitoli.length > 0
@@ -1378,6 +1436,7 @@ export default function CompatibilitaPage() {
                 </section>
               )}
 
+            {/* FOCUS */}
             {(premiumSinastriaAI?.punti_forza || premiumSinastriaAI?.punti_criticita || premiumSinastriaAI?.consigli_finali) && (
               <section className="section">
                 <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
