@@ -32,7 +32,10 @@ const API_BASE =
     : "https://chatbot-test-0h4o.onrender.com");
 
 const ASTROBOT_JWT_TEMA = process.env.NEXT_PUBLIC_ASTROBOT_JWT_TEMA || "";
-const OROSCOPO_DRAFT_KEY = "dyana_oroscopo_draft_v1"; // non usata qui, ok lasciarla
+const OROSCOPO_DRAFT_KEY = "dyana_oroscopo_draft_v1"; 
+
+// non usata qui, ok lasciarla
+
 const AUTH_DONE_KEY = "dyana_auth_done";
 const POST_LOGIN_ACTION_KEY = "dyana_post_login_action";
 if (typeof window !== "undefined") {
@@ -82,6 +85,9 @@ function normalizeCapitoli(capitoliRaw) {
 // COMPONENTE PRINCIPALE
 // ==========================
 export default function TemaPage() {
+console.log("[TEMA PAGE] BUILD MARKER = 2025-12-19-XYZ");	
+	
+	
   const [form, setForm] = useState({
     nome: "",
     data: "",
@@ -121,15 +127,16 @@ export default function TemaPage() {
   const [guestTrialLeft, setGuestTrialLeft] = useState(null);
 
   // Email gate inline (allineato a Oroscopo)
-  const [emailGateOpen, setEmailGateOpen] = useState(false);
+const [emailGateOpen, setEmailGateOpen] = useState(false);
 const [gateMode, setGateMode] = useState("magic"); 
 
-// magic | register | login  const [gateEmail, setGateEmail] = useState("");
-  const [gatePass, setGatePass] = useState("");
-  const [gatePass2, setGatePass2] = useState("");
-  const [gateMsg, setGateMsg] = useState("");
-  const [gateErr, setGateErr] = useState("");
-  const [gateLoading, setGateLoading] = useState(false);
+// magic | register | login
+const [gateEmail, setGateEmail] = useState("");
+const [gatePass, setGatePass] = useState("");
+const [gatePass2, setGatePass2] = useState("");
+const [gateMsg, setGateMsg] = useState("");
+const [gateErr, setGateErr] = useState("");
+const [gateLoading, setGateLoading] = useState(false);
 
   // Consenso marketing: prefleggato a sì
   const [gateMarketing, setGateMarketing] = useState(true);
