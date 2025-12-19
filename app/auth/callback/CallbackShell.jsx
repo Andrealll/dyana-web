@@ -6,9 +6,7 @@ import { clearToken } from "../../../lib/authClient";
 
 export default function CallbackShell({ children }) {
   function handleLogout() {
-    try {
-      clearToken();
-    } catch {}
+    try { clearToken(); } catch {}
   }
 
   return (

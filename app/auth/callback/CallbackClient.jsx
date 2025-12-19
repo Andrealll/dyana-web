@@ -1,87 +1,64 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
+import { useRouter } from "next/navigation";
 import { exchangeSupabaseTokenForDyanaJwt } from "../../../lib/authClient";
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-const supabase =
-  SUPABASE_URL && SUPABASE_ANON_KEY
-    ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-    : null;
-
-function readHashAccessToken() {
-  if (typeof window === "undefined") return null;
-  const hash = window.location.hash?.replace(/^#/, "") || "";
-  if (!hash) return null;
-  const p = new URLSearchParams(hash);
-  return p.get("access_token");
+function safeReadHashToken() {
+  try {
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    if (!hash || hash.length < 2) return null;
+    const sp = new URLSearchParams(hash.replace("#", ""));
+    return sp.get("access_token");
+  } catch {
+    return null;
+  }
 }
 
-function getResumeTargetAndClear() {
+function readResumePath() {
   try {
-    const path = localStorage.getItem("dyana_resume_path") || "/";
-    const qs = localStorage.getItem("dyana_resume_qs") || "";
-
-    // evita loop: pulisci subito
-    localStorage.removeItem("dyana_resume_path");
-    localStorage.removeItem("dyana_resume_qs");
-    localStorage.removeItem("dyana_resume_ts");
-
-    return qs ? `${path}?${qs}` : path;
+    const p = localStorage.getItem("dyana_resume_path");
+    return p && typeof p === "string" ? p : "/";
   } catch {
     return "/";
   }
 }
 
+function clearResume() {
+  try {
+    localStorage.removeItem("dyana_resume_path");
+    localStorage.removeItem("dyana_resume_qs");
+    localStorage.removeItem("dyana_resume_ts");
+  } catch {}
+}
+
 export default function CallbackClient() {
   const router = useRouter();
-  const sp = useSearchParams();
-
-  const [status, setStatus] = useState("loading");
+  const [status, setStatus] = useState("loading"); // loading | error
   const [error, setError] = useState("");
 
   useEffect(() => {
-    async function run() {
+    (async () => {
       try {
-        if (!supabase) {
-          throw new Error("Supabase non configurato (NEXT_PUBLIC_SUPABASE_URL/ANON_KEY mancanti).");
-        }
-
-        // 1) PKCE: code -> session
-        const code = sp.get("code");
-        let sbAccessToken = null;
-
-        if (code) {
-          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) throw new Error(error.message || "exchangeCodeForSession fallita.");
-          sbAccessToken = data?.session?.access_token || null;
-        } else {
-          // 2) fallback: access_token in hash
-          sbAccessToken = readHashAccessToken();
-        }
-
+        const sbAccessToken = safeReadHashToken();
         if (!sbAccessToken) {
-          throw new Error("Callback senza code/access_token (link scaduto o redirect non corretto).");
+          throw new Error("Token mancante nel link. Richiedi un nuovo accesso via email.");
         }
 
-        // 3) Exchange verso astrobot-auth-pub -> DYANA JWT
+        // 1) Exchange → salva dyana_jwt in localStorage (saveToken dentro authClient)
         await exchangeSupabaseTokenForDyanaJwt(sbAccessToken);
 
-        // 4) redirect dove stava l’utente
-        const target = getResumeTargetAndClear();
-        router.replace(target);
+        // 2) Torna dove eri
+        const resumePath = readResumePath();
+        clearResume();
+
+        router.replace(resumePath || "/");
       } catch (e) {
-        console.error("[AUTH/CALLBACK] errore:", e);
         setStatus("error");
         setError(e?.message || "Impossibile completare l’accesso.");
       }
-    }
-    run();
-  }, [sp, router]);
+    })();
+  }, [router]);
 
   if (status === "error") {
     return (

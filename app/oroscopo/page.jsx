@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import DyanaNavbar from "../../components/DyanaNavbar";
-import DyanaFooter from "../../components/DyanaFooter";
+
 
 import {
   loginWithCredentials,
@@ -638,28 +638,18 @@ setGateMode("magic");
       // --------------------------------------------------
       // TRIAL ESAURITO → LOGIN / REGISTER / MAGIC LINK
       // --------------------------------------------------
-      if (guestTrialLeft === 0) {
-        console.info("[INLINE-AUTH] trial esaurito → auth");
-
-const redirectUrl =
-  (typeof window !== "undefined" && window.location?.origin)
-    ? `${window.location.origin.replace(/\/+$/, "")}/auth/callback`
-    : "https://dyana.app/auth/callback";
-
-
-        // ✅ MAGIC LINK LOGIN (passwordless)
-        if (gateMode === "magic") {
-          try {
-            console.info("[INLINE-AUTH] sendAuthMagicLink() [trial=0 magic]");
-            setGateMsg("Ti ho inviato un link di accesso via email. Controlla anche spam/promozioni.");
-await sendMagicLinkSupabase(email);
-            console.info("[INLINE-AUTH] magic link inviato (trial=0 magic)");
-          } catch (err) {
-            console.warn("[INLINE-AUTH] magic link FAIL (trial=0 magic):", err?.message || err);
-            setGateErr("Non riesco a inviare il magic link. Riprova tra poco.");
-          }
-          return; // IMPORTANTISSIMO: non fare login/register e non generare premium
-        }
+if (gateMode === "magic") {
+  try {
+    console.info("[INLINE-AUTH] sendAuthMagicLink() [trial=0 magic]");
+    setGateMsg("Ti ho inviato un link di accesso via email. Controlla anche spam/promozioni.");
+    await sendAuthMagicLink(email, redirectUrl);
+    console.info("[INLINE-AUTH] magic link inviato (trial=0 magic)");
+  } catch (err) {
+    console.warn("[INLINE-AUTH] magic link FAIL (trial=0 magic):", err?.message || err);
+    setGateErr("Non riesco a inviare il magic link. Riprova tra poco.");
+  }
+  return;
+}
 
         // LOGIN / REGISTER con password (come prima)
         if (gateMode === "login") {
