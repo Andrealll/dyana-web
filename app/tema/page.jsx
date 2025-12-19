@@ -107,20 +107,20 @@ export default function TemaPage() {
   const [sessionId] = useState(() => `tema_session_${Date.now()}`);
   const [diyanaOpen, setDiyanaOpen] = useState(false);
 
-  // UX: free sopra, premium sotto
+  // ===== UX allineata a Oroscopo: free sempre sopra, premium sotto =====
   const [premiumLoaded, setPremiumLoaded] = useState(false);
 
-  // Navbar/credits state
+  // ===== Navbar/credits state (allineato a /credits/state) =====
   const [userRole, setUserRole] = useState("guest");
   const [userCredits, setUserCredits] = useState(0);
   const [userIdForDyana, setUserIdForDyana] = useState("guest_tema");
 
-  // trial guest 1/0 (o null)
+  // trial guest 1/0 (o null se non disponibile)
   const [guestTrialLeft, setGuestTrialLeft] = useState(null);
 
-  // Email gate inline
+  // Email gate inline (allineato a Oroscopo)
   const [emailGateOpen, setEmailGateOpen] = useState(false);
-  const [gateMode, setGateMode] = useState("magic"); // ✅ magic | register | login
+  const [gateMode, setGateMode] = useState("register"); // register | login
   const [gateEmail, setGateEmail] = useState("");
   const [gatePass, setGatePass] = useState("");
   const [gatePass2, setGatePass2] = useState("");
@@ -132,6 +132,7 @@ export default function TemaPage() {
   const [gateMarketing, setGateMarketing] = useState(true);
 
   const isLoggedIn = !!getToken();
+  const isPremium = premiumLoaded;
 
   // ==========================
   // Mappa sezioni (legacy)
@@ -154,7 +155,7 @@ export default function TemaPage() {
   let readingTextForDyana = interpretazione || "";
 
   if (contenuto) {
-    if (premiumLoaded && capitoliArray.length > 0) {
+    if (isPremium && capitoliArray.length > 0) {
       const extraParts = [];
       capitoliArray.forEach((cap, idx) => {
         const titolo = cap.titolo || `Capitolo ${idx + 1}`;
@@ -164,7 +165,7 @@ export default function TemaPage() {
       if (extraParts.length > 0) {
         readingTextForDyana += (readingTextForDyana ? "\n\n" : "") + extraParts.join("\n\n");
       }
-    } else if (premiumLoaded) {
+    } else if (isPremium) {
       const extraParts = [];
       Object.entries(sectionLabels).forEach(([key, label]) => {
         const text = contenuto?.[key];
@@ -179,7 +180,7 @@ export default function TemaPage() {
   const hasReading = !!interpretazione;
 
   // ======================================================
-  // Refresh user/credits
+  // Refresh user/credits (allineato Oroscopo)
   // ======================================================
   const refreshUserFromToken = useCallback(() => {
     const token = getToken();
@@ -293,7 +294,7 @@ export default function TemaPage() {
   }
 
   // ======================================================
-  // Apply response
+  // Apply response (parsing invariato)
   // ======================================================
   function applyTemaResponse(data) {
     setRisultato(data);
@@ -347,51 +348,56 @@ export default function TemaPage() {
       setTemaVis(null);
     }
 
-    // ---- Parsing robusto ----
-    const content =
-      data?.result?.content ||
-      data?.tema_ai?.content ||
-      data?.content ||
-      data?.result ||
-      data?.tema_ai ||
-      null;
+// ---- Parsing robusto (supporta più shape di response) ----
 
-    setContenuto(content);
+// content può arrivare in vari posti a seconda del backend
+const content =
+  data?.result?.content ||
+  data?.tema_ai?.content ||
+  data?.content ||
+  data?.result ||
+  data?.tema_ai ||
+  null;
 
-    const profiloGenerale =
-      content?.profilo_generale ||
-      content?.interpretazione ||
-      data?.tema_ai?.profilo_generale ||
-      data?.result?.content?.profilo_generale ||
-      "";
+setContenuto(content);
 
-    setInterpretazione(
-      profiloGenerale || "Interpretazione non disponibile (profilo_generale vuoto)."
-    );
+// interpretazione: prova più chiavi possibili
+const profiloGenerale =
+  content?.profilo_generale ||
+  content?.interpretazione ||
+  data?.tema_ai?.profilo_generale ||
+  data?.result?.content?.profilo_generale ||
+  "";
 
-    const meta =
-      data?.result?.meta ||
-      data?.payload_ai?.meta ||
-      data?.tema_ai?.meta ||
-      content?.meta ||
-      {};
+setInterpretazione(
+  profiloGenerale || "Interpretazione non disponibile (profilo_generale vuoto)."
+);
 
-    const readingIdFromBackend =
-      meta.reading_id || meta.id || `tema_${Date.now()}`;
+// meta può arrivare in result.meta oppure in payload_ai.meta oppure in tema_ai.meta
+const meta =
+  data?.result?.meta ||
+  data?.payload_ai?.meta ||
+  data?.tema_ai?.meta ||
+  content?.meta ||
+  {};
 
-    setReadingId(readingIdFromBackend);
-    setReadingPayload(data);
+const readingIdFromBackend =
+  meta.reading_id || meta.id || `tema_${Date.now()}`;
 
-    const kbFromBackend =
-      meta.kb_tags ||
-      meta.kb ||
-      ["tema_natale"];
+setReadingId(readingIdFromBackend);
+setReadingPayload(data);
 
-    setKbTags(kbFromBackend);
+const kbFromBackend =
+  meta.kb_tags ||
+  meta.kb ||
+  ["tema_natale"];
+
+setKbTags(kbFromBackend);
+
   }
 
   // ======================================================
-  // FREE
+  // FREE (sempre primo step)
   // ======================================================
   async function generaFree() {
     setLoading(true);
@@ -432,7 +438,7 @@ export default function TemaPage() {
   }
 
   // ======================================================
-  // PREMIUM
+  // PREMIUM (secondo step via CTA)
   // ======================================================
   async function generaPremium() {
     setLoading(true);
@@ -484,15 +490,12 @@ export default function TemaPage() {
   function openEmailGate() {
     setGateErr("");
     setGateLoading(false);
-
-    // ✅ default: magic link preselezionato
-    setGateMode("magic");
-
+    setGateMode("register");
     setEmailGateOpen(true);
 
     const trial = guestTrialLeft;
     if (trial === 0) {
-      setGateMsg("Hai finito la tua prova gratuita. Puoi entrare con Email+Link, oppure accedere/iscriverti.");
+      setGateMsg("Hai finito la tua prova gratuita. Iscriviti o accedi per continuare.");
     } else {
       setGateMsg("Inserisci la tua email per continuare. Ti invieremo anche un link per salvare l’accesso (controlla spam).");
     }
@@ -528,35 +531,14 @@ export default function TemaPage() {
         return;
       }
 
-      // ✅ resume: torna su /tema senza reinserire dati (li gestiamo via localStorage lato pagina/callback)
       try {
         localStorage.setItem("dyana_pending_email", email);
       } catch {}
 
       setResumeTarget({ path: "/tema", readingId: "tema_inline" });
 
-      const redirectUrl =
-        (typeof window !== "undefined" && window.location?.origin)
-          ? `${window.location.origin.replace(/\/+$/, "")}/auth/callback`
-          : "https://dyana.app/auth/callback";
-
-      // --------------------------------------------------
-      // TRIAL ESAURITO → MAGIC LINK / LOGIN / REGISTER
-      // --------------------------------------------------
+      // TRIAL ESAURITO → password login/register
       if (guestTrialLeft === 0) {
-        // ✅ MAGIC LINK
-        if (gateMode === "magic") {
-          try {
-            setGateMsg("Ti ho inviato un link via email. Aprilo per entrare. Controlla anche spam/promozioni.");
-            await sendAuthMagicLink(email, redirectUrl);
-          } catch (err) {
-            console.warn("[TEMA][INLINE-AUTH] magic link FAIL:", err?.message || err);
-            setGateErr("Non riesco a inviare il link. Riprova tra poco.");
-          }
-          return; // non fare login/register e non generare premium
-        }
-
-        // LOGIN / REGISTER con password
         if (gateMode === "login") {
           if (!gatePass) {
             setGateErr("Inserisci la password per accedere.");
@@ -581,10 +563,11 @@ export default function TemaPage() {
         return;
       }
 
-      // --------------------------------------------------
-      // TRIAL DISPONIBILE → premium subito + invio link best-effort
-      // --------------------------------------------------
-      setGateMsg("Attendi, sto generando…");
+      // TRIAL DISPONIBILE → premium subito + magic link best-effort
+      setGateMsg("Attendi, sto generando il tuo Tema…");
+
+      const siteBase = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
+      const redirectUrl = `${siteBase}/auth/callback`;
 
       // marketing consent: SOLO se token utente registrato valido
       try {
@@ -604,7 +587,6 @@ export default function TemaPage() {
         console.warn("[TEMA][INLINE-AUTH] updateMarketingConsent fallito (non blocco):", err?.message || err);
       }
 
-      // invio magic link BEST-EFFORT
       try {
         await sendAuthMagicLink(email, redirectUrl);
       } catch (err) {
@@ -663,7 +645,7 @@ export default function TemaPage() {
           </p>
         </header>
 
-        {/* FORM */}
+        {/* FORM (solo dati) */}
         <section className="section">
           <div className="card" style={{ maxWidth: "650px", margin: "0 auto" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
@@ -743,14 +725,14 @@ export default function TemaPage() {
                 />
               </div>
 
-              {/* CTA primaria: genera FREE */}
+              {/* CTA primaria: genera SEMPRE FREE */}
               <button
                 onClick={generaFree}
                 className="btn btn-primary"
-                disabled={loading || gateLoading}
+                disabled={loading}
                 style={{ marginTop: "14px" }}
               >
-                {(loading || gateLoading) ? "Attendi, sto generando…" : "🔮 Inizia la lettura"}
+                {loading ? "Generazione..." : "🔮 Inizia la lettura"}
               </button>
 
               {/* Errori */}
@@ -771,7 +753,7 @@ export default function TemaPage() {
                       <>
                         <p>Hai finito la tua prova gratuita.</p>
                         <p style={{ marginTop: 8, fontSize: "0.9rem", opacity: 0.9 }}>
-                          Usa Email+Link, oppure accedi/iscriviti per continuare.
+                          Iscriviti o accedi per continuare.
                         </p>
                       </>
                     )}
@@ -922,7 +904,7 @@ export default function TemaPage() {
           </section>
         )}
 
-        {/* BLOCCO FREE + CTA upgrade */}
+        {/* BLOCCO FREE: interpretazione base + CTA upgrade */}
         {interpretazione && (
           <section className="section">
             <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
@@ -937,9 +919,9 @@ export default function TemaPage() {
                     type="button"
                     className="btn btn-primary"
                     onClick={handleApprofondisciClick}
-                    disabled={loading || gateLoading}
+                    disabled={loading}
                   >
-                    {(loading || gateLoading) ? "Attendi, sto generando…" : "✨ Approfondisci con DYANA"}
+                    ✨ Approfondisci con DYANA
                   </button>
 
                   {isLoggedIn && (
@@ -960,7 +942,7 @@ export default function TemaPage() {
                 </div>
               )}
 
-              {/* EMAIL GATE INLINE */}
+              {/* EMAIL GATE INLINE (sparisce appena arriva premium) */}
               {emailGateOpen && !premiumLoaded && (
                 <div
                   className="card"
@@ -979,15 +961,6 @@ export default function TemaPage() {
                   <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
                     {guestTrialLeft === 0 && (
                       <>
-                        {/* ✅ Primo e preselezionato */}
-                        <button
-                          type="button"
-                          className={gateMode === "magic" ? "btn btn-primary" : "btn"}
-                          onClick={() => setGateMode("magic")}
-                        >
-                          Email+Link
-                        </button>
-
                         <button
                           type="button"
                           className={gateMode === "register" ? "btn btn-primary" : "btn"}
@@ -995,7 +968,6 @@ export default function TemaPage() {
                         >
                           Iscriviti
                         </button>
-
                         <button
                           type="button"
                           className={gateMode === "login" ? "btn btn-primary" : "btn"}
@@ -1023,10 +995,8 @@ export default function TemaPage() {
                       placeholder="La tua email"
                       value={gateEmail}
                       onChange={(e) => setGateEmail(e.target.value)}
-                      disabled={gateLoading || loading}
                     />
 
-                    {/* CONSENSO MARKETING SOLO SE TRIAL DISPONIBILE */}
                     {guestTrialLeft === 1 && (
                       <div style={{ marginTop: 2 }}>
                         <label className="card-text" style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
@@ -1056,8 +1026,7 @@ export default function TemaPage() {
                       </div>
                     )}
 
-                    {/* PASSWORD SOLO SE TRIAL=0 E NON MAGIC */}
-                    {guestTrialLeft === 0 && gateMode !== "magic" && (
+                    {guestTrialLeft === 0 && (
                       <>
                         <input
                           className="form-input"
@@ -1066,7 +1035,6 @@ export default function TemaPage() {
                           value={gatePass}
                           onChange={(e) => setGatePass(e.target.value)}
                           autoComplete="current-password"
-                          disabled={gateLoading || loading}
                         />
                         {gateMode === "register" && (
                           <input
@@ -1076,19 +1044,16 @@ export default function TemaPage() {
                             value={gatePass2}
                             onChange={(e) => setGatePass2(e.target.value)}
                             autoComplete="new-password"
-                            disabled={gateLoading || loading}
                           />
                         )}
                       </>
                     )}
 
                     <button type="submit" className="btn btn-primary" disabled={gateLoading || loading}>
-                      {(gateLoading || loading)
-                        ? "Attendi, sto generando…"
+                      {gateLoading
+                        ? "Attendi... Sto generando il tuo Tema"
                         : guestTrialLeft === 0
-                        ? (gateMode === "magic"
-                            ? "Invia link su email e aprilo per entrare"
-                            : (gateMode === "login" ? "Accedi e continua" : "Iscriviti e continua"))
+                        ? (gateMode === "login" ? "Accedi e continua" : "Iscriviti e continua")
                         : "Continua"}
                     </button>
 
@@ -1106,7 +1071,7 @@ export default function TemaPage() {
           </section>
         )}
 
-        {/* BLOCCO PREMIUM (sotto; FREE resta sopra) */}
+        {/* BLOCCO PREMIUM (si apre sotto; FREE resta sopra) */}
         {premiumLoaded && contenuto && (
           <section className="section">
             <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
@@ -1152,9 +1117,9 @@ export default function TemaPage() {
           </section>
         )}
 
-    {/* BLOCCO DYANA Q&A: solo se premium presente */}
-        {hasPremium && (
-          <section className="section">
+        {/* BLOCCO DYANA Q&A: solo se premium presente */}
+        {premiumLoaded && hasReading && readingTextForDyana && (
+ <section className="section">
             <div style={{ display: "flex", justifyContent: "center", marginTop: 32 }}>
               <div
                 className="card"
