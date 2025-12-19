@@ -17,24 +17,9 @@ import {
 const WELCOME_PATH = "/welcome";
 
 /**
- * Resume target salvato prima di aprire il gate (es. quando l'utente clicca "Approfondisci")
- * Se manca o scade, torniamo alla home (o puoi cambiare in /welcome).
+ * Resume target salvato prima di aprire il gate (quando chiedi email / login)
+ * Lo teniamo per poter “continuare” dopo (dalla welcome), ma qui non ci torniamo più direttamente.
  */
-function readResumeTarget() {
-  try {
-    const path = localStorage.getItem("dyana_resume_path") || "/";
-    const qs = localStorage.getItem("dyana_resume_qs") || "";
-    const ts = parseInt(localStorage.getItem("dyana_resume_ts") || "0", 10);
-
-    // scadenza resume 30 minuti
-    if (ts && Date.now() - ts > 30 * 60 * 1000) return { path: "/" };
-
-    return { path, qs };
-  } catch {
-    return { path: "/" };
-  }
-}
-
 function clearResumeTarget() {
   try {
     localStorage.removeItem("dyana_resume_path");
@@ -44,10 +29,7 @@ function clearResumeTarget() {
 }
 
 function notifyAuthDone() {
-  try {
-    localStorage.setItem("dyana_auth_done", String(Date.now()));
-  } catch {}
-
+  try { localStorage.setItem("dyana_auth_done", String(Date.now())); } catch {}
   try {
     const bc = new BroadcastChannel("dyana_auth");
     bc.postMessage({ type: "AUTH_DONE", ts: Date.now() });
@@ -55,22 +37,25 @@ function notifyAuthDone() {
   } catch {}
 }
 
-function isNewUserType(typeQ) {
-  return typeQ === "signup" || typeQ === "invite";
+function resolveWelcomeMode(typeQ) {
+  // nuovi utenti: signup / invite
+  if (typeQ === "signup" || typeQ === "invite") return "new";
+  // tutto il resto: ritorno (magiclink / recovery / ecc.)
+  return "back";
 }
 
 export default function CallbackClient() {
   const router = useRouter();
   const sp = useSearchParams();
 
-  const [status, setStatus] = useState("loading"); // loading | kamikaze | error
+  const [status, setStatus] = useState("loading"); // loading | error
   const [error, setError] = useState("");
 
   useEffect(() => {
     async function run() {
       try {
         // -----------------------------
-        // 1) NUOVO FLOW (consigliato):
+        // 1) NUOVO FLOW:
         // /auth/callback?token_hash=...&type=magiclink|signup|recovery|invite
         // -----------------------------
         const tokenHash = sp?.get("token_hash");
@@ -78,24 +63,14 @@ export default function CallbackClient() {
 
         if (tokenHash) {
           await verifyMagicLink(tokenHash, typeQ);
-
-          // ✅ Notifica alle altre tab/pagine che l'accesso è completato
           notifyAuthDone();
 
-          // ✅ NUOVI UTENTI -> WELCOME
-          if (isNewUserType(typeQ)) {
-            clearResumeTarget(); // evita rientri su pagine "a metà" durante onboarding
-            router.replace(WELCOME_PATH);
-            return;
-          }
+          const mode = resolveWelcomeMode(typeQ);
 
-          // ✅ ESISTENTI -> KAMIKAZE (prova a chiudersi)
-          try {
-            window.close();
-          } catch {}
+          // Per i nuovi: evitiamo di portarci dietro resume "sporchi" di pagine a metà
+          if (mode === "new") clearResumeTarget();
 
-          // Se il browser blocca la chiusura (tipico da email), mostriamo testo minimale
-          setStatus("kamikaze");
+          router.replace(`${WELCOME_PATH}?mode=${mode}`);
           return;
         }
 
@@ -110,21 +85,12 @@ export default function CallbackClient() {
 
         if (sbAccessToken) {
           await exchangeSupabaseTokenForDyanaJwt(sbAccessToken);
-
           notifyAuthDone();
 
-          // Se arriva da signup/invite anche qui, andiamo a welcome
-          if (isNewUserType(typeHash)) {
-            clearResumeTarget();
-            router.replace(WELCOME_PATH);
-            return;
-          }
+          const mode = resolveWelcomeMode(typeHash);
+          if (mode === "new") clearResumeTarget();
 
-          // ESISTENTI -> KAMIKAZE
-          try {
-            window.close();
-          } catch {}
-          setStatus("kamikaze");
+          router.replace(`${WELCOME_PATH}?mode=${mode}`);
           return;
         }
 
@@ -133,9 +99,7 @@ export default function CallbackClient() {
         // -----------------------------
         throw new Error("Token mancante nel link. Richiedi un nuovo magic link.");
       } catch (e) {
-        try {
-          clearToken();
-        } catch {}
+        try { clearToken(); } catch {}
         setStatus("error");
         setError(e?.message || "Impossibile completare l’accesso.");
       }
@@ -151,36 +115,6 @@ export default function CallbackClient() {
         <p className="card-text" style={{ color: "#ff9a9a" }}>
           {error}
         </p>
-      </div>
-    );
-  }
-
-  if (status === "kamikaze") {
-    return (
-      <div className="card">
-        <h1 className="card-title">Accesso completato</h1>
-
-        <p className="card-text" style={{ opacity: 0.9 }}>
-          Ora puoi tornare alla scheda DYANA che avevi aperta e continuare.
-        </p>
-
-        <p className="card-text" style={{ opacity: 0.75, fontSize: "0.9rem" }}>
-          Se questa pagina non si chiude da sola, puoi chiuderla manualmente.
-        </p>
-
-        <button
-          type="button"
-          className="btn btn-primary"
-          style={{ marginTop: 10 }}
-          onClick={() => {
-            const { path, qs } = readResumeTarget();
-            const target = qs ? `${path}?${qs}` : path;
-            clearResumeTarget();
-            router.replace(target);
-          }}
-        >
-          Torna a DYANA
-        </button>
       </div>
     );
   }
