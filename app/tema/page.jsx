@@ -236,6 +236,7 @@ const isLoggedIn = userRole !== "guest";
   }, []);
 
 useEffect(() => {
+  console.log("[TEMA PAGE] mounted BUILD MARKER = 2025-12-19-XYZ");	
   if (typeof window === "undefined") return;
 
 async function onAuthDone() {
@@ -334,8 +335,9 @@ async function onAuthDone() {
       tier, // free | premium
       ora_ignota: oraIgnota,
     };
-
+console.log("[TEMA][CALL] /tema_ai", { tier, API_BASE });
     let token = await getAnyAuthTokenAsync();
+console.log("[TEMA][CALL] token present?", !!token);	
     if (!token && ASTROBOT_JWT_TEMA) token = ASTROBOT_JWT_TEMA;
 
     const headers = {
@@ -510,11 +512,12 @@ setKbTags(kbFromBackend);
   // PREMIUM (secondo step via CTA)
   // ======================================================
   async function generaPremium() {
+	  
     setLoading(true);
     setErrore("");
     setNoCredits(false);
     setGateErr("");
-
+ console.log("[TEMA][PREMIUM] start", { userRole, isLoggedIn, loading });
     try {
       const { res, data } = await callTema({ tier: "premium" });
 
@@ -547,6 +550,7 @@ setKbTags(kbFromBackend);
       setDiyanaOpen(false);
       await refreshCreditsUI();
     } catch (e) {
+		  console.error("[TEMA][PREMIUM] failed:", e);
       setErrore("Impossibile comunicare con il server. Controlla la connessione e riprova.");
     } finally {
       setLoading(false);
@@ -573,16 +577,26 @@ if (trial === 0) {
   }
 
   async function handleApprofondisciClick() {
+  console.log("[TEMA][APPROFONDISCI] click", {
+    premiumLoaded,
+    userRole,
+    isLoggedIn,
+    guestTrialLeft,
+    loading,
+    hasInterpretazione: !!interpretazione,
+  });
+
     setErrore("");
     setNoCredits(false);
 
     if (premiumLoaded) return;
-
+    console.log("[TEMA][APPROFONDISCI] skip: premiumLoaded");
     if (isLoggedIn) {
+		    console.log("[TEMA][APPROFONDISCI] logged in -> generaPremium()");
       await generaPremium();
       return;
     }
-
+  console.log("[TEMA][APPROFONDISCI] guest -> openEmailGate()");
     openEmailGate();
   }
 
