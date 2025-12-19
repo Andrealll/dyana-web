@@ -1234,8 +1234,8 @@ if (guestTrialLeft === 0) {
                   DYANA • Q&amp;A sul tuo Oroscopo
                 </p>
 
-                {form.tier === "premium" ? (
-                  <>
+{premiumLoaded ? (
+  <>
                     <h3 className="card-title" style={{ marginBottom: 6 }}>
                       Hai domande su questa lettura?
                     </h3>
