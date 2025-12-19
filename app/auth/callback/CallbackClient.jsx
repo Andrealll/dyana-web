@@ -78,6 +78,14 @@ export default function CallbackClient() {
 
         if (sbAccessToken) {
           await exchangeSupabaseTokenForDyanaJwt(sbAccessToken);
+// Notifica alle altre tab che l'accesso è completato
+try { localStorage.setItem("dyana_auth_done", String(Date.now())); } catch {}
+
+try {
+  const bc = new BroadcastChannel("dyana_auth");
+  bc.postMessage({ type: "AUTH_DONE", ts: Date.now() });
+  bc.close();
+} catch {}
 
           const { path, qs } = readResumeTarget();
           const target = qs ? `${path}?${qs}` : path;

@@ -429,13 +429,83 @@ const [gateMode, setGateMode] = useState("magic"); // magic | register | login
     }
   }, []);
 
-  useEffect(() => {
-    refreshUserFromToken();
-    (async () => {
-      await ensureGuestToken();
+useEffect(() => {
+  // 1) ripristina bozza form (se esiste)
+  try {
+    const draft = loadOroscopoDraft();
+    if (draft && typeof draft === "object") {
+      if (draft.form) setForm((prev) => ({ ...prev, ...draft.form }));
+      if (typeof draft.oraIgnota === "boolean") setOraIgnota(draft.oraIgnota);
+    }
+  } catch {}
+
+  refreshUserFromToken();
+  (async () => {
+    await ensureGuestToken();
+    await refreshCreditsUI();
+  })();
+}, [refreshUserFromToken, refreshCreditsUI]);
+useEffect(() => {
+  saveOroscopoDraft({
+    form,
+    oraIgnota,
+    ts: Date.now(),
+  });
+}, [form, oraIgnota]);
+
+useEffect(() => {
+  async function onAuthDone() {
+    try {
+      console.log("[OROSCOPO][AUTH_DONE] ricevuto evento, riallineo stato...");
+
+      // 1) riallinea token -> ruolo/userId UI
+      refreshUserFromToken();
+
+      // 2) riallinea crediti
       await refreshCreditsUI();
-    })();
-  }, [refreshUserFromToken, refreshCreditsUI]);
+
+      // 3) se avevamo un'azione pending, ripartiamo
+      const pending = (() => {
+        try { return localStorage.getItem(POST_LOGIN_ACTION_KEY); } catch { return null; }
+      })();
+
+      console.log("[OROSCOPO][AUTH_DONE] pending =", pending);
+
+      if (pending === "oroscopo_premium") {
+        try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
+        setEmailGateOpen(false);
+
+        console.log("[OROSCOPO][AUTH_DONE] lancio generaPremium()");
+        await generaPremium();
+      }
+    } catch (e) {
+      console.warn("[OROSCOPO][AUTH_DONE] errore:", e?.message || e);
+    }
+  }
+
+  // Fallback cross-tab via localStorage event
+  function onStorage(e) {
+    if (e.key === AUTH_DONE_KEY || e.key === "dyana_jwt") {
+      onAuthDone();
+    }
+  }
+
+  window.addEventListener("storage", onStorage);
+
+  // Cross-tab moderno
+  let bc = null;
+  try {
+    bc = new BroadcastChannel("dyana_auth");
+    bc.onmessage = (ev) => {
+      if (ev?.data?.type === "AUTH_DONE") onAuthDone();
+    };
+  } catch {}
+
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    try { bc && bc.close(); } catch {}
+  };
+}, [refreshUserFromToken, refreshCreditsUI]);
 
   function handleLogout() {
     clearToken();
@@ -564,6 +634,7 @@ const [gateMode, setGateMode] = useState("magic"); // magic | register | login
       }
 
       setPremiumResult(data);
+	  try { clearOroscopoDraft(); } catch {}
       setEmailGateOpen(false);
       setDiyanaOpen(false);
       await refreshCreditsUI();
@@ -650,6 +721,9 @@ const redirectUrl =
         // ✅ MAGIC LINK LOGIN (passwordless)
 if (gateMode === "magic") {
   setGateMsg("Ti ho inviato un link di accesso via email...");
+  try {
+  localStorage.setItem(POST_LOGIN_ACTION_KEY, "oroscopo_premium");
+} catch {}
   await sendAuthMagicLink(email, redirectUrl);
   return;
 }
@@ -797,7 +871,8 @@ if (gateMode === "magic") {
     }
   }, [userIdForDyana, sessionId, premiumResult, premiumText, premiumPeriodoKey]);
 const OROSCOPO_DRAFT_KEY = "dyana_oroscopo_draft_v1";
-
+const AUTH_DONE_KEY = "dyana_auth_done";
+const POST_LOGIN_ACTION_KEY = "dyana_post_login_action";
 function loadOroscopoDraft() {
   try {
     const raw = localStorage.getItem(OROSCOPO_DRAFT_KEY);
