@@ -638,6 +638,16 @@ setGateMode("magic");
       // --------------------------------------------------
       // TRIAL ESAURITO → LOGIN / REGISTER / MAGIC LINK
       // --------------------------------------------------
+      if (guestTrialLeft === 0) {
+        console.info("[INLINE-AUTH] trial esaurito → auth");
+
+const redirectUrl =
+  (typeof window !== "undefined" && window.location?.origin)
+    ? `${window.location.origin.replace(/\/+$/, "")}/auth/callback`
+    : "https://dyana.app/auth/callback";
+
+
+        // ✅ MAGIC LINK LOGIN (passwordless)
 if (gateMode === "magic") {
   try {
     console.info("[INLINE-AUTH] sendAuthMagicLink() [trial=0 magic]");
