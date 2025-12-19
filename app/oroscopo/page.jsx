@@ -371,7 +371,7 @@ export default function OroscopoPage() {
 
   // Email gate inline
   const [emailGateOpen, setEmailGateOpen] = useState(false);
-  const [gateMode, setGateMode] = useState("magic"); // ✅ register | login | magic
+const [gateMode, setGateMode] = useState("magic"); // magic | register | login
   const [gateEmail, setGateEmail] = useState("");
   const [gatePass, setGatePass] = useState("");
   const [gatePass2, setGatePass2] = useState("");
@@ -577,12 +577,12 @@ export default function OroscopoPage() {
   function openEmailGate() {
     setGateErr("");
     setGateLoading(false);
-    setGateMode("register");
+setGateMode("magic");
     setEmailGateOpen(true);
 
     const trial = guestTrialLeft;
     if (trial === 0) {
-      setGateMsg("Hai finito la tua prova gratuita. Iscriviti, accedi o usa la tua email per continuare.");
+      setGateMsg("Hai finito la tua prova gratuita. Usa Email+Link, accedi o Iscriviti per continuare.");
     } else {
       setGateMsg(
         "Inserisci la tua email per continuare. Ti invieremo anche un link per salvare l’accesso (controlla spam)."
@@ -641,8 +641,13 @@ export default function OroscopoPage() {
       if (guestTrialLeft === 0) {
         console.info("[INLINE-AUTH] trial esaurito → auth");
 
-        const siteBase = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
-        const redirectUrl = `${siteBase}/auth/callback`;
+        const siteBase =
+  (typeof window !== "undefined" && window.location?.origin)
+    ? window.location.origin
+    : (process.env.NEXT_PUBLIC_SITE_URL || "https://dyana.app");
+
+const redirectUrl = `${String(siteBase).replace(/\/+$/, "")}/auth/callback`;
+
 
         // ✅ MAGIC LINK LOGIN (passwordless)
         if (gateMode === "magic") {
@@ -891,7 +896,7 @@ export default function OroscopoPage() {
                 disabled={loading}
                 style={{ marginTop: "14px" }}
               >
-                {loading ? "Generazione..." : "🔮 Inizia la lettura"}
+                {loading ? "Attendi, sto generando…" : "🔮 Inizia la lettura"}
               </button>
 
               {/* Errori */}
@@ -940,7 +945,7 @@ export default function OroscopoPage() {
               {!hasPremium && (
                 <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                   <button type="button" className="btn btn-primary" onClick={handleApprofondisciClick} disabled={loading}>
-                    ✨ Approfondisci con DYANA
+                  {loading ? "Attendi, sto generando…" : "✨ Approfondisci con DYANA"}
                   </button>
 
                   {isLoggedIn && currentCost > 0 && (
@@ -1082,7 +1087,7 @@ export default function OroscopoPage() {
                         ? "Attendi... Sto generando il tuo oroscopo"
                         : guestTrialLeft === 0
                         ? (gateMode === "magic"
-                            ? "Invia Magic Link"
+                            ? "Invia link su email e aprilo per entrare"
                             : (gateMode === "login" ? "Accedi e continua" : "Iscriviti e continua"))
                         : "Continua"}
                     </button>
@@ -1169,7 +1174,6 @@ export default function OroscopoPage() {
         )}
       </section>
 
-      <DyanaFooter />
     </main>
   );
 }
