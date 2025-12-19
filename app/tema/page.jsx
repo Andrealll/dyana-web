@@ -1152,22 +1152,21 @@ export default function TemaPage() {
           </section>
         )}
 
-        {/* BLOCCO DYANA Q&A: solo se premium presente */}
-        {premiumLoaded && hasReading && readingTextForDyana && (
+    {/* BLOCCO DYANA Q&A: solo se premium presente */}
+        {hasPremium && (
           <section className="section">
             <div style={{ display: "flex", justifyContent: "center", marginTop: 32 }}>
               <div
                 className="card"
                 style={{
+                  maxWidth: 950,
                   width: "100%",
-                  maxWidth: "960px",
-                  padding: "22px 24px",
                   border: "1px solid rgba(255,255,255,0.08)",
                   boxShadow: "0 18px 40px rgba(0,0,0,0.75)",
                 }}
               >
                 <p className="card-text" style={{ fontSize: "0.8rem", opacity: 0.8, marginBottom: 4 }}>
-                  DYANA • Q&amp;A sul tuo Tema Natale
+                  DYANA • Q&amp;A sul tuo Oroscopo
                 </p>
 
                 <h3 className="card-title" style={{ marginBottom: 6 }}>
@@ -1175,7 +1174,7 @@ export default function TemaPage() {
                 </h3>
 
                 <p className="card-text" style={{ marginBottom: 4, opacity: 0.9 }}>
-                  DYANA conosce già il Tema che hai appena generato e può aiutarti a interpretarlo meglio.
+                  DYANA conosce già l&apos;oroscopo che hai appena generato e può aiutarti a interpretarlo meglio.
                 </p>
 
                 <button
@@ -1188,17 +1187,7 @@ export default function TemaPage() {
                 </button>
 
                 {diyanaOpen && (
-                  <div
-                    style={{
-                      marginTop: 16,
-                      width: "100%",
-                      height: "600px",
-                      borderRadius: "14px",
-                      overflow: "hidden",
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      boxShadow: "0 22px 48px rgba(0,0,0,0.75)",
-                    }}
-                  >
+                  <div style={{ marginTop: 16, width: "100%", height: 560, borderRadius: 18, overflow: "hidden" }}>
                     <iframe
                       src={typebotUrl}
                       style={{ border: "none", width: "100%", height: "100%" }}
@@ -1208,7 +1197,7 @@ export default function TemaPage() {
                 )}
 
                 <p className="card-text" style={{ marginTop: 8, fontSize: "0.75rem", opacity: 0.65, textAlign: "right" }}>
-                  DYANA risponde solo su questo Tema, non su argomenti generici.
+                  DYANA risponde solo su questo oroscopo, non su argomenti generici.
                 </p>
               </div>
             </div>
