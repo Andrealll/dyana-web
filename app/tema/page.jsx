@@ -1138,9 +1138,7 @@ if (guestTrialLeft === 0) {
 
 
                     <button type="submit" className="btn btn-primary" disabled={gateLoading || loading}>
-                      {gateLoading
-                        ? "Attendi... Sto generando il tuo Tema"
-                        {gateLoading
+{gateLoading
   ? "Attendi... Sto generando il tuo Tema"
   : guestTrialLeft === 0
   ? (gateMode === "magic"
