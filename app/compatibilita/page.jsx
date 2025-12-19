@@ -36,6 +36,10 @@ const ASTROBOT_JWT_TEMA = process.env.NEXT_PUBLIC_ASTROBOT_JWT_TEMA || "";
 // Costo premium compatibilità (coerente con backend / convenzione)
 const PREMIUM_COST = 3;
 
+// ✅ chiavi auth callback sandwich
+const AUTH_DONE_KEY = "dyana_auth_done";
+const POST_LOGIN_ACTION_KEY = "dyana_post_login_action";
+
 if (typeof window !== "undefined") {
   console.log("[DYANA/COMPAT] API_BASE runtime:", API_BASE);
 }
@@ -214,13 +218,19 @@ export default function CompatibilitaPage() {
 
   // Email gate inline
   const [emailGateOpen, setEmailGateOpen] = useState(false);
-  const [gateMode, setGateMode] = useState("magic"); // ✅ magic | register | login
+  const [gateMode, setGateMode] = useState("magic"); // magic | register | login
   const [gateEmail, setGateEmail] = useState("");
   const [gatePass, setGatePass] = useState("");
   const [gatePass2, setGatePass2] = useState("");
   const [gateMsg, setGateMsg] = useState("");
   const [gateErr, setGateErr] = useState("");
   const [gateLoading, setGateLoading] = useState(false);
+
+  // ✅ UX: sandwich + loading premium chiaro
+  const [justLoggedIn, setJustLoggedIn] = useState(false);
+  const [postAuthToast, setPostAuthToast] = useState("");
+  const [premiumCtaLoading, setPremiumCtaLoading] = useState(false);
+  const [slowLoading, setSlowLoading] = useState(false);
 
   // Consenso marketing prefleggato a sì
   const [gateMarketing, setGateMarketing] = useState(true);
@@ -284,6 +294,67 @@ export default function CompatibilitaPage() {
     })();
   }, [refreshUserFromToken, refreshCreditsUI]);
 
+  // ======================================================
+  // AUTH_DONE listener: sandwich post-login (no auto premium)
+  // ======================================================
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    async function onAuthDone() {
+      try {
+        localStorage.removeItem(AUTH_DONE_KEY);
+      } catch {}
+
+      refreshUserFromToken();
+      await refreshCreditsUI();
+
+      setEmailGateOpen(false);
+      setGateErr("");
+      setGateMsg("");
+
+      setJustLoggedIn(true);
+      setPostAuthToast(
+        "Accesso completato. Ora puoi continuare: clicca “Approfondisci con DYANA” per la compatibilità Premium."
+      );
+      setTimeout(() => setJustLoggedIn(false), 6000);
+
+      try {
+        localStorage.removeItem(POST_LOGIN_ACTION_KEY);
+      } catch {}
+    }
+
+    const storageHandler = (e) => {
+      if (e?.key === AUTH_DONE_KEY) onAuthDone();
+    };
+    window.addEventListener("storage", storageHandler);
+
+    const localHandler = (e) => {
+      if (e?.detail?.type === "AUTH_DONE") onAuthDone();
+    };
+    window.addEventListener("dyana:auth", localHandler);
+
+    let bc = null;
+    try {
+      bc = new BroadcastChannel("dyana_auth");
+      bc.onmessage = (msg) => {
+        if (msg?.data?.type === "AUTH_DONE") onAuthDone();
+      };
+    } catch {}
+
+    try {
+      const pending = localStorage.getItem(AUTH_DONE_KEY);
+      if (pending) onAuthDone();
+    } catch {}
+
+    return () => {
+      window.removeEventListener("storage", storageHandler);
+      window.removeEventListener("dyana:auth", localHandler);
+      try {
+        bc && bc.close();
+      } catch {}
+    };
+  }, [refreshUserFromToken, refreshCreditsUI]);
+
   function handleLogout() {
     clearToken();
 
@@ -297,6 +368,11 @@ export default function CompatibilitaPage() {
     setEmailGateOpen(false);
     setGateErr("");
     setGateMsg("");
+
+    setJustLoggedIn(false);
+    setPostAuthToast("");
+    setPremiumCtaLoading(false);
+    setSlowLoading(false);
 
     (async () => {
       await ensureGuestToken();
@@ -411,6 +487,9 @@ export default function CompatibilitaPage() {
     setPremiumResult(null);
     setBilling(null);
 
+    setPremiumCtaLoading(false);
+    setSlowLoading(false);
+
     try {
       const { res, data } = await callSinastria({ tier: "free" });
 
@@ -473,6 +552,8 @@ export default function CompatibilitaPage() {
     } catch (e) {
       setErrore("Impossibile comunicare con il server. Controlla la connessione e riprova.");
     } finally {
+      setPremiumCtaLoading(false);
+      setSlowLoading(false);
       setLoading(false);
     }
   }
@@ -484,16 +565,19 @@ export default function CompatibilitaPage() {
     setGateErr("");
     setGateLoading(false);
 
-    // ✅ default: magic link preselezionato
+    // default: magic link preselezionato
     setGateMode("magic");
-
     setEmailGateOpen(true);
 
     const trial = guestTrialLeft;
     if (trial === 0) {
-      setGateMsg("Hai finito la tua prova gratuita. Puoi entrare con Email+Link, oppure accedere/iscriverti.");
+      setGateMsg(
+        "Hai finito la prova gratuita. Per continuare, accedi: puoi ricevere un link via email oppure usare la password."
+      );
     } else {
-      setGateMsg("Inserisci la tua email per continuare. Ti invieremo anche un link per salvare l’accesso (controlla spam).");
+      setGateMsg(
+        "Inserisci la tua email per continuare. Ti invierò anche un link di accesso per salvare l’account."
+      );
     }
   }
 
@@ -503,12 +587,27 @@ export default function CompatibilitaPage() {
 
     if (premiumResult) return;
 
-    if (isLoggedIn) {
-      await generaPremium();
-      return;
-    }
+    // feedback immediato sul bottone + messaggio
+    setPremiumCtaLoading(true);
+    setSlowLoading(false);
+    const slowTimer = setTimeout(() => setSlowLoading(true), 12000);
 
-    openEmailGate();
+    try {
+      if (isLoggedIn) {
+        await generaPremium();
+        return;
+      }
+
+      // guest: apri gate, quindi non stai caricando premium
+      clearTimeout(slowTimer);
+      setPremiumCtaLoading(false);
+      setSlowLoading(false);
+      openEmailGate();
+    } catch (e) {
+      clearTimeout(slowTimer);
+      setPremiumCtaLoading(false);
+      setSlowLoading(false);
+    }
   }
 
   // ======================================================
@@ -542,16 +641,20 @@ export default function CompatibilitaPage() {
       // TRIAL ESAURITO → MAGIC LINK / LOGIN / REGISTER
       // --------------------------------------------------
       if (guestTrialLeft === 0) {
-        // ✅ MAGIC LINK
+        // MAGIC LINK
         if (gateMode === "magic") {
           try {
-            setGateMsg("Ti ho inviato un link via email. Aprilo per entrare. Controlla anche spam/promozioni.");
             await sendAuthMagicLink(email, redirectUrl);
+            setGateMsg(
+              "Link inviato. Apri l’email e clicca il link di accesso per completare. Poi torna qui e premi “Approfondisci con DYANA”."
+            );
           } catch (err) {
             console.warn("[COMPAT][INLINE-AUTH] magic link FAIL:", err?.message || err);
             setGateErr("Non riesco a inviare il link. Riprova tra poco.");
+          } finally {
+            setGateLoading(false);
           }
-          return; // non fare login/register e non generare premium
+          return; // non generare premium
         }
 
         // LOGIN / REGISTER con password
@@ -575,14 +678,27 @@ export default function CompatibilitaPage() {
 
         refreshUserFromToken();
         await refreshCreditsUI();
-        await generaPremium();
+
+        // UX: avvia premium con feedback chiaro
+        setPremiumCtaLoading(true);
+        setSlowLoading(false);
+        const slowTimer = setTimeout(() => setSlowLoading(true), 12000);
+
+        try {
+          await generaPremium();
+        } finally {
+          clearTimeout(slowTimer);
+          setPremiumCtaLoading(false);
+          setSlowLoading(false);
+        }
+
         return;
       }
 
       // --------------------------------------------------
       // TRIAL DISPONIBILE → premium subito + invio link best-effort
       // --------------------------------------------------
-      setGateMsg("Attendi, sto generando…");
+      setGateMsg("Attendi, sto generando la compatibilità Premium…");
 
       // marketing consent: SOLO se token utente registrato valido
       try {
@@ -609,8 +725,20 @@ export default function CompatibilitaPage() {
         console.warn("[COMPAT][INLINE-AUTH] magic link non inviato (non blocco):", err?.message || err);
       }
 
-      await generaPremium();
-      await refreshCreditsUI();
+      // UX: avvia premium con feedback chiaro
+      setPremiumCtaLoading(true);
+      setSlowLoading(false);
+      const slowTimer = setTimeout(() => setSlowLoading(true), 12000);
+
+      try {
+        await generaPremium();
+        await refreshCreditsUI();
+      } finally {
+        clearTimeout(slowTimer);
+        setPremiumCtaLoading(false);
+        setSlowLoading(false);
+      }
+
       return;
     } catch (err) {
       setGateErr(err?.message || "Operazione non riuscita. Riprova.");
@@ -706,6 +834,48 @@ export default function CompatibilitaPage() {
   return (
     <main className="page-root">
       <DyanaNavbar userRole={userRole} credits={userCredits} onLogout={handleLogout} />
+
+      {/* ✅ Sandwich post-login */}
+      {justLoggedIn && (
+        <section className="section" style={{ paddingTop: 12, paddingBottom: 0 }}>
+          <div
+            className="card"
+            style={{
+              maxWidth: 850,
+              margin: "0 auto",
+              border: "1px solid rgba(255,255,255,0.14)",
+              background: "rgba(0,0,0,0.25)",
+            }}
+          >
+            <h4 className="card-subtitle" style={{ marginBottom: 6 }}>
+              Accesso completato
+            </h4>
+
+            <p className="card-text" style={{ opacity: 0.9 }}>
+              {postAuthToast}
+            </p>
+
+            <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setJustLoggedIn(false);
+                  const el = document.getElementById("dyana-approfondisci-compat");
+                  if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                  if (el && typeof el.focus === "function") el.focus();
+                }}
+              >
+                Continua
+              </button>
+
+              <button type="button" className="btn" onClick={() => setJustLoggedIn(false)}>
+                Chiudi
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="landing-wrapper">
         {/* INTESTAZIONE */}
@@ -1046,13 +1216,28 @@ export default function CompatibilitaPage() {
                   {/* CTA Approfondisci */}
                   <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                     <button
+                      id="dyana-approfondisci-compat"
                       type="button"
                       className="btn btn-primary"
                       onClick={handleApprofondisciClick}
-                      disabled={loading || gateLoading}
+                      disabled={loading || gateLoading || premiumCtaLoading}
                     >
-                      {(loading || gateLoading) ? "Attendi, sto generando…" : "✨ Approfondisci con DYANA"}
+                      {premiumCtaLoading
+                        ? "Attendi… sto preparando la compatibilità Premium"
+                        : "✨ Approfondisci con DYANA"}
                     </button>
+
+                    {premiumCtaLoading && (
+                      <p className="card-text" style={{ fontSize: "0.85rem", opacity: 0.85, marginTop: 10 }}>
+                        Non chiudere la pagina: la lettura comparirà qui sotto appena pronta.
+                      </p>
+                    )}
+
+                    {slowLoading && (
+                      <p className="card-text" style={{ fontSize: "0.85rem", opacity: 0.85, marginTop: 8 }}>
+                        Sta impiegando più del previsto. Rimani su questa pagina: appena pronta, si aggiorna automaticamente.
+                      </p>
+                    )}
 
                     {isLoggedIn && (
                       <span
@@ -1090,7 +1275,6 @@ export default function CompatibilitaPage() {
                       <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
                         {guestTrialLeft === 0 && (
                           <>
-                            {/* ✅ Primo e preselezionato */}
                             <button
                               type="button"
                               className={gateMode === "magic" ? "btn btn-primary" : "btn"}
@@ -1137,7 +1321,6 @@ export default function CompatibilitaPage() {
                           disabled={gateLoading || loading}
                         />
 
-                        {/* Consenso marketing + link condizioni solo con trial disponibile */}
                         {guestTrialLeft === 1 && (
                           <div style={{ marginTop: 2 }}>
                             <label className="card-text" style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
@@ -1167,7 +1350,6 @@ export default function CompatibilitaPage() {
                           </div>
                         )}
 
-                        {/* Password solo se trial=0 e non magic */}
                         {guestTrialLeft === 0 && gateMode !== "magic" && (
                           <>
                             <input
@@ -1195,10 +1377,10 @@ export default function CompatibilitaPage() {
 
                         <button type="submit" className="btn btn-primary" disabled={gateLoading || loading}>
                           {(gateLoading || loading)
-                            ? "Attendi, sto generando…"
+                            ? "Attendi…"
                             : guestTrialLeft === 0
                             ? (gateMode === "magic"
-                                ? "Invia link su email e aprilo per entrare"
+                                ? "Invia link di accesso"
                                 : (gateMode === "login" ? "Accedi e continua" : "Iscriviti e continua"))
                             : "Continua"}
                         </button>
