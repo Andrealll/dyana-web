@@ -479,7 +479,6 @@ async function onAuthDone() {
       try { return localStorage.getItem(POST_LOGIN_ACTION_KEY); } catch { return null; }
     })();
 
-    ...
 
 
       console.log("[OROSCOPO][AUTH_DONE] pending =", pending);
