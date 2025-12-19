@@ -1,4 +1,3 @@
-// app/tema/page.jsx
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -19,7 +18,7 @@ import {
 } from "../../lib/authClient";
 
 // ==========================
-// COSTANTI GLOBALI
+// COSTANTI
 // ==========================
 const TYPEBOT_DYANA_ID = "dyana-ai";
 
@@ -32,25 +31,32 @@ const API_BASE =
     : "https://chatbot-test-0h4o.onrender.com");
 
 const ASTROBOT_JWT_TEMA = process.env.NEXT_PUBLIC_ASTROBOT_JWT_TEMA || "";
-const OROSCOPO_DRAFT_KEY = "dyana_oroscopo_draft_v1"; 
 
-// non usata qui, ok lasciarla
+const PERIOD_COSTS = {
+  giornaliero: 1,
+  settimanale: 2,
+  mensile: 3,
+  annuale: 5,
+};
 
+const OROSCOPO_DRAFT_KEY = "dyana_oroscopo_draft_v1";
 const AUTH_DONE_KEY = "dyana_auth_done";
-const POST_LOGIN_ACTION_KEY = "dyana_post_login_action";
-if (typeof window !== "undefined") {
-  console.log("[DYANA] API_BASE runtime:", API_BASE);
+const POST_LOGIN_ACTION_KEY = "dyana_post_login_action"; // usato solo come compatibilità, NON auto-run
+
+function mapPeriodoToSlug(periodo) {
+  const p = (periodo || "").toLowerCase();
+  if (p === "giornaliero") return "giornaliero";
+  if (p === "settimanale") return "settimanale";
+  if (p === "mensile") return "mensile";
+  if (p === "annuale") return "annuale";
+  return "giornaliero";
 }
 
-// ==========================
-// Helper decode JWT
-// ==========================
 function decodeJwtPayload(token) {
   try {
     if (!token) return null;
     const parts = token.split(".");
     if (parts.length < 2) return null;
-
     const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     const json = decodeURIComponent(
       atob(b64)
@@ -65,34 +71,307 @@ function decodeJwtPayload(token) {
 }
 
 // ==========================
-// NORMALIZZAZIONE CAPITOLI
+// TESTO INTERPRETAZIONE
 // ==========================
-function normalizeCapitoli(capitoliRaw) {
-  if (!capitoliRaw) return [];
-  if (Array.isArray(capitoliRaw)) return capitoliRaw;
+function buildInterpretazioneTesto(oroscopoAi, tierRaw) {
+  if (!oroscopoAi || typeof oroscopoAi !== "object") return "";
 
-  if (typeof capitoliRaw === "object") {
-    return Object.entries(capitoliRaw).map(([titolo, testo]) => ({
-      chiave: String(titolo).toLowerCase().replace(/\s+/g, "_"),
-      titolo,
-      testo,
-    }));
+  const tier = (tierRaw || "free").toLowerCase();
+  const isPremium = tier === "premium";
+  const pieces = [];
+
+  const intro = (
+    oroscopoAi.intro ||
+    oroscopoAi.sintesi_periodo ||
+    oroscopoAi.sintesi ||
+    ""
+  ).trim();
+  if (intro) pieces.push(intro);
+
+  const macro =
+    Array.isArray(oroscopoAi.macro_periods) && oroscopoAi.macro_periods.length > 0
+      ? oroscopoAi.macro_periods
+      : Array.isArray(oroscopoAi.sottoperiodi) && oroscopoAi.sottoperiodi.length > 0
+      ? oroscopoAi.sottoperiodi
+      : [];
+
+  if (macro.length) {
+    if (isPremium) {
+      macro.forEach((mp, idx) => {
+        if (!mp || typeof mp !== "object") return;
+        const label = mp.label || mp.titolo || mp.title || `Sottoperiodo ${idx + 1}`;
+        const range = mp.date_range || mp.range || {};
+        const start = range.start || range.inizio || range.from || null;
+        const end = range.end || range.fine || range.to || null;
+        const rangeText = start && end ? `${start} – ${end}` : "";
+        const text = (mp.text || mp.descrizione || mp.content || "").trim();
+        const header = rangeText ? `${label} (${rangeText})` : label;
+        if (text) pieces.push(`${header}\n${text}`);
+      });
+    } else {
+      const labels = macro
+        .map((mp) => mp && (mp.label || mp.titolo || mp.title))
+        .filter(Boolean);
+      if (labels.length) {
+        pieces.push("Sottoperiodi principali:\n" + labels.map((l) => `• ${l}`).join("\n"));
+      }
+    }
   }
-  return [];
+
+  const sections = oroscopoAi.sections || {};
+  const SECTION_LABELS = {
+    panorama: "Panoramica generale",
+    emozioni: "Emozioni",
+    relazioni: "Relazioni",
+    energia: "Energia",
+    lavoro: "Lavoro",
+    focus: "Focus",
+    consigli: "Consigli",
+  };
+
+  const orderedKeys = Object.keys(SECTION_LABELS);
+
+  if (sections && typeof sections === "object") {
+    const secPieces = [];
+    orderedKeys.forEach((key) => {
+      const rawVal = sections[key];
+      if (!rawVal || typeof rawVal !== "string") return;
+      const val = rawVal.trim();
+      if (!val) return;
+      const label = SECTION_LABELS[key] || key;
+      secPieces.push(isPremium ? `${label}\n${val}` : `${label}: ${val}`);
+    });
+    if (secPieces.length) pieces.push(secPieces.join("\n\n"));
+  }
+
+  if (isPremium) {
+    const summary = (oroscopoAi.summary || "").trim();
+    if (summary) pieces.push(summary);
+  } else {
+    const cta = (oroscopoAi.cta || "").trim();
+    const premiumMsg = (oroscopoAi.premium_message || "").trim();
+    if (cta) pieces.push(cta);
+    if (premiumMsg) pieces.push(premiumMsg);
+  }
+
+  if (!pieces.length) return "Interpretazione non disponibile.";
+  return pieces.join("\n\n");
 }
 
 // ==========================
-// COMPONENTE PRINCIPALE
+// COMPONENTI SUPPORTO
 // ==========================
-export default function TemaPage() {
-console.log("[TEMA PAGE] BUILD MARKER = 2025-12-19-XYZ");	
-	
-	
+function MetricheGrafico({ metriche }) {
+  if (
+    !metriche ||
+    typeof metriche !== "object" ||
+    !Array.isArray(metriche.samples) ||
+    metriche.samples.length === 0
+  ) {
+    return null;
+  }
+
+  const first = metriche.samples[0] || {};
+  const firstMetrics = first.metrics || {};
+  const ambiti =
+    (firstMetrics.intensities && Object.keys(firstMetrics.intensities)) ||
+    (firstMetrics.raw_scores && Object.keys(firstMetrics.raw_scores)) ||
+    [];
+
+  if (!ambiti.length) return null;
+
+  const LABELS = {
+    emozioni: "Emozioni",
+    relazioni: "Relazioni",
+    energia: "Energia",
+  };
+
+  const normalize = (val) => {
+    if (typeof val !== "number" || !isFinite(val)) return 0;
+    const clamped = Math.max(-1, Math.min(1, val));
+    return Math.round(((clamped + 1) / 2) * 100);
+  };
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <h4 className="card-subtitle">Andamento del periodo</h4>
+      <p className="card-text" style={{ fontSize: "0.8rem", opacity: 0.8, marginBottom: 8 }}>
+        Ogni riga rappresenta un sottoperiodo; i rettangoli mostrano l&apos;intensità media.
+      </p>
+
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.08)", whiteSpace: "nowrap" }}>
+                Sottoperiodo
+              </th>
+              {ambiti.map((a) => (
+                <th key={a} style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.08)", whiteSpace: "nowrap" }}>
+                  {LABELS[a] || a}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {metriche.samples.map((s, idx) => {
+              const label = s.label || `Fase ${idx + 1}`;
+              const metrics = s.metrics || {};
+              const intensities = metrics.intensities || metrics.raw_scores || {};
+              return (
+                <tr key={idx}>
+                  <td style={{ padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.05)", whiteSpace: "nowrap" }}>
+                    {label}
+                  </td>
+                  {ambiti.map((a) => {
+                    const perc = normalize(intensities[a]);
+                    return (
+                      <td key={a} style={{ padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                        <div style={{ position: "relative", height: 12, borderRadius: 999, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                          <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: `${perc}%`, borderRadius: 999, background: "rgba(255,255,255,0.75)" }} />
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function AspettiTable({ aspetti }) {
+  if (!Array.isArray(aspetti) || aspetti.length === 0) return null;
+
+  const ASP_LABEL = {
+    congiunzione: "congiunzione",
+    opposizione: "opposizione",
+    quadratura: "quadratura",
+    trigono: "trigono",
+    sestile: "sestile",
+  };
+
+  function parseFromKey(chiave) {
+    if (!chiave || typeof chiave !== "string") return { tr: "?", asp: "?", nat: "?" };
+
+    const parts = chiave.split("_").filter(Boolean);
+    if (parts.length >= 3) {
+      const tr = parts[0];
+      const asp = parts[1];
+      const nat = parts.slice(2).join("_");
+      return { tr, asp, nat };
+    }
+    return { tr: "?", asp: "?", nat: "?" };
+  }
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      <h4 className="card-subtitle">Aspetti chiave del periodo</h4>
+      <p className="card-text" style={{ fontSize: "0.8rem", opacity: 0.8, marginBottom: 8 }}>
+        Una selezione compatta degli aspetti più rilevanti che colorano questo periodo.
+      </p>
+
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>Aspetto</th>
+              <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.08)", whiteSpace: "nowrap" }}>Intensità</th>
+              <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.08)", whiteSpace: "nowrap" }}>Durata</th>
+              <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.08)", whiteSpace: "nowrap" }}>Prima attivazione</th>
+            </tr>
+          </thead>
+          <tbody>
+            {aspetti.map((a, idx) => {
+              const chiave = a?.chiave || a?.key || a?.id || "";
+              const parsed = parseFromKey(chiave);
+
+              const tr =
+                a?.pianeta_transito ||
+                a?.transit_planet ||
+                a?.transito ||
+                parsed.tr ||
+                "?";
+
+              const nat =
+                a?.pianeta_natale ||
+                a?.natal_planet ||
+                a?.natale ||
+                parsed.nat ||
+                "?";
+
+              const aspRaw = a?.aspetto || a?.tipo || a?.aspect || parsed.asp || "?";
+              const asp = ASP_LABEL[aspRaw] || aspRaw;
+
+              const intensita =
+                a?.intensita_discreta ||
+                a?.intensita ||
+                a?.intensity ||
+                "-";
+
+              const pers = a?.persistenza || {};
+              const durataGiorni = pers.durata_giorni ?? pers.durata ?? pers.days ?? null;
+              const first = a?.prima_occorrenza || pers.data_inizio || pers.start || "-";
+
+              return (
+                <tr key={idx}>
+                  <td style={{ padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                    {tr} {asp} {nat}
+                  </td>
+                  <td style={{ padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.05)", whiteSpace: "nowrap" }}>
+                    {intensita}
+                  </td>
+                  <td style={{ padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.05)", whiteSpace: "nowrap" }}>
+                    {durataGiorni != null ? `${durataGiorni} giorno${durataGiorni === 1 ? "" : "i"}` : "-"}
+                  </td>
+                  <td style={{ padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.05)", whiteSpace: "nowrap" }}>
+                    {first}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ==========================
+// BOZZA localStorage
+// ==========================
+function loadOroscopoDraft() {
+  try {
+    const raw = localStorage.getItem(OROSCOPO_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function saveOroscopoDraft(draft) {
+  try {
+    localStorage.setItem(OROSCOPO_DRAFT_KEY, JSON.stringify(draft));
+  } catch {}
+}
+function clearOroscopoDraft() {
+  try {
+    localStorage.removeItem(OROSCOPO_DRAFT_KEY);
+  } catch {}
+}
+
+// ==========================
+// PAGINA
+// ==========================
+export default function OroscopoPage() {
   const [form, setForm] = useState({
     nome: "",
     data: "",
     ora: "",
     citta: "",
+    periodo: "giornaliero",
   });
 
   const [oraIgnota, setOraIgnota] = useState(false);
@@ -101,107 +380,47 @@ console.log("[TEMA PAGE] BUILD MARKER = 2025-12-19-XYZ");
   const [errore, setErrore] = useState("");
   const [noCredits, setNoCredits] = useState(false);
 
-  const [interpretazione, setInterpretazione] = useState("");
-  const [contenuto, setContenuto] = useState(null);
-  const [risultato, setRisultato] = useState(null);
-  const [temaVis, setTemaVis] = useState(null);
+  // Risultati separati: FREE resta, PREMIUM si aggiunge sotto
+  const [freeResult, setFreeResult] = useState(null);
+  const [premiumResult, setPremiumResult] = useState(null);
 
-  const [billing, setBilling] = useState(null);
-
-  const [readingId, setReadingId] = useState("");
-  const [readingPayload, setReadingPayload] = useState(null);
-  const [kbTags, setKbTags] = useState([]);
-
-  const [sessionId] = useState(() => `tema_session_${Date.now()}`);
-  const [diyanaOpen, setDiyanaOpen] = useState(false);
-
-  // ===== UX allineata a Oroscopo: free sempre sopra, premium sotto =====
-  const [premiumLoaded, setPremiumLoaded] = useState(false);
-
-  // ===== Navbar/credits state (allineato a /credits/state) =====
+  // Navbar state
   const [userRole, setUserRole] = useState("guest");
   const [userCredits, setUserCredits] = useState(0);
-  const [userIdForDyana, setUserIdForDyana] = useState("guest_tema");
+  const [userIdForDyana, setUserIdForDyana] = useState("guest_oroscopo");
 
   // trial guest 1/0 (o null se non disponibile)
   const [guestTrialLeft, setGuestTrialLeft] = useState(null);
 
-  // Email gate inline (allineato a Oroscopo)
-const [emailGateOpen, setEmailGateOpen] = useState(false);
-const [gateMode, setGateMode] = useState("magic"); 
-
-// magic | register | login
-const [gateEmail, setGateEmail] = useState("");
-const [gatePass, setGatePass] = useState("");
-const [gatePass2, setGatePass2] = useState("");
-const [gateMsg, setGateMsg] = useState("");
-const [gateErr, setGateErr] = useState("");
-const [gateLoading, setGateLoading] = useState(false);
-
-  // Consenso marketing: prefleggato a sì
+  // Email gate inline
+  const [emailGateOpen, setEmailGateOpen] = useState(false);
+  const [gateMode, setGateMode] = useState("magic"); // magic | register | login
+  const [gateEmail, setGateEmail] = useState("");
+  const [gatePass, setGatePass] = useState("");
+  const [gatePass2, setGatePass2] = useState("");
+  const [gateMsg, setGateMsg] = useState("");
+  const [gateErr, setGateErr] = useState("");
+  const [gateLoading, setGateLoading] = useState(false);
   const [gateMarketing, setGateMarketing] = useState(true);
 
-const isLoggedIn = userRole !== "guest" && !!getToken();
-  const isPremium = premiumLoaded;
+  // DYANA
+  const [diyanaOpen, setDiyanaOpen] = useState(false);
 
-  // ==========================
-  // Mappa sezioni (legacy)
-  // ==========================
-  const sectionLabels = {
-    psicologia_profonda: "Psicologia profonda",
-    amore_relazioni: "Amore e relazioni",
-    lavoro_carriera: "Lavoro e carriera",
-    fortuna_crescita: "Fortuna e crescita",
-    talenti: "Talenti",
-    sfide: "Sfide",
-    consigli: "Consigli",
-  };
+  const [sessionId] = useState(() => `oroscopo_session_${Date.now()}`);
 
-  const capitoliArray = normalizeCapitoli(contenuto?.capitoli);
+  // ✅ reattivo: dipende da userRole, non da getToken() nel render
+  const isLoggedIn = userRole !== "guest";
 
-  // ==========================
-  // Testo passato a DYANA (Q&A)
-  // ==========================
-  let readingTextForDyana = interpretazione || "";
-
-  if (contenuto) {
-    if (isPremium && capitoliArray.length > 0) {
-      const extraParts = [];
-      capitoliArray.forEach((cap, idx) => {
-        const titolo = cap.titolo || `Capitolo ${idx + 1}`;
-        const testo = cap.testo || cap.contenuto || cap.testo_breve || "";
-        if (testo) extraParts.push(`${titolo}:\n${testo}`);
-      });
-      if (extraParts.length > 0) {
-        readingTextForDyana += (readingTextForDyana ? "\n\n" : "") + extraParts.join("\n\n");
-      }
-    } else if (isPremium) {
-      const extraParts = [];
-      Object.entries(sectionLabels).forEach(([key, label]) => {
-        const text = contenuto?.[key];
-        if (text) extraParts.push(`${label}:\n${text}`);
-      });
-      if (extraParts.length > 0) {
-        readingTextForDyana += (readingTextForDyana ? "\n\n" : "") + extraParts.join("\n\n");
-      }
-    }
-  }
-
-  const hasReading = !!interpretazione;
-
-  // ======================================================
-  // Refresh user/credits (allineato Oroscopo)
-  // ======================================================
   const refreshUserFromToken = useCallback(() => {
     const token = getToken();
     if (!token) {
       setUserRole("guest");
-      setUserIdForDyana("guest_tema");
+      setUserIdForDyana("guest_oroscopo");
       return;
     }
     const payload = decodeJwtPayload(token);
     setUserRole(payload?.role || "free");
-    setUserIdForDyana(payload?.sub || "guest_tema");
+    setUserIdForDyana(payload?.sub || "guest_oroscopo");
   }, []);
 
   const refreshCreditsUI = useCallback(async () => {
@@ -230,84 +449,101 @@ const isLoggedIn = userRole !== "guest" && !!getToken();
       if (remaining != null) setUserCredits(remaining);
       if (trialAvailable != null) setGuestTrialLeft(trialAvailable);
     } catch (e) {
-      console.warn("[TEMA] refreshCreditsUI failed:", e?.message || e);
+      console.warn("[OROSCOPO] refreshCreditsUI failed:", e?.message || e);
     }
   }, []);
 
-useEffect(() => {
-  if (typeof window === "undefined") return;
+  useEffect(() => {
+    // restore bozza
+    try {
+      const draft = loadOroscopoDraft();
+      if (draft && typeof draft === "object") {
+        if (draft.form) setForm((prev) => ({ ...prev, ...draft.form }));
+        if (typeof draft.oraIgnota === "boolean") setOraIgnota(draft.oraIgnota);
+      }
+    } catch {}
 
-async function onAuthDone() {
-  try { localStorage.removeItem(AUTH_DONE_KEY); } catch {}
+    refreshUserFromToken();
+    (async () => {
+      await ensureGuestToken();
+      await refreshCreditsUI();
+    })();
+  }, [refreshUserFromToken, refreshCreditsUI]);
 
-  // riallinea subito lo state (questo triggera rerender)
-  refreshUserFromToken();
-  await refreshCreditsUI();
+  useEffect(() => {
+    saveOroscopoDraft({
+      form,
+      oraIgnota,
+      ts: Date.now(),
+    });
+  }, [form, oraIgnota]);
 
-  setEmailGateOpen(false);
-  setGateErr("");
-  setGateMsg("");
+  // ✅ AUTH_DONE: riallinea UI + sblocca, MA NON auto-esegue premium
+  useEffect(() => {
+    if (typeof window === "undefined") return;
 
-  let action = null;
-  try { action = localStorage.getItem(POST_LOGIN_ACTION_KEY); } catch {}
+    async function onAuthDone() {
+      try {
+        // riallinea
+        refreshUserFromToken();
+        await refreshCreditsUI();
 
-if (action === "tema_premium") {
-  // login completato: NON far partire premium automaticamente
-  try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
+        // sblocca sempre UI (evita bottone “morto” per race)
+        setLoading(false);
+        setGateLoading(false);
 
-  // opzionale: messaggio UI per dire "ora puoi approfondire"
-  setGateMsg("Accesso completato. Ora puoi cliccare 'Approfondisci con DYANA' quando vuoi.");
-}
-}
+        // chiudi gate e messaggio coerente
+        setEmailGateOpen(false);
+        setGateErr("");
+        setGateMsg("Accesso completato. Ora puoi cliccare “Approfondisci con DYANA” quando vuoi.");
 
+        // compat: se qualcosa ha lasciato pending, lo pulisco (ma NON eseguo nulla)
+        try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
+        try { localStorage.removeItem(AUTH_DONE_KEY); } catch {}
+      } catch (e) {
+        console.warn("[OROSCOPO][AUTH_DONE] errore:", e?.message || e);
+      }
+    }
 
+    function onStorage(e) {
+      if (e?.key === AUTH_DONE_KEY) onAuthDone();
+    }
+    window.addEventListener("storage", onStorage);
 
-  const storageHandler = (e) => {
-    if (e?.key === AUTH_DONE_KEY) onAuthDone();
-  };
+    let bc = null;
+    try {
+      bc = new BroadcastChannel("dyana_auth");
+      bc.onmessage = (ev) => {
+        if (ev?.data?.type === "AUTH_DONE") onAuthDone();
+      };
+    } catch {}
 
-  window.addEventListener("storage", storageHandler);
+    // bootstrap: se key già presente
+    try {
+      const pending = localStorage.getItem(AUTH_DONE_KEY);
+      if (pending) onAuthDone();
+    } catch {}
 
-  // stessa tab: CustomEvent opzionale (se lo usi altrove)
-  const localHandler = (e) => {
-    if (e?.detail?.type === "AUTH_DONE") onAuthDone();
-  };
-  window.addEventListener("dyana:auth", localHandler);
-
-  // BroadcastChannel (se presente)
-  let bc = null;
-  try {
-    bc = new BroadcastChannel("dyana_auth");
-    bc.onmessage = (msg) => {
-      if (msg?.data?.type === "AUTH_DONE") onAuthDone();
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      try { bc && bc.close(); } catch {}
     };
-  } catch {}
-
-  // bootstrap: se hai già auth_done settato, prova a reagire
-  try {
-    const pending = localStorage.getItem(AUTH_DONE_KEY);
-    if (pending) onAuthDone();
-  } catch {}
-
-  return () => {
-    window.removeEventListener("storage", storageHandler);
-    window.removeEventListener("dyana:auth", localHandler);
-    try { bc && bc.close(); } catch {}
-  };
-}, [refreshUserFromToken, refreshCreditsUI, interpretazione]);
+  }, [refreshUserFromToken, refreshCreditsUI]);
 
   function handleLogout() {
     clearToken();
     setUserRole("guest");
     setUserCredits(0);
-    setUserIdForDyana("guest_tema");
+    setUserIdForDyana("guest_oroscopo");
     setGuestTrialLeft(null);
 
-    setPremiumLoaded(false);
+    setPremiumResult(null);
+    setDiyanaOpen(false);
     setEmailGateOpen(false);
     setGateErr("");
     setGateMsg("");
-    setDiyanaOpen(false);
+    setLoading(false);
+    setGateLoading(false);
 
     (async () => {
       await ensureGuestToken();
@@ -315,19 +551,28 @@ if (action === "tema_premium") {
     })();
   }
 
-  // ======================================================
-  // CALL /tema_ai
-  // ======================================================
-  async function callTema({ tier }) {
-    const oraEffettiva = oraIgnota ? null : (form.ora || "");
+  function handleChange(e) {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  }
+
+  function handleOraIgnotaChange(e) {
+    const checked = e.target.checked;
+    setOraIgnota(checked);
+    setForm((prev) => ({ ...prev, ora: checked ? "" : prev.ora }));
+  }
+
+  async function callOroscopo({ tier }) {
+    const slug = mapPeriodoToSlug(form.periodo);
 
     const payload = {
-      citta: form.citta,
-      data_nascita: form.data,
-      ora_nascita: oraEffettiva,
       nome: form.nome || null,
+      citta: form.citta,
+      data: form.data,
+      ora: oraIgnota ? null : form.ora,
+      email: null,
+      domanda: null,
       tier, // free | premium
-      ora_ignota: oraIgnota,
     };
 
     let token = await getAnyAuthTokenAsync();
@@ -335,12 +580,12 @@ if (action === "tema_premium") {
 
     const headers = {
       "Content-Type": "application/json",
-      "X-Client-Source": "dyana_web/tema",
+      "X-Client-Source": "dyana_web/oroscopo",
       "X-Client-Session": sessionId,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
 
-    const res = await fetch(`${API_BASE}/tema_ai`, {
+    const res = await fetch(`${API_BASE}/oroscopo_ai/${slug}`, {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
@@ -354,136 +599,20 @@ if (action === "tema_premium") {
       data = { raw: text };
     }
 
-    return { res, data };
+    return { res, data, slug };
   }
 
-  // ======================================================
-  // Apply response (parsing invariato)
-  // ======================================================
-  function applyTemaResponse(data) {
-    setRisultato(data);
-
-    if (data?.billing) {
-      setBilling(data.billing);
-      const remaining = data.billing.remaining_credits;
-      if (typeof remaining === "number") {
-        setUserCredits(remaining);
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(
-            new CustomEvent("dyana-credits-updated", {
-              detail: {
-                feature: "tema_ai",
-                remaining_credits: remaining,
-                billing_mode: data.billing.mode,
-              },
-            })
-          );
-          window.dispatchEvent(
-            new CustomEvent("dyana:refresh-credits", {
-              detail: {
-                feature: "tema_ai",
-                remaining_credits: remaining,
-                billing_mode: data.billing.mode,
-              },
-            })
-          );
-        }
-      }
-    } else {
-      setBilling(null);
-    }
-
-    const chartBase64 = data?.chart_png_base64 || data?.tema_vis?.chart_png_base64 || null;
-    const graficoJson = data?.tema_vis?.grafico || null;
-
-    const metaVis = (data?.tema_vis && data.tema_vis.meta) || data?.tema_meta || null;
-    const pianetiVis = data?.tema_vis?.pianeti || [];
-    const aspettiVis = data?.tema_vis?.aspetti || [];
-
-    if (chartBase64 || graficoJson || metaVis || pianetiVis.length > 0 || aspettiVis.length > 0) {
-      setTemaVis({
-        chart_png_base64: chartBase64,
-        grafico: graficoJson,
-        meta: metaVis,
-        pianeti: pianetiVis,
-        aspetti: aspettiVis,
-      });
-    } else {
-      setTemaVis(null);
-    }
-
-// ---- Parsing robusto (supporta più shape di response) ----
-
-// content può arrivare in vari posti a seconda del backend
-const content =
-  data?.result?.content ||
-  data?.tema_ai?.content ||
-  data?.content ||
-  data?.result ||
-  data?.tema_ai ||
-  null;
-
-setContenuto(content);
-
-// interpretazione: prova più chiavi possibili
-const profiloGenerale =
-  content?.profilo_generale ||
-  content?.interpretazione ||
-  data?.tema_ai?.profilo_generale ||
-  data?.result?.content?.profilo_generale ||
-  "";
-
-setInterpretazione(
-  profiloGenerale || "Interpretazione non disponibile (profilo_generale vuoto)."
-);
-
-// meta può arrivare in result.meta oppure in payload_ai.meta oppure in tema_ai.meta
-const meta =
-  data?.result?.meta ||
-  data?.payload_ai?.meta ||
-  data?.tema_ai?.meta ||
-  content?.meta ||
-  {};
-
-const readingIdFromBackend =
-  meta.reading_id || meta.id || `tema_${Date.now()}`;
-
-setReadingId(readingIdFromBackend);
-setReadingPayload(data);
-
-const kbFromBackend =
-  meta.kb_tags ||
-  meta.kb ||
-  ["tema_natale"];
-
-setKbTags(kbFromBackend);
-
-  }
-
-  // ======================================================
-  // FREE (sempre primo step)
-  // ======================================================
   async function generaFree() {
     setLoading(true);
     setErrore("");
     setNoCredits(false);
-
-    setDiyanaOpen(false);
     setEmailGateOpen(false);
     setGateErr("");
-    setGateMsg("");
-
-    setPremiumLoaded(false);
-
-    setInterpretazione("");
-    setContenuto(null);
-    setRisultato(null);
-    setBilling(null);
-    setTemaVis(null);
+    setDiyanaOpen(false);
+    setPremiumResult(null);
 
     try {
-      const { res, data } = await callTema({ tier: "free" });
-
+      const { res, data } = await callOroscopo({ tier: "free" });
       if (!res.ok) {
         const msg =
           (data && (data.error || data.detail || data.message)) ||
@@ -491,8 +620,7 @@ setKbTags(kbFromBackend);
         setErrore(typeof msg === "string" ? msg : "Errore nella generazione.");
         return;
       }
-
-      applyTemaResponse(data);
+      setFreeResult(data);
       await refreshCreditsUI();
     } catch (e) {
       setErrore("Impossibile comunicare con il server. Controlla la connessione e riprova.");
@@ -501,9 +629,6 @@ setKbTags(kbFromBackend);
     }
   }
 
-  // ======================================================
-  // PREMIUM (secondo step via CTA)
-  // ======================================================
   async function generaPremium() {
     setLoading(true);
     setErrore("");
@@ -511,7 +636,7 @@ setKbTags(kbFromBackend);
     setGateErr("");
 
     try {
-      const { res, data } = await callTema({ tier: "premium" });
+      const { res, data } = await callOroscopo({ tier: "premium" });
 
       if (!res.ok) {
         const errorCode = data?.error_code || data?.code || data?.error || data?.detail;
@@ -535,9 +660,8 @@ setKbTags(kbFromBackend);
         return;
       }
 
-      applyTemaResponse(data);
-      setPremiumLoaded(true);
-
+      setPremiumResult(data);
+      try { clearOroscopoDraft(); } catch {}
       setEmailGateOpen(false);
       setDiyanaOpen(false);
       await refreshCreditsUI();
@@ -548,42 +672,41 @@ setKbTags(kbFromBackend);
     }
   }
 
-  // ======================================================
-  // Gate open / Approfondisci click
-  // ======================================================
   function openEmailGate() {
     setGateErr("");
     setGateLoading(false);
-setGateMode(guestTrialLeft === 0 ? "magic" : "register");
+
+    // ✅ default coerente:
+    // - trial=0: magic (serve login)
+    // - trial=1: register (ma puoi comunque inviare magic-link best-effort)
+    setGateMode(guestTrialLeft === 0 ? "magic" : "register");
+
     setEmailGateOpen(true);
 
-const trial = guestTrialLeft;
-
-if (trial === 0) {
-  setGateMsg("Hai finito la prova gratuita. Per continuare, accedi: puoi ricevere un link via email oppure usare password.");
-} else {
-  setGateMsg("Inserisci la tua email per continuare. Genero subito il Premium; in parallelo ti invio un link per salvare l’accesso.");
-}
-
+    const trial = guestTrialLeft;
+    if (trial === 0) {
+      setGateMsg("Hai finito la prova gratuita. Entra con Email+Link, Accedi o Iscriviti. Poi torni qui e clicchi “Approfondisci”.");
+    } else {
+      setGateMsg("Inserisci la tua email per continuare: avvio la lettura Premium e, se possibile, ti invio anche un link per salvare l’accesso.");
+    }
   }
 
   async function handleApprofondisciClick() {
     setErrore("");
     setNoCredits(false);
 
-    if (premiumLoaded) return;
+    if (premiumResult) return;
 
+    // ✅ logged-in -> paga e genera premium
     if (isLoggedIn) {
       await generaPremium();
       return;
     }
 
+    // guest -> gate
     openEmailGate();
   }
 
-  // ======================================================
-  // Submit gate
-  // ======================================================
   async function submitInlineAuth(e) {
     e.preventDefault();
 
@@ -601,65 +724,60 @@ if (trial === 0) {
         localStorage.setItem("dyana_pending_email", email);
       } catch {}
 
-      setResumeTarget({ path: "/tema", readingId: "tema_inline" });
+      setResumeTarget({ path: "/oroscopo", readingId: "oroscopo_inline" });
 
-// TRIAL ESAURITO → serve login vero (password o magic link)
-if (guestTrialLeft === 0) {
-  // 1) Se sceglie magic link: invio link e basta.
-if (gateMode === "magic") {
-  setGateErr("");
-  setGateErr("");
+      const redirectUrl =
+        (typeof window !== "undefined" && window.location?.origin)
+          ? `${window.location.origin.replace(/\/+$/, "")}/auth/callback`
+          : "https://dyana.app/auth/callback";
 
-  const siteBase = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
-  const redirectUrl = `${siteBase}/auth/callback`;
+      // --------------------------------------------------
+      // TRIAL ESAURITO -> serve login (magic / login / register)
+      // --------------------------------------------------
+      if (guestTrialLeft === 0) {
+        if (gateMode === "magic") {
+          setGateMsg("Link inviato. Aprilo dalla tua email per entrare. Poi torna qui e clicca “Approfondisci con DYANA”.");
+          setGateErr("");
 
-  // quando torni dal callback, potrai fare premium (se la free è presente)
-  try { localStorage.setItem(POST_LOGIN_ACTION_KEY, "tema_premium"); } catch {}
+          // IMPORTANTISSIMO: NON setto POST_LOGIN_ACTION_KEY, niente auto-premium.
+          try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
 
-  await sendAuthMagicLink(email, redirectUrl);
+          await sendAuthMagicLink(email, redirectUrl);
+          return;
+        }
 
-  // Messaggio corretto (non "sto generando")
-  setGateMsg("Link inviato. Apri l’email e clicca il link di accesso per completare. Poi torna qui: “Approfondisci” funzionerà.");
-  setGateLoading(false);
-  return;
-}
+        if (gateMode === "login") {
+          if (!gatePass) {
+            setGateErr("Inserisci la password per accedere.");
+            return;
+          }
+          await loginWithCredentials(email, gatePass);
+        } else {
+          if (!gatePass || gatePass.length < 6) {
+            setGateErr("La password deve essere lunga almeno 6 caratteri.");
+            return;
+          }
+          if (gatePass !== gatePass2) {
+            setGateErr("Le password non coincidono.");
+            return;
+          }
+          await registerWithEmail(email, gatePass);
+        }
 
-  // 2) Altrimenti password login/register
-  if (gateMode === "login") {
-    if (!gatePass) {
-      setGateErr("Inserisci la password per accedere.");
-      return;
-    }
-    await loginWithCredentials(email, gatePass);
-  } else {
-    if (!gatePass || gatePass.length < 6) {
-      setGateErr("La password deve essere lunga almeno 6 caratteri.");
-      return;
-    }
-    if (gatePass !== gatePass2) {
-      setGateErr("Le password non coincidono.");
-      return;
-    }
-    await registerWithEmail(email, gatePass);
-  }
+        // Ora sei loggato: sblocco UI e invito al click (nessun auto-run)
+        refreshUserFromToken();
+        await refreshCreditsUI();
+        setGateMsg("Accesso completato. Ora puoi cliccare “Approfondisci con DYANA” quando vuoi.");
+        setEmailGateOpen(false);
+        return;
+      }
 
-  // segna azione post-login e procedi subito (perché ora ho token)
-  try { localStorage.setItem(POST_LOGIN_ACTION_KEY, "tema_premium"); } catch {}
+      // --------------------------------------------------
+      // TRIAL DISPONIBILE -> premium subito + magic link best-effort
+      // --------------------------------------------------
+      setGateMsg("Sto generando la lettura Premium…");
 
-  refreshUserFromToken();
-  await refreshCreditsUI();
-  await generaPremium();
-  return;
-}
-
-
-      // TRIAL DISPONIBILE → premium subito + magic link best-effort
-      setGateMsg("Attendi, sto generando il tuo Tema…");
-
-      const siteBase = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
-      const redirectUrl = `${siteBase}/auth/callback`;
-
-      // marketing consent: SOLO se token utente registrato valido
+      // marketing consent: SOLO utente loggato (mai guest)
       try {
         const userToken = getToken();
         if (userToken) {
@@ -674,15 +792,17 @@ if (gateMode === "magic") {
           }
         }
       } catch (err) {
-        console.warn("[TEMA][INLINE-AUTH] updateMarketingConsent fallito (non blocco):", err?.message || err);
+        console.warn("[INLINE-AUTH] updateMarketingConsent fallito (non blocco):", err?.message || err);
       }
 
+      // magic link best-effort (non blocca)
       try {
         await sendAuthMagicLink(email, redirectUrl);
       } catch (err) {
-        console.warn("[TEMA][INLINE-AUTH] magic link non inviato (non blocco):", err?.message || err);
+        console.warn("[INLINE-AUTH] magic link non inviato (non blocco):", err?.message || err);
       }
 
+      // avvio subito premium (trial)
       await generaPremium();
       await refreshCreditsUI();
       return;
@@ -694,21 +814,59 @@ if (gateMode === "magic") {
   }
 
   // ==========================
-  // URL Typebot
+  // DERIVATE UI
   // ==========================
+  const currentCost = PERIOD_COSTS[form.periodo] != null ? PERIOD_COSTS[form.periodo] : 0;
+
+  const freeTier = freeResult?.oroscopo_ai?.meta?.tier || "free";
+  const freeAi =
+    freeResult?.oroscopo_ai?.content ||
+    freeResult?.oroscopo_ai ||
+    freeResult?.content ||
+    freeResult ||
+    null;
+
+  const freeText = freeAi ? buildInterpretazioneTesto(freeAi, freeTier) : "";
+  const hasFree = !!freeResult;
+
+  const freePeriodoKey = freeResult?.engine_result?.periodo_ita || form.periodo || "giornaliero";
+  const freePeriodBlock =
+    freeResult?.payload_ai?.periodi && freeResult.payload_ai.periodi[freePeriodoKey]
+      ? freeResult.payload_ai.periodi[freePeriodoKey]
+      : null;
+  const freeMetriche = freePeriodBlock?.metriche_grafico || null;
+  const freeAspetti = Array.isArray(freePeriodBlock?.aspetti_rilevanti) ? freePeriodBlock.aspetti_rilevanti : [];
+
+  const premiumTier = premiumResult?.oroscopo_ai?.meta?.tier || "premium";
+  const premiumAi =
+    premiumResult?.oroscopo_ai?.content ||
+    premiumResult?.oroscopo_ai ||
+    premiumResult?.content ||
+    premiumResult ||
+    null;
+
+  const hasPremium = !!premiumResult;
+  const premiumText = premiumAi ? buildInterpretazioneTesto(premiumAi, premiumTier) : "";
+
+  const premiumPeriodoKey = premiumResult?.engine_result?.periodo_ita || form.periodo || "giornaliero";
+  const premiumPeriodBlock =
+    premiumResult?.payload_ai?.periodi && premiumResult.payload_ai.periodi[premiumPeriodoKey]
+      ? premiumResult.payload_ai.periodi[premiumPeriodoKey]
+      : null;
+  const premiumMetriche = premiumPeriodBlock?.metriche_grafico || null;
+  const premiumAspetti = Array.isArray(premiumPeriodBlock?.aspetti_rilevanti) ? premiumPeriodBlock.aspetti_rilevanti : [];
+
   const typebotUrl = useMemo(() => {
     const baseUrl = `https://typebot.co/${TYPEBOT_DYANA_ID}`;
     try {
       const params = new URLSearchParams();
-
       if (userIdForDyana) params.set("user_id", userIdForDyana);
       if (sessionId) params.set("session_id", sessionId);
+      params.set("reading_id", premiumResult?.oroscopo_ai?.meta?.reading_id || "oroscopo_inline");
+      params.set("reading_type", "oroscopo_ai");
+      params.set("reading_label", `Il tuo oroscopo (${premiumPeriodoKey || "giorno"})`);
 
-      params.set("reading_id", readingId || "tema_inline");
-      params.set("reading_type", "tema_natale");
-      params.set("reading_label", "Il tuo Tema Natale");
-
-      const safeReadingText = (readingTextForDyana || "").slice(0, 6000);
+      const safeReadingText = (premiumText || "").slice(0, 6000);
       if (safeReadingText) params.set("reading_text", safeReadingText);
 
       const qs = params.toString();
@@ -716,7 +874,7 @@ if (gateMode === "magic") {
     } catch {
       return baseUrl;
     }
-  }, [userIdForDyana, sessionId, readingId, readingTextForDyana]);
+  }, [userIdForDyana, sessionId, premiumResult, premiumText, premiumPeriodoKey]);
 
   // ==========================
   // RENDER
@@ -727,102 +885,88 @@ if (gateMode === "magic") {
 
       <section className="landing-wrapper">
         <header className="section">
-          <h1 className="section-title">Calcola il tuo Tema Natale</h1>
+          <h1 className="section-title">Oroscopo dinamico: giorno, settimana, mese, anno.</h1>
           <p className="section-subtitle">
-            Inserisci i tuoi dati di nascita per ottenere una lettura base gratuita.
-            <br />
-            Se vuoi, puoi poi <strong>approfondire</strong> e sbloccare DYANA (Premium).
+            Inserisci i tuoi dati di nascita e scegli il periodo che ti interessa.
           </p>
         </header>
 
-        {/* FORM (solo dati) */}
+        {/* FORM */}
         <section className="section">
           <div className="card" style={{ maxWidth: "650px", margin: "0 auto" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
               <div>
                 <label className="card-text">Nome (opzionale)</label>
                 <input
-                  type="text"
                   name="nome"
                   value={form.nome}
-                  onChange={(e) => setForm({ ...form, nome: e.target.value })}
+                  onChange={handleChange}
                   className="form-input"
-                  placeholder="Come vuoi che ti chiami DYANA?"
+                  placeholder="Come vuoi essere chiamato"
                 />
               </div>
 
-              <div className="form-row" style={{ display: "flex", gap: "16px" }}>
-                <div className="form-field" style={{ flex: 1 }}>
-                  <label htmlFor="data_nascita" className="card-text">
-                    Data di nascita
-                  </label>
-                  <input
-                    id="data_nascita"
-                    type="date"
-                    className="form-input"
-                    value={form.data}
-                    onChange={(e) => setForm((prev) => ({ ...prev, data: e.target.value }))}
-                    required
-                  />
-                </div>
+              <div>
+                <label className="card-text">Città di nascita</label>
+                <input
+                  name="citta"
+                  value={form.citta}
+                  onChange={handleChange}
+                  className="form-input"
+                  placeholder="Es. Milano, Roma, Napoli…"
+                />
+              </div>
 
-                <div className="form-field" style={{ flex: 1 }}>
-                  <label htmlFor="ora_nascita" className="card-text">
-                    Ora di nascita
-                  </label>
+              <div>
+                <label className="card-text">Data di nascita</label>
+                <input
+                  type="date"
+                  name="data"
+                  value={form.data}
+                  onChange={handleChange}
+                  className="form-input"
+                />
+              </div>
+
+              <div>
+                <label className="card-text">Ora di nascita</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
                   <input
-                    id="ora_nascita"
                     type="time"
+                    name="ora"
+                    value={form.ora}
+                    onChange={handleChange}
                     className="form-input"
-                    value={oraIgnota ? "" : (form.ora || "")}
-                    onChange={(e) => setForm((prev) => ({ ...prev, ora: e.target.value }))}
                     disabled={oraIgnota}
-                    required={!oraIgnota}
+                    style={oraIgnota ? { opacity: 0.4, pointerEvents: "none" } : undefined}
                   />
-                </div>
-
-                <div
-                  className="form-field"
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-end",
-                    gap: "8px",
-                    paddingBottom: "4px",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  <input
-                    id="ora_ignota"
-                    type="checkbox"
-                    checked={oraIgnota}
-                    onChange={(e) => setOraIgnota(e.target.checked)}
-                  />
-                  <label htmlFor="ora_ignota" className="card-text">
-                    Ora ignota
+                  <label className="card-text" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem", cursor: "pointer" }}>
+                    <input type="checkbox" checked={oraIgnota} onChange={handleOraIgnotaChange} style={{ width: 14, height: 14 }} />
+                    <span>Non conosco l&apos;ora esatta (uso un oroscopo con ora neutra)</span>
                   </label>
                 </div>
               </div>
 
               <div>
-                <label className="card-text">Luogo di nascita</label>
-                <input
-                  type="text"
-                  name="citta"
-                  value={form.citta}
-                  onChange={(e) => setForm({ ...form, citta: e.target.value })}
-                  className="form-input"
-                  placeholder="Es. Napoli, IT"
-                />
+                <label className="card-text">Periodo</label>
+                <select name="periodo" value={form.periodo} onChange={handleChange} className="form-input">
+                  <option value="giornaliero">Giornaliero</option>
+                  <option value="settimanale">Settimanale</option>
+                  <option value="mensile">Mensile</option>
+                  <option value="annuale">Annuale</option>
+                </select>
+                <p className="card-text" style={{ fontSize: "0.8rem", opacity: 0.75, marginTop: 4 }}>
+                  Scegli se vuoi una fotografia della giornata, della settimana, del mese o dell&apos;anno.
+                </p>
               </div>
 
-              {/* CTA primaria: genera SEMPRE FREE */}
               <button
                 onClick={generaFree}
                 className="btn btn-primary"
                 disabled={loading}
                 style={{ marginTop: "14px" }}
               >
-                {loading ? "Generazione..." : "🔮 Inizia la lettura"}
+                {loading ? "Attendi, sto generando…" : "🔮 Inizia la lettura"}
               </button>
 
               {/* Errori */}
@@ -843,7 +987,7 @@ if (gateMode === "magic") {
                       <>
                         <p>Hai finito la tua prova gratuita.</p>
                         <p style={{ marginTop: 8, fontSize: "0.9rem", opacity: 0.9 }}>
-                          Iscriviti o accedi per continuare.
+                          Iscriviti, accedi o usa Email+Link per continuare.
                         </p>
                       </>
                     )}
@@ -856,184 +1000,47 @@ if (gateMode === "magic") {
           </div>
         </section>
 
-        {/* AVVISO ORA IGNOTA */}
-        {risultato?.input?.ora_ignota && (
-          <section className="section">
-            <div
-              className="card"
-              style={{
-                maxWidth: "850px",
-                margin: "0 auto",
-                border: "1px solid rgba(255,180,180,0.4)",
-                backgroundColor: "#2a1818",
-              }}
-            >
-              <p className="card-text" style={{ color: "#ffb4b4", whiteSpace: "pre-wrap" }}>
-                Ascendente e case astrologiche non sono state calcolate e incluse nell&apos;analisi perché l&apos;ora di nascita non è stata indicata con precisione.
-              </p>
-            </div>
-          </section>
-        )}
-
-        {/* GRAFICO */}
-        {temaVis && temaVis.chart_png_base64 && (
-          <section className="section">
-            <div
-              className="card"
-              style={{
-                maxWidth: "850px",
-                margin: "0 auto",
-                display: "flex",
-                flexDirection: "column",
-                gap: 12,
-              }}
-            >
-              <h3 className="card-title">La tua carta del Tema Natale</h3>
-
-              <div style={{ width: "100%", display: "flex", justifyContent: "center" }}>
-                <div style={{ position: "relative", width: "100%", maxWidth: "560px", paddingTop: "100%" }}>
-                  <img
-                    src={`data:image/png;base64,${temaVis.chart_png_base64}`}
-                    alt="Carta del Tema Natale"
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "contain",
-                      borderRadius: "12px",
-                      display: "block",
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", marginTop: "12px" }}>
-                <div
-                  style={{
-                    flex: 1,
-                    minWidth: "260px",
-                    backgroundColor: "#15191c",
-                    borderRadius: "12px",
-                    border: "1px solid #2c3238",
-                    padding: "16px",
-                  }}
-                >
-                  <h3 style={{ fontSize: "1.05rem", fontWeight: 600, marginBottom: "12px" }}>
-                    Pianeti nel tema natale
-                  </h3>
-
-                  {temaVis?.pianeti && temaVis.pianeti.length > 0 ? (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                      {temaVis.pianeti.map((p) => (
-                        <div
-                          key={p.name}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                            fontSize: "0.9rem",
-                          }}
-                        >
-                          <span style={{ fontSize: "1.3rem" }}>{p.glyph}</span>
-                          <span>{p.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p style={{ fontSize: "0.8rem", opacity: 0.7 }}>
-                      Dati pianeti non disponibili nel payload.
-                    </p>
-                  )}
-                </div>
-
-                <div
-                  style={{
-                    flex: 1,
-                    minWidth: "260px",
-                    backgroundColor: "#15191c",
-                    borderRadius: "12px",
-                    border: "1px solid #2c3238",
-                    padding: "16px",
-                  }}
-                >
-                  <h3 style={{ fontSize: "1.05rem", fontWeight: 600, marginBottom: "12px" }}>
-                    Aspetti principali
-                  </h3>
-
-                  {temaVis?.aspetti && temaVis.aspetti.length > 0 ? (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                      {temaVis.aspetti.map((a, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "10px",
-                            fontSize: "0.9rem",
-                          }}
-                        >
-                          <div style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "1.1rem", minWidth: "70px" }}>
-                            <span>{a.g1}</span>
-                            <span>{a.g_asp}</span>
-                            <span>{a.g2}</span>
-                          </div>
-                          <div style={{ flex: 1 }}>{a.label}</div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p style={{ fontSize: "0.8rem", opacity: 0.7 }}>
-                      Dati aspetti non disponibili nel payload.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* BLOCCO FREE: interpretazione base + CTA upgrade */}
-        {interpretazione && (
+        {/* BLOCCO FREE: visibile solo finché NON c'è premium */}
+        {hasFree && !hasPremium && (
           <section className="section">
             <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
               <h3 className="card-title">La tua sintesi</h3>
-              <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
-                {interpretazione}
-              </p>
 
-              {!premiumLoaded && (
-                <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={handleApprofondisciClick}
-                    disabled={loading}
+              {freeMetriche && <MetricheGrafico metriche={freeMetriche} />}
+              {freeAspetti.length > 0 && <AspettiTable aspetti={freeAspetti} />}
+
+              <h4 className="card-subtitle" style={{ marginTop: 24 }}>Interpretazione</h4>
+              <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>{freeText}</p>
+
+              <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleApprofondisciClick}
+                  disabled={loading}
+                >
+                  {loading ? "Attendi, sto generando…" : "✨ Approfondisci con DYANA"}
+                </button>
+
+                {isLoggedIn && currentCost > 0 && (
+                  <span
+                    className="card-text"
+                    style={{
+                      fontSize: "0.8rem",
+                      opacity: 0.85,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      padding: "6px 10px",
+                      borderRadius: 999,
+                      whiteSpace: "nowrap",
+                    }}
                   >
-                    ✨ Approfondisci con DYANA
-                  </button>
+                    Costo: {currentCost} credito{currentCost === 1 ? "" : "i"}
+                  </span>
+                )}
+              </div>
 
-                  {isLoggedIn && (
-                    <span
-                      className="card-text"
-                      style={{
-                        fontSize: "0.8rem",
-                        opacity: 0.85,
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        padding: "6px 10px",
-                        borderRadius: 999,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      Costo: 2 crediti
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {/* EMAIL GATE INLINE (sparisce appena arriva premium) */}
-              {emailGateOpen && !premiumLoaded && (
+              {/* EMAIL GATE INLINE */}
+              {emailGateOpen && !hasPremium && (
                 <div
                   className="card"
                   style={{
@@ -1043,40 +1050,36 @@ if (gateMode === "magic") {
                   }}
                 >
                   <h4 className="card-subtitle" style={{ marginBottom: 6 }}>
-                    {guestTrialLeft === 0 ? "Hai finito la tua prova gratuita." : "Continua con la tua email"}
+                    {guestTrialLeft === 0 ? "Accesso richiesto" : "Continua con la tua email"}
                   </h4>
-
                   <p className="card-text" style={{ opacity: 0.9 }}>{gateMsg}</p>
 
                   <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
                     {guestTrialLeft === 0 && (
-  <>
-    <button
-      type="button"
-      className={gateMode === "magic" ? "btn btn-primary" : "btn"}
-      onClick={() => setGateMode("magic")}
-    >
-      Email+Link
-    </button>
-
-    <button
-      type="button"
-      className={gateMode === "register" ? "btn btn-primary" : "btn"}
-      onClick={() => setGateMode("register")}
-    >
-      Iscriviti
-    </button>
-
-    <button
-      type="button"
-      className={gateMode === "login" ? "btn btn-primary" : "btn"}
-      onClick={() => setGateMode("login")}
-    >
-      Accedi
-    </button>
-  </>
-)}
-
+                      <>
+                        <button
+                          type="button"
+                          className={gateMode === "magic" ? "btn btn-primary" : "btn"}
+                          onClick={() => setGateMode("magic")}
+                        >
+                          Email+Link
+                        </button>
+                        <button
+                          type="button"
+                          className={gateMode === "register" ? "btn btn-primary" : "btn"}
+                          onClick={() => setGateMode("register")}
+                        >
+                          Iscriviti
+                        </button>
+                        <button
+                          type="button"
+                          className={gateMode === "login" ? "btn btn-primary" : "btn"}
+                          onClick={() => setGateMode("login")}
+                        >
+                          Accedi
+                        </button>
+                      </>
+                    )}
 
                     <button
                       type="button"
@@ -1126,44 +1129,38 @@ if (gateMode === "magic") {
                       </div>
                     )}
 
- {guestTrialLeft === 0 && gateMode !== "magic" && (
-  <>
-    <input
-      className="form-input"
-      type="password"
-      placeholder="Password"
-      value={gatePass}
-      onChange={(e) => setGatePass(e.target.value)}
-      autoComplete="current-password"
-    />
-    {gateMode === "register" && (
-      <input
-        className="form-input"
-        type="password"
-        placeholder="Ripeti password"
-        value={gatePass2}
-        onChange={(e) => setGatePass2(e.target.value)}
-        autoComplete="new-password"
-      />
-    )}
-  </>
-)}
+                    {guestTrialLeft === 0 && gateMode !== "magic" && (
+                      <>
+                        <input
+                          className="form-input"
+                          type="password"
+                          placeholder="Password"
+                          value={gatePass}
+                          onChange={(e) => setGatePass(e.target.value)}
+                          autoComplete="current-password"
+                        />
+                        {gateMode === "register" && (
+                          <input
+                            className="form-input"
+                            type="password"
+                            placeholder="Ripeti password"
+                            value={gatePass2}
+                            onChange={(e) => setGatePass2(e.target.value)}
+                            autoComplete="new-password"
+                          />
+                        )}
+                      </>
+                    )}
 
-
-<button type="submit" className="btn btn-primary" disabled={gateLoading || loading}>
-  {gateLoading
-    ? (guestTrialLeft === 0 && gateMode === "magic"
-        ? "Invio link..."
-        : "Attendi... sto completando")
-    : guestTrialLeft === 0
-    ? (gateMode === "magic"
-        ? "Invia link di accesso"
-        : gateMode === "login"
-        ? "Accedi e continua"
-        : "Iscriviti e continua")
-    : "Continua"}
-</button>
-
+                    <button type="submit" className="btn btn-primary" disabled={gateLoading || loading}>
+                      {gateLoading
+                        ? "Attendi…"
+                        : guestTrialLeft === 0
+                        ? (gateMode === "magic"
+                            ? "Invia link e poi clicca Approfondisci"
+                            : (gateMode === "login" ? "Accedi" : "Iscriviti"))
+                        : "Continua"}
+                    </button>
 
                     {gateErr && <p className="card-text" style={{ color: "#ff9a9a" }}>{gateErr}</p>}
 
@@ -1179,175 +1176,73 @@ if (gateMode === "magic") {
           </section>
         )}
 
-        {/* BLOCCO PREMIUM (si apre sotto; FREE resta sopra) */}
-        {premiumLoaded && contenuto && (
+        {/* BLOCCO PREMIUM */}
+        {hasPremium && (
           <section className="section">
             <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
               <h3 className="card-title">La tua lettura completa</h3>
 
-              {capitoliArray.length > 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                  {capitoliArray.map((cap, idx) => {
-                    const titolo = cap.titolo || `Capitolo ${idx + 1}`;
-                    const testo = cap.testo || cap.contenuto || cap.testo_breve || "";
-                    if (!testo) return null;
-                    return (
-                      <div key={`${titolo}-${idx}`}>
-                        <h4 className="card-text" style={{ fontWeight: 600, marginBottom: 4 }}>
-                          {titolo}
-                        </h4>
-                        <p className="card-text" style={{ whiteSpace: "pre-wrap", marginBottom: 8 }}>
-                          {testo}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                  {Object.entries(sectionLabels).map(([key, label]) => {
-                    const text = contenuto?.[key];
-                    if (!text) return null;
-                    return (
-                      <div key={key}>
-                        <h4 className="card-text" style={{ fontWeight: 600, marginBottom: 4 }}>
-                          {label}
-                        </h4>
-                        <p className="card-text" style={{ whiteSpace: "pre-wrap", marginBottom: 8 }}>
-                          {text}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              {premiumMetriche && <MetricheGrafico metriche={premiumMetriche} />}
+              {premiumAspetti.length > 0 && <AspettiTable aspetti={premiumAspetti} />}
+
+              <h4 className="card-subtitle" style={{ marginTop: 24 }}>Interpretazione</h4>
+              <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
+                {premiumText || "Lettura completata. (Testo non disponibile in questo formato risposta.)"}
+              </p>
             </div>
           </section>
         )}
 
         {/* BLOCCO DYANA Q&A: solo se premium presente */}
-        {premiumLoaded && hasReading && readingTextForDyana && (
- <section className="section">
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "center",
-                marginTop: 32,
-              }}
-            >
+        {hasPremium && (
+          <section className="section">
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 32 }}>
               <div
                 className="card"
                 style={{
+                  maxWidth: 950,
                   width: "100%",
-                  maxWidth: "960px",
-                  padding: "22px 24px",
                   border: "1px solid rgba(255,255,255,0.08)",
                   boxShadow: "0 18px 40px rgba(0,0,0,0.75)",
                 }}
               >
-                <p
-                  className="card-text"
-                  style={{
-                    fontSize: "0.8rem",
-                    opacity: 0.8,
-                    marginBottom: 4,
-                  }}
-                >
+                <p className="card-text" style={{ fontSize: "0.8rem", opacity: 0.8, marginBottom: 4 }}>
                   DYANA • Q&amp;A sul tuo Oroscopo
                 </p>
 
-{premiumLoaded ? (
-  <>
-                    <h3 className="card-title" style={{ marginBottom: 6 }}>
-                      Hai domande su questa lettura?
-                    </h3>
+                <h3 className="card-title" style={{ marginBottom: 6 }}>
+                  Hai domande su questa lettura?
+                </h3>
 
-                    <p
-                      className="card-text"
-                      style={{ marginBottom: 4, opacity: 0.9 }}
-                    >
-                      DYANA conosce già l&apos;oroscopo che hai appena generato
-                      e può aiutarti a capire meglio cosa sta emergendo nel tuo
-                      cielo in questo periodo.
-                    </p>
+                <p className="card-text" style={{ marginBottom: 4, opacity: 0.9 }}>
+                  DYANA conosce già l&apos;oroscopo che hai appena generato e può aiutarti a interpretarlo meglio.
+                </p>
 
-                    <p
-                      className="card-text"
-                      style={{ fontSize: "0.9rem", opacity: 0.8 }}
-                    >
-                      Con questa lettura <strong>Premium</strong> hai a
-                      disposizione{" "}
-                      <strong>2 domande di chiarimento</strong> incluse.
-                      Successivamente potrai usare i tuoi crediti per sbloccare
-                      altre domande extra.
-                    </p>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ marginTop: 16 }}
+                  onClick={() => setDiyanaOpen((prev) => !prev)}
+                >
+                  {diyanaOpen ? "Chiudi DYANA" : "Chiedi a DYANA"}
+                </button>
 
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      style={{ marginTop: 16 }}
-                      onClick={() => {
-                        setDiyanaOpen((prev) => !prev);
-                      }}
-                    >
-                      {diyanaOpen ? "Chiudi DYANA" : "Chiedi a DYANA"}
-                    </button>
-
-                    {diyanaOpen && (
-                      <div
-                        style={{
-                          marginTop: 16,
-                          width: "100%",
-                          height: "600px",
-                          borderRadius: "14px",
-                          overflow: "hidden",
-                          border: "1px solid rgba(255,255,255,0.12)",
-                          boxShadow: "0 22px 48px rgba(0,0,0,0.75)",
-                        }}
-                      >
-                        <iframe
-                          src={typebotUrl}
-                          style={{
-                            border: "none",
-                            width: "100%",
-                            height: "100%",
-                          }}
-                          allow="clipboard-write; microphone; camera"
-                        />
-                      </div>
-                    )}
-
-                    <p
-                      className="card-text"
-                      style={{
-                        marginTop: 8,
-                        fontSize: "0.75rem",
-                        opacity: 0.65,
-                        textAlign: "right",
-                      }}
-                    >
-                      DYANA risponde solo su questo oroscopo, non su altri
-                      argomenti generici.
-                    </p>
-                  </>
-                ) : (
-                  <p
-                    className="card-text"
-                    style={{
-                      marginTop: 8,
-                      fontSize: "0.9rem",
-                      opacity: 0.9,
-                    }}
-                  >
-                    Hai domande su questa lettura? Effettua una lettura{" "}
-                    <strong>Premium</strong> per fare domande a DYANA e ottenere
-                    risposte personalizzate sul tuo oroscopo.
-                  </p>
+                {diyanaOpen && (
+                  <div style={{ marginTop: 16, width: "100%", height: 560, borderRadius: 18, overflow: "hidden" }}>
+                    <iframe
+                      src={typebotUrl}
+                      style={{ border: "none", width: "100%", height: "100%" }}
+                      allow="clipboard-write; microphone; camera"
+                    />
+                  </div>
                 )}
+
+                <p className="card-text" style={{ marginTop: 8, fontSize: "0.75rem", opacity: 0.65, textAlign: "right" }}>
+                  DYANA risponde solo su questo oroscopo, non su argomenti generici.
+                </p>
               </div>
             </div>
           </section>
-
         )}
       </section>
     </main>
