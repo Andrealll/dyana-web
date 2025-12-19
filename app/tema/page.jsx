@@ -21,7 +21,7 @@ import {
 // ==========================
 // COSTANTI GLOBALI
 // ==========================
-const TYPEBOT_DYANA_ID = "diyana-ai";
+const TYPEBOT_DYANA_ID = "dyana-ai";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ||
@@ -32,7 +32,9 @@ const API_BASE =
     : "https://chatbot-test-0h4o.onrender.com");
 
 const ASTROBOT_JWT_TEMA = process.env.NEXT_PUBLIC_ASTROBOT_JWT_TEMA || "";
-
+const OROSCOPO_DRAFT_KEY = "dyana_oroscopo_draft_v1"; // non usata qui, ok lasciarla
+const AUTH_DONE_KEY = "dyana_auth_done";
+const POST_LOGIN_ACTION_KEY = "dyana_post_login_action";
 if (typeof window !== "undefined") {
   console.log("[DYANA] API_BASE runtime:", API_BASE);
 }
@@ -120,8 +122,7 @@ export default function TemaPage() {
 
   // Email gate inline (allineato a Oroscopo)
   const [emailGateOpen, setEmailGateOpen] = useState(false);
-  const [gateMode, setGateMode] = useState("register"); // register | login
-  const [gateEmail, setGateEmail] = useState("");
+const [gateMode, setGateMode] = useState("magic"); // magic | register | login  const [gateEmail, setGateEmail] = useState("");
   const [gatePass, setGatePass] = useState("");
   const [gatePass2, setGatePass2] = useState("");
   const [gateMsg, setGateMsg] = useState("");
@@ -224,13 +225,62 @@ export default function TemaPage() {
     }
   }, []);
 
-  useEffect(() => {
+useEffect(() => {
+  if (typeof window === "undefined") return;
+
+  async function onAuthDone() {
+    // appena autenticato: riallinea UI
     refreshUserFromToken();
-    (async () => {
-      await ensureGuestToken();
-      await refreshCreditsUI();
-    })();
-  }, [refreshUserFromToken, refreshCreditsUI]);
+    await refreshCreditsUI();
+
+    // chiudi gate (se aperto)
+    setEmailGateOpen(false);
+    setGateErr("");
+    setGateMsg("");
+
+    // se era richiesto un’azione post login, eseguila
+    let action = null;
+    try { action = localStorage.getItem(POST_LOGIN_ACTION_KEY); } catch {}
+    if (action === "tema_premium") {
+      try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
+      // lancia premium ORA
+      await generaPremium();
+    }
+  }
+
+  const storageHandler = (e) => {
+    if (e?.key === AUTH_DONE_KEY) onAuthDone();
+  };
+
+  window.addEventListener("storage", storageHandler);
+
+  // stessa tab: CustomEvent opzionale (se lo usi altrove)
+  const localHandler = (e) => {
+    if (e?.detail?.type === "AUTH_DONE") onAuthDone();
+  };
+  window.addEventListener("dyana:auth", localHandler);
+
+  // BroadcastChannel (se presente)
+  let bc = null;
+  try {
+    bc = new BroadcastChannel("dyana_auth");
+    bc.onmessage = (msg) => {
+      if (msg?.data?.type === "AUTH_DONE") onAuthDone();
+    };
+  } catch {}
+
+  // bootstrap: se hai già auth_done settato, prova a reagire
+  try {
+    const pending = localStorage.getItem(AUTH_DONE_KEY);
+    if (pending) onAuthDone();
+  } catch {}
+
+  return () => {
+    window.removeEventListener("storage", storageHandler);
+    window.removeEventListener("dyana:auth", localHandler);
+    try { bc && bc.close(); } catch {}
+  };
+}, [refreshUserFromToken, refreshCreditsUI]);
 
   function handleLogout() {
     clearToken();
@@ -537,31 +587,56 @@ setKbTags(kbFromBackend);
 
       setResumeTarget({ path: "/tema", readingId: "tema_inline" });
 
-      // TRIAL ESAURITO → password login/register
-      if (guestTrialLeft === 0) {
-        if (gateMode === "login") {
-          if (!gatePass) {
-            setGateErr("Inserisci la password per accedere.");
-            return;
-          }
-          await loginWithCredentials(email, gatePass);
-        } else {
-          if (!gatePass || gatePass.length < 6) {
-            setGateErr("La password deve essere lunga almeno 6 caratteri.");
-            return;
-          }
-          if (gatePass !== gatePass2) {
-            setGateErr("Le password non coincidono.");
-            return;
-          }
-          await registerWithEmail(email, gatePass);
-        }
+// TRIAL ESAURITO → serve login vero (password o magic link)
+if (guestTrialLeft === 0) {
+  // 1) Se sceglie magic link: invio link e basta.
+  if (gateMode === "magic") {
+    setGateMsg("Ti ho inviato un link di accesso. Aprilo dalla mail per continuare qui.");
+    setGateErr("");
 
-        refreshUserFromToken();
-        await refreshCreditsUI();
-        await generaPremium();
-        return;
-      }
+    const siteBase = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
+    const redirectUrl = `${siteBase}/auth/callback`;
+
+    // salva azione post login: quando torna dal callback, parte premium
+    try {
+      localStorage.setItem(POST_LOGIN_ACTION_KEY, "tema_premium");
+    } catch {}
+
+    await sendAuthMagicLink(email, redirectUrl);
+
+    // non posso fare premium subito: non ho JWT user ancora
+    setGateLoading(false);
+    return;
+  }
+
+  // 2) Altrimenti password login/register
+  if (gateMode === "login") {
+    if (!gatePass) {
+      setGateErr("Inserisci la password per accedere.");
+      return;
+    }
+    await loginWithCredentials(email, gatePass);
+  } else {
+    if (!gatePass || gatePass.length < 6) {
+      setGateErr("La password deve essere lunga almeno 6 caratteri.");
+      return;
+    }
+    if (gatePass !== gatePass2) {
+      setGateErr("Le password non coincidono.");
+      return;
+    }
+    await registerWithEmail(email, gatePass);
+  }
+
+  // segna azione post-login e procedi subito (perché ora ho token)
+  try { localStorage.setItem(POST_LOGIN_ACTION_KEY, "tema_premium"); } catch {}
+
+  refreshUserFromToken();
+  await refreshCreditsUI();
+  await generaPremium();
+  return;
+}
+
 
       // TRIAL DISPONIBILE → premium subito + magic link best-effort
       setGateMsg("Attendi, sto generando il tuo Tema…");
@@ -960,23 +1035,33 @@ setKbTags(kbFromBackend);
 
                   <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
                     {guestTrialLeft === 0 && (
-                      <>
-                        <button
-                          type="button"
-                          className={gateMode === "register" ? "btn btn-primary" : "btn"}
-                          onClick={() => setGateMode("register")}
-                        >
-                          Iscriviti
-                        </button>
-                        <button
-                          type="button"
-                          className={gateMode === "login" ? "btn btn-primary" : "btn"}
-                          onClick={() => setGateMode("login")}
-                        >
-                          Accedi
-                        </button>
-                      </>
-                    )}
+  <>
+    <button
+      type="button"
+      className={gateMode === "magic" ? "btn btn-primary" : "btn"}
+      onClick={() => setGateMode("magic")}
+    >
+      Email+Link
+    </button>
+
+    <button
+      type="button"
+      className={gateMode === "register" ? "btn btn-primary" : "btn"}
+      onClick={() => setGateMode("register")}
+    >
+      Iscriviti
+    </button>
+
+    <button
+      type="button"
+      className={gateMode === "login" ? "btn btn-primary" : "btn"}
+      onClick={() => setGateMode("login")}
+    >
+      Accedi
+    </button>
+  </>
+)}
+
 
                     <button
                       type="button"
@@ -1026,28 +1111,29 @@ setKbTags(kbFromBackend);
                       </div>
                     )}
 
-                    {guestTrialLeft === 0 && (
-                      <>
-                        <input
-                          className="form-input"
-                          type="password"
-                          placeholder="Password"
-                          value={gatePass}
-                          onChange={(e) => setGatePass(e.target.value)}
-                          autoComplete="current-password"
-                        />
-                        {gateMode === "register" && (
-                          <input
-                            className="form-input"
-                            type="password"
-                            placeholder="Ripeti password"
-                            value={gatePass2}
-                            onChange={(e) => setGatePass2(e.target.value)}
-                            autoComplete="new-password"
-                          />
-                        )}
-                      </>
-                    )}
+ {guestTrialLeft === 0 && gateMode !== "magic" && (
+  <>
+    <input
+      className="form-input"
+      type="password"
+      placeholder="Password"
+      value={gatePass}
+      onChange={(e) => setGatePass(e.target.value)}
+      autoComplete="current-password"
+    />
+    {gateMode === "register" && (
+      <input
+        className="form-input"
+        type="password"
+        placeholder="Ripeti password"
+        value={gatePass2}
+        onChange={(e) => setGatePass2(e.target.value)}
+        autoComplete="new-password"
+      />
+    )}
+  </>
+)}
+
 
                     <button type="submit" className="btn btn-primary" disabled={gateLoading || loading}>
                       {gateLoading
