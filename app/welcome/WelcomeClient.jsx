@@ -2,16 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { verifyMagicLink, saveToken, fetchCreditsState } from "../../lib/authClient";
+import { fetchCreditsState, getAnyAuthTokenAsync } from "../../lib/authClient";
 
 export default function WelcomeClient() {
   const router = useRouter();
   const sp = useSearchParams();
-  const ml = sp.get("ml");
 
+  const mode = sp?.get("mode") || "back"; // new | back
   const [status, setStatus] = useState("loading"); // loading | ok | error
   const [error, setError] = useState("");
-  const [credits, setCredits] = useState(0);
+  const [credits, setCredits] = useState(null);
 
   const resumeUrl = useMemo(() => {
     try {
@@ -32,22 +32,20 @@ export default function WelcomeClient() {
   }
 
   useEffect(() => {
-    async function finalize() {
-      if (!ml) {
-        setStatus("error");
-        setError("Link mancante.");
-        return;
-      }
-
+    async function load() {
       try {
-        const data = await verifyMagicLink(ml);
-        if (!data?.access_token) throw new Error("Token non presente nella risposta.");
-
-        saveToken(data.access_token);
+        // Qui NON verifichiamo il link: lo fa /auth/callback.
+        const token = await getAnyAuthTokenAsync?.();
+        if (!token) {
+          setStatus("error");
+          setError("Sessione non trovata. Richiedi un nuovo link di accesso.");
+          return;
+        }
 
         try {
-          const st = await fetchCreditsState(data.access_token);
+          const st = await fetchCreditsState(token);
           if (typeof st?.remaining_credits === "number") setCredits(st.remaining_credits);
+          else if (typeof st?.credits === "number") setCredits(st.credits);
         } catch {}
 
         setStatus("ok");
@@ -57,59 +55,85 @@ export default function WelcomeClient() {
       }
     }
 
-    finalize();
-  }, [ml]);
+    load();
+  }, []);
+
+  if (status === "loading") {
+    return (
+      <div className="card">
+        <h1 className="card-title">Sto completando l’accesso…</h1>
+        <p className="card-text" style={{ opacity: 0.85 }}>Un momento.</p>
+      </div>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <div className="card">
+        <h1 className="card-title">Non riesco a completare l’accesso</h1>
+        <p className="card-text" style={{ color: "#ff9a9a" }}>{error}</p>
+        <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => router.push("/login")}>
+          Vai al login
+        </button>
+      </div>
+    );
+  }
+
+  // ok
+  const title = mode === "new" ? "Benvenuto su DYANA" : "Bentornato su DYANA";
 
   return (
     <div className="card">
-      {status === "loading" && (
+      <h1 className="card-title">{title}</h1>
+
+      {mode === "new" ? (
         <>
-          <h1 className="card-title">Sto completando l’accesso…</h1>
-          <p className="card-text" style={{ opacity: 0.85 }}>Un momento.</p>
+          <p className="card-text" style={{ opacity: 0.9 }}>
+            Accesso completato.
+          </p>
+          <p className="card-text" style={{ opacity: 0.9 }}>
+            Hai dei <strong>crediti gratuiti</strong> per iniziare. Inoltre, riceverai <strong>1 credito gratuito al giorno</strong>.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="card-text" style={{ opacity: 0.9 }}>
+            Accesso completato: ora sei loggato.
+          </p>
+          <p className="card-text" style={{ opacity: 0.9 }}>
+            Puoi continuare da dove eri rimasto.
+          </p>
         </>
       )}
 
-      {status === "error" && (
-        <>
-          <h1 className="card-title">Non riesco a completare l’accesso</h1>
-          <p className="card-text" style={{ color: "#ff9a9a" }}>{error}</p>
-          <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => router.push("/login")}>
-            Vai al login
-          </button>
-        </>
-      )}
+      <p className="card-text" style={{ marginTop: 10 }}>
+        Crediti disponibili: <strong>{credits ?? "—"}</strong>
+      </p>
 
-      {status === "ok" && (
-        <>
-          <h1 className="card-title">Benvenuto su DYANA</h1>
-          <p className="card-text">Accesso completato. Crediti: {credits}</p>
-
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
+        {mode === "back" && (
           <button
             className="btn btn-primary"
-            style={{ marginTop: 16 }}
-            onClick={() => {
-              clearResume();
-              router.push("/");
-            }}
-          >
-            Torna alla home
-          </button>
-
-          {/* Se vuoi davvero tornare alla lettura, scommenta:
-          <button
-            className="btn"
-            style={{ marginTop: 10 }}
             onClick={() => {
               const target = resumeUrl;
               clearResume();
               router.push(target);
             }}
           >
-            Torna alla tua lettura
+            Continua
           </button>
-          */}
-        </>
-      )}
+        )}
+
+        <button
+          className={mode === "back" ? "btn" : "btn btn-primary"}
+          onClick={() => {
+            clearResume();
+            router.push("/");
+          }}
+        >
+          Torna alla home
+        </button>
+      </div>
     </div>
   );
 }
