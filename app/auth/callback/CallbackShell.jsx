@@ -1,3 +1,4 @@
+// app/auth/callback/CallbackShell.jsx
 "use client";
 
 import DyanaNavbar from "../../../components/DyanaNavbar";
@@ -6,7 +7,9 @@ import { clearToken } from "../../../lib/authClient";
 
 export default function CallbackShell({ children }) {
   function handleLogout() {
-    try { clearToken(); } catch {}
+    try {
+      clearToken();
+    } catch {}
   }
 
   return (
