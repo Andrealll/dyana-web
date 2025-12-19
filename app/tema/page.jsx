@@ -258,12 +258,6 @@ if (action === "tema_premium") {
   // opzionale: messaggio UI per dire "ora puoi approfondire"
   setGateMsg("Accesso completato. Ora puoi cliccare 'Approfondisci con DYANA' quando vuoi.");
 }
-
-    // NON bloccare nulla se manca interpretazione: lascia che l’utente clicchi Approfondisci
-    if (interpretazione) {
-      await generaPremium();
-    }
-  }
 }
 
 
