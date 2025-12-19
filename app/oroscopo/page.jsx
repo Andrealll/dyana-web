@@ -840,9 +840,16 @@ if (gateMode === "magic") {
   const currentCost = PERIOD_COSTS[form.periodo] != null ? PERIOD_COSTS[form.periodo] : 0;
 
   // FREE view
-  const freeTier = freeResult?.oroscopo_ai?.meta?.tier || "free";
-  const freeText = freeResult ? buildInterpretazioneTesto(freeResult.oroscopo_ai, freeTier) : "";
-  const hasFree = !!freeText;
+const freeTier = freeResult?.oroscopo_ai?.meta?.tier || "free";
+const freeAi =
+  freeResult?.oroscopo_ai?.content ||
+  freeResult?.oroscopo_ai ||
+  freeResult?.content ||
+  freeResult ||
+  null;
+
+const freeText = freeAi ? buildInterpretazioneTesto(freeAi, freeTier) : "";
+const hasFree = !!freeResult;
 
   const freePeriodoKey = freeResult?.engine_result?.periodo_ita || form.periodo || "giornaliero";
   const freePeriodBlock =
@@ -853,9 +860,15 @@ if (gateMode === "magic") {
   const freeAspetti = Array.isArray(freePeriodBlock?.aspetti_rilevanti) ? freePeriodBlock.aspetti_rilevanti : [];
 
   // PREMIUM view
-  const premiumTier = premiumResult?.oroscopo_ai?.meta?.tier || "premium";
-  const premiumText = premiumResult ? buildInterpretazioneTesto(premiumResult.oroscopo_ai, premiumTier) : "";
-  const hasPremium = !!premiumText;
+const premiumTier = premiumResult?.oroscopo_ai?.meta?.tier || "premium";
+const premiumAi =
+  premiumResult?.oroscopo_ai?.content ||
+  premiumResult?.oroscopo_ai ||
+  premiumResult?.content ||
+  premiumResult ||
+  null;
+const hasPremium = !!premiumResult;
+const premiumText = premiumAi ? buildInterpretazioneTesto(premiumAi, premiumTier) : "";
 
   const premiumPeriodoKey = premiumResult?.engine_result?.periodo_ita || form.periodo || "giornaliero";
   const premiumPeriodBlock =
@@ -1206,6 +1219,24 @@ function clearOroscopoDraft() {
             </div>
           </section>
         )}
+
+{/* BLOCCO PREMIUM */}
+{hasPremium && (
+  <section className="section">
+    <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
+      <h3 className="card-title">La tua lettura completa</h3>
+
+      {premiumMetriche && <MetricheGrafico metriche={premiumMetriche} />}
+      {premiumAspetti.length > 0 && <AspettiTable aspetti={premiumAspetti} />}
+
+      <h4 className="card-subtitle" style={{ marginTop: 24 }}>Interpretazione</h4>
+      <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
+        {premiumText || "Lettura completata. (Testo non disponibile in questo formato risposta.)"}
+      </p>
+    </div>
+  </section>
+)}
+
 
     {/* BLOCCO DYANA Q&A: solo se premium presente */}
         {hasPremium && (
