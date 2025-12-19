@@ -2,15 +2,13 @@
 
 import DyanaNavbar from "../../components/DyanaNavbar";
 import DyanaFooter from "../../components/DyanaFooter";
-import WelcomeClient from "./WelcomeClient";
 import { clearToken } from "../../lib/authClient";
 
-export default function WelcomeShell() {
+export default function WelcomeShell({ children }) {
   function handleLogout() {
     try {
       clearToken();
     } catch {}
-    // qui non serve altro: la pagina è solo “welcome”
   }
 
   return (
@@ -19,7 +17,7 @@ export default function WelcomeShell() {
 
       <section className="landing-wrapper">
         <section className="section" style={{ maxWidth: 720, margin: "0 auto" }}>
-          <WelcomeClient />
+          {children}
         </section>
       </section>
 
