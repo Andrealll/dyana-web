@@ -646,7 +646,10 @@ setGateMode("magic");
     ? window.location.origin
     : (process.env.NEXT_PUBLIC_SITE_URL || "https://dyana.app");
 
-const redirectUrl = `${String(siteBase).replace(/\/+$/, "")}/auth/callback`;
+const redirectUrl =
+  (typeof window !== "undefined" && window.location?.origin)
+    ? `${window.location.origin.replace(/\/+$/, "")}/auth/callback`
+    : "https://dyana.app/auth/callback";
 
 
         // ✅ MAGIC LINK LOGIN (passwordless)
