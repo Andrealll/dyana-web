@@ -1,9 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+
 import {
+  // ✅ nuovo flow: token_hash -> /auth/magic-link/verify -> JWT DYANA già pronto
+  verifyMagicLink,
+
+  // ✅ vecchio flow (fallback): access_token supabase -> /auth/exchange -> JWT DYANA
   exchangeSupabaseTokenForDyanaJwt,
+
   clearToken,
 } from "../../../lib/authClient";
 
@@ -13,7 +19,7 @@ function readResumeTarget() {
     const qs = localStorage.getItem("dyana_resume_qs") || "";
     const ts = parseInt(localStorage.getItem("dyana_resume_ts") || "0", 10);
 
-    // opzionale: scadenza resume 30 minuti
+    // scadenza resume 30 minuti (opzionale)
     if (ts && Date.now() - ts > 30 * 60 * 1000) return { path: "/" };
 
     return { path, qs };
@@ -22,49 +28,87 @@ function readResumeTarget() {
   }
 }
 
+function clearResumeTarget() {
+  try {
+    localStorage.removeItem("dyana_resume_path");
+    localStorage.removeItem("dyana_resume_qs");
+    localStorage.removeItem("dyana_resume_ts");
+  } catch {}
+}
+
 export default function CallbackClient() {
   const router = useRouter();
+  const sp = useSearchParams();
+
   const [status, setStatus] = useState("loading"); // loading | error
   const [error, setError] = useState("");
 
   useEffect(() => {
     async function run() {
       try {
-        // 1) Leggi access_token dal fragment (come reset password)
-        const hash = typeof window !== "undefined" ? window.location.hash : "";
-        const params = new URLSearchParams(hash.replace("#", ""));
+        // -----------------------------
+        // 1) NUOVO FLOW (consigliato):
+        // /auth/callback?token_hash=...&type=magiclink|signup|recovery|invite
+        // -----------------------------
+        const tokenHash = sp?.get("token_hash");
+        const typeQ = sp?.get("type") || "magiclink";
 
-        const sbAccessToken = params.get("access_token");
-        const type = params.get("type"); // "magiclink" | "recovery" | ...
+        if (tokenHash) {
+          // Questa call:
+          // - verifica con Supabase /auth/v1/verify usando token_hash
+          // - crea JWT DYANA (astrobot_access_token)
+          // - salva token in localStorage (nel tuo authClient)
+          await verifyMagicLink(tokenHash, typeQ);
 
-        if (!sbAccessToken) {
-          throw new Error("Token mancante nel link. Richiedi un nuovo magic link.");
+          const { path, qs } = readResumeTarget();
+          const target = qs ? `${path}?${qs}` : path;
+          clearResumeTarget();
+          router.replace(target);
+          return;
         }
 
-        // 2) Exchange: Supabase token -> JWT DYANA (astrobot_access_token)
-        await exchangeSupabaseTokenForDyanaJwt(sbAccessToken);
+        // -----------------------------
+        // 2) FALLBACK: FLOW SUPABASE HASH
+        // /auth/callback#access_token=...&type=...
+        // (utile se qualcuno arriva da altri template o flow)
+        // -----------------------------
+        const hash = typeof window !== "undefined" ? window.location.hash : "";
+        const hp = new URLSearchParams((hash || "").replace("#", ""));
+        const sbAccessToken = hp.get("access_token");
 
-        // 3) Resume: torna dove era l’utente (pagina compilata)
-        const { path, qs } = readResumeTarget();
-        const target = qs ? `${path}?${qs}` : path;
+        if (sbAccessToken) {
+          await exchangeSupabaseTokenForDyanaJwt(sbAccessToken);
 
-        router.replace(target);
+          const { path, qs } = readResumeTarget();
+          const target = qs ? `${path}?${qs}` : path;
+          clearResumeTarget();
+          router.replace(target);
+          return;
+        }
+
+        // -----------------------------
+        // 3) NIENTE TOKEN: errore
+        // -----------------------------
+        throw new Error("Token mancante nel link. Richiedi un nuovo magic link.");
       } catch (e) {
-        // fallback: pulizia e messaggio
-        try { clearToken(); } catch {}
+        try {
+          clearToken();
+        } catch {}
         setStatus("error");
         setError(e?.message || "Impossibile completare l’accesso.");
       }
     }
 
     run();
-  }, [router]);
+  }, [router, sp]);
 
   if (status === "error") {
     return (
       <div className="card">
         <h1 className="card-title">Errore accesso</h1>
-        <p className="card-text" style={{ color: "#ff9a9a" }}>{error}</p>
+        <p className="card-text" style={{ color: "#ff9a9a" }}>
+          {error}
+        </p>
       </div>
     );
   }
