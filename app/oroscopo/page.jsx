@@ -641,11 +641,6 @@ setGateMode("magic");
       if (guestTrialLeft === 0) {
         console.info("[INLINE-AUTH] trial esaurito → auth");
 
-        const siteBase =
-  (typeof window !== "undefined" && window.location?.origin)
-    ? window.location.origin
-    : (process.env.NEXT_PUBLIC_SITE_URL || "https://dyana.app");
-
 const redirectUrl =
   (typeof window !== "undefined" && window.location?.origin)
     ? `${window.location.origin.replace(/\/+$/, "")}/auth/callback`
@@ -657,7 +652,7 @@ const redirectUrl =
           try {
             console.info("[INLINE-AUTH] sendAuthMagicLink() [trial=0 magic]");
             setGateMsg("Ti ho inviato un link di accesso via email. Controlla anche spam/promozioni.");
-            await sendAuthMagicLink(email, redirectUrl);
+await sendMagicLinkSupabase(email);
             console.info("[INLINE-AUTH] magic link inviato (trial=0 magic)");
           } catch (err) {
             console.warn("[INLINE-AUTH] magic link FAIL (trial=0 magic):", err?.message || err);
