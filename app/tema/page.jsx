@@ -237,25 +237,37 @@ const [gateLoading, setGateLoading] = useState(false);
 useEffect(() => {
   if (typeof window === "undefined") return;
 
-  async function onAuthDone() {
-    // appena autenticato: riallinea UI
-    refreshUserFromToken();
-    await refreshCreditsUI();
+async function onAuthDone() {
+  // 1) Consuma AUTH_DONE (evita loop/stati incastrati)
+  try { localStorage.removeItem(AUTH_DONE_KEY); } catch {}
 
-    // chiudi gate (se aperto)
-    setEmailGateOpen(false);
-    setGateErr("");
-    setGateMsg("");
+  // 2) Riallinea UI
+  refreshUserFromToken();
+  await refreshCreditsUI();
 
-    // se era richiesto un’azione post login, eseguila
-    let action = null;
-    try { action = localStorage.getItem(POST_LOGIN_ACTION_KEY); } catch {}
-    if (action === "tema_premium") {
-      try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
-      // lancia premium ORA
+  // 3) Chiudi gate e reset messaggi
+  setEmailGateOpen(false);
+  setGateErr("");
+  setGateMsg("");
+
+  // 4) Se era richiesto premium post-login, fallo SOLO se hai già una lettura free pronta.
+  let action = null;
+  try { action = localStorage.getItem(POST_LOGIN_ACTION_KEY); } catch {}
+
+  if (action === "tema_premium") {
+    // consumiamo sempre l’azione (così il bottone non resta bloccato)
+    try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
+
+    // se hai già interpretazione (lettura free presente), allora fai premium
+    if (interpretazione) {
       await generaPremium();
+    } else {
+      // altrimenti non bloccare: l’utente clicca Approfondisci quando ha la free
+      console.warn("[TEMA][AUTH_DONE] action=tema_premium ma manca interpretazione; non lancio premium ora.");
     }
   }
+}
+
 
   const storageHandler = (e) => {
     if (e?.key === AUTH_DONE_KEY) onAuthDone();
@@ -289,7 +301,7 @@ useEffect(() => {
     window.removeEventListener("dyana:auth", localHandler);
     try { bc && bc.close(); } catch {}
   };
-}, [refreshUserFromToken, refreshCreditsUI]);
+}, [refreshUserFromToken, refreshCreditsUI, interpretazione]);
 
   function handleLogout() {
     clearToken();
@@ -549,15 +561,17 @@ setKbTags(kbFromBackend);
   function openEmailGate() {
     setGateErr("");
     setGateLoading(false);
-    setGateMode("register");
+setGateMode(guestTrialLeft === 0 ? "magic" : "register");
     setEmailGateOpen(true);
 
-    const trial = guestTrialLeft;
-    if (trial === 0) {
-      setGateMsg("Hai finito la tua prova gratuita. Iscriviti o accedi per continuare.");
-    } else {
-      setGateMsg("Inserisci la tua email per continuare. Ti invieremo anche un link per salvare l’accesso (controlla spam).");
-    }
+const trial = guestTrialLeft;
+
+if (trial === 0) {
+  setGateMsg("Hai finito la prova gratuita. Per continuare, accedi: puoi ricevere un link via email oppure usare password.");
+} else {
+  setGateMsg("Inserisci la tua email per continuare. Genero subito il Premium; in parallelo ti invio un link per salvare l’accesso.");
+}
+
   }
 
   async function handleApprofondisciClick() {
@@ -599,24 +613,22 @@ setKbTags(kbFromBackend);
 // TRIAL ESAURITO → serve login vero (password o magic link)
 if (guestTrialLeft === 0) {
   // 1) Se sceglie magic link: invio link e basta.
-  if (gateMode === "magic") {
-    setGateMsg("Ti ho inviato un link di accesso. Aprilo dalla mail per continuare qui.");
-    setGateErr("");
+if (gateMode === "magic") {
+  setGateErr("");
 
-    const siteBase = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
-    const redirectUrl = `${siteBase}/auth/callback`;
+  const siteBase = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
+  const redirectUrl = `${siteBase}/auth/callback`;
 
-    // salva azione post login: quando torna dal callback, parte premium
-    try {
-      localStorage.setItem(POST_LOGIN_ACTION_KEY, "tema_premium");
-    } catch {}
+  // quando torni dal callback, potrai fare premium (se la free è presente)
+  try { localStorage.setItem(POST_LOGIN_ACTION_KEY, "tema_premium"); } catch {}
 
-    await sendAuthMagicLink(email, redirectUrl);
+  await sendAuthMagicLink(email, redirectUrl);
 
-    // non posso fare premium subito: non ho JWT user ancora
-    setGateLoading(false);
-    return;
-  }
+  // Messaggio corretto (non "sto generando")
+  setGateMsg("Link inviato. Apri l’email e clicca il link di accesso per completare. Poi torna qui: “Approfondisci” funzionerà.");
+  setGateLoading(false);
+  return;
+}
 
   // 2) Altrimenti password login/register
   if (gateMode === "login") {
@@ -1144,17 +1156,20 @@ if (guestTrialLeft === 0) {
 )}
 
 
-                    <button type="submit" className="btn btn-primary" disabled={gateLoading || loading}>
-{gateLoading
-  ? "Attendi... Sto generando il tuo Tema"
-  : guestTrialLeft === 0
-  ? (gateMode === "magic"
-      ? "Invia link e continua"
-      : gateMode === "login"
-      ? "Accedi e continua"
-      : "Iscriviti e continua")
-  : "Continua"}
-                    </button>
+<button type="submit" className="btn btn-primary" disabled={gateLoading || loading}>
+  {gateLoading
+    ? (guestTrialLeft === 0 && gateMode === "magic"
+        ? "Invio link..."
+        : "Attendi... sto completando")
+    : guestTrialLeft === 0
+    ? (gateMode === "magic"
+        ? "Invia link di accesso"
+        : gateMode === "login"
+        ? "Accedi e continua"
+        : "Iscriviti e continua")
+    : "Continua"}
+</button>
+
 
                     {gateErr && <p className="card-text" style={{ color: "#ff9a9a" }}>{gateErr}</p>}
 
