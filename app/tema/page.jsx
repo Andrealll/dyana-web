@@ -122,7 +122,9 @@ export default function TemaPage() {
 
   // Email gate inline (allineato a Oroscopo)
   const [emailGateOpen, setEmailGateOpen] = useState(false);
-const [gateMode, setGateMode] = useState("magic"); // magic | register | login  const [gateEmail, setGateEmail] = useState("");
+const [gateMode, setGateMode] = useState("magic"); 
+
+// magic | register | login  const [gateEmail, setGateEmail] = useState("");
   const [gatePass, setGatePass] = useState("");
   const [gatePass2, setGatePass2] = useState("");
   const [gateMsg, setGateMsg] = useState("");
