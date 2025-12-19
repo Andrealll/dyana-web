@@ -43,6 +43,10 @@ const PERIOD_COSTS = {
   annuale: 5,
 };
 
+const OROSCOPO_DRAFT_KEY = "dyana_oroscopo_draft_v1"; 
+const AUTH_DONE_KEY = "dyana_auth_done"; 
+const POST_LOGIN_ACTION_KEY = "dyana_post_login_action";
+
 function mapPeriodoToSlug(periodo) {
   const p = (periodo || "").toLowerCase();
   if (p === "giornaliero") return "giornaliero";
@@ -454,20 +458,29 @@ useEffect(() => {
 }, [form, oraIgnota]);
 
 useEffect(() => {
-  async function onAuthDone() {
-    try {
-      console.log("[OROSCOPO][AUTH_DONE] ricevuto evento, riallineo stato...");
+async function onAuthDone() {
+  try {
+    console.log("[OROSCOPO][AUTH_DONE] ricevuto evento, riallineo stato...");
 
-      // 1) riallinea token -> ruolo/userId UI
-      refreshUserFromToken();
+    // ✅ Guard: se non ho un JWT "user" valido, NON posso eseguire azioni post-login
+    const tokenNow = getToken();
+    const payloadNow = tokenNow ? decodeJwtPayload(tokenNow) : null;
+    const roleNow = (payloadNow?.role || "").toLowerCase();
 
-      // 2) riallinea crediti
-      await refreshCreditsUI();
+    if (!tokenNow || roleNow === "guest") {
+      console.log("[OROSCOPO][AUTH_DONE] skip: token assente o role=guest", { roleNow });
+      return;
+    }
 
-      // 3) se avevamo un'azione pending, ripartiamo
-      const pending = (() => {
-        try { return localStorage.getItem(POST_LOGIN_ACTION_KEY); } catch { return null; }
-      })();
+    refreshUserFromToken();
+    await refreshCreditsUI();
+
+    const pending = (() => {
+      try { return localStorage.getItem(POST_LOGIN_ACTION_KEY); } catch { return null; }
+    })();
+
+    ...
+
 
       console.log("[OROSCOPO][AUTH_DONE] pending =", pending);
 
@@ -484,11 +497,13 @@ useEffect(() => {
   }
 
   // Fallback cross-tab via localStorage event
-  function onStorage(e) {
-    if (e.key === AUTH_DONE_KEY || e.key === "dyana_jwt") {
-      onAuthDone();
-    }
+function onStorage(e) {
+  // L'evento di "auth completata" deve arrivare SOLO dalla callback,
+  // non da refresh guest / refresh crediti.
+  if (e.key === AUTH_DONE_KEY) {
+    onAuthDone();
   }
+}
 
   window.addEventListener("storage", onStorage);
 
@@ -870,9 +885,9 @@ if (gateMode === "magic") {
       return baseUrl;
     }
   }, [userIdForDyana, sessionId, premiumResult, premiumText, premiumPeriodoKey]);
-const OROSCOPO_DRAFT_KEY = "dyana_oroscopo_draft_v1";
-const AUTH_DONE_KEY = "dyana_auth_done";
-const POST_LOGIN_ACTION_KEY = "dyana_post_login_action";
+
+
+
 function loadOroscopoDraft() {
   try {
     const raw = localStorage.getItem(OROSCOPO_DRAFT_KEY);

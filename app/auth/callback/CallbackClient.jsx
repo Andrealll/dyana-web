@@ -53,19 +53,24 @@ export default function CallbackClient() {
         const tokenHash = sp?.get("token_hash");
         const typeQ = sp?.get("type") || "magiclink";
 
-        if (tokenHash) {
-          // Questa call:
-          // - verifica con Supabase /auth/v1/verify usando token_hash
-          // - crea JWT DYANA (astrobot_access_token)
-          // - salva token in localStorage (nel tuo authClient)
-          await verifyMagicLink(tokenHash, typeQ);
+       if (tokenHash) {
+  await verifyMagicLink(tokenHash, typeQ);
 
-          const { path, qs } = readResumeTarget();
-          const target = qs ? `${path}?${qs}` : path;
-          clearResumeTarget();
-          router.replace(target);
-          return;
-        }
+  // ✅ Notifica alle altre tab/pagine che l'accesso è completato
+  try { localStorage.setItem("dyana_auth_done", String(Date.now())); } catch {}
+  try {
+    const bc = new BroadcastChannel("dyana_auth");
+    bc.postMessage({ type: "AUTH_DONE", ts: Date.now() });
+    bc.close();
+  } catch {}
+
+  const { path, qs } = readResumeTarget();
+  const target = qs ? `${path}?${qs}` : path;
+  clearResumeTarget();
+  router.replace(target);
+  return;
+}
+
 
         // -----------------------------
         // 2) FALLBACK: FLOW SUPABASE HASH
