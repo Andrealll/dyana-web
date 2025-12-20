@@ -241,48 +241,40 @@ const isLoggedIn = userRole !== "guest";
   }, []);
 
 useEffect(() => {
-  console.log("[TEMA PAGE] mounted BUILD MARKER = 2025-12-19-XYZ");	
   if (typeof window === "undefined") return;
 
-async function onAuthDone() {
-  try { localStorage.removeItem(AUTH_DONE_KEY); } catch {}
+  const onAuthDone = async () => {
+    try { localStorage.removeItem(AUTH_DONE_KEY); } catch {}
 
-  // riallinea subito lo state (questo triggera rerender)
-  refreshUserFromToken();
-  await refreshCreditsUI();
-  setEmailGateOpen(false);
-  setGateErr("");
-  setGateMsg("");
+    refreshUserFromToken();
+    await refreshCreditsUI();
 
-  // Banner post-login (NO auto-scalo crediti)
-  setJustLoggedIn(true);
-  setPostAuthToast("Accesso completato. Ora puoi continuare: clicca “Approfondisci con DYANA” per la lettura Premium.");
-  setTimeout(() => setJustLoggedIn(false), 6000);
+    setEmailGateOpen(false);
+    setGateErr("");
+    setGateMsg("");
 
-  // Non auto-eseguire premium: l’utente deve scegliere
-  try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
+    let action = null;
+    try { action = localStorage.getItem(POST_LOGIN_ACTION_KEY); } catch {}
 
-    // ✅ NON auto-eseguire il premium: deve scegliere l'utente cliccando "Approfondisci"
-    setGateMsg("Accesso completato. Ora puoi cliccare “Approfondisci con DYANA” quando vuoi.");
-  }
-
-}
-
-
+    if (action === "tema_premium") {
+      try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
+      if (interpretazione) {
+        await generaPremium();
+      }
+    }
+  };
 
   const storageHandler = (e) => {
     if (e?.key === AUTH_DONE_KEY) onAuthDone();
   };
 
-  window.addEventListener("storage", storageHandler);
-
-  // stessa tab: CustomEvent opzionale (se lo usi altrove)
   const localHandler = (e) => {
     if (e?.detail?.type === "AUTH_DONE") onAuthDone();
   };
+
+  window.addEventListener("storage", storageHandler);
   window.addEventListener("dyana:auth", localHandler);
 
-  // BroadcastChannel (se presente)
   let bc = null;
   try {
     bc = new BroadcastChannel("dyana_auth");
@@ -291,7 +283,7 @@ async function onAuthDone() {
     };
   } catch {}
 
-  // bootstrap: se hai già auth_done settato, prova a reagire
+  // bootstrap
   try {
     const pending = localStorage.getItem(AUTH_DONE_KEY);
     if (pending) onAuthDone();
