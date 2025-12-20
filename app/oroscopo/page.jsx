@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import DyanaNavbar from "../../components/DyanaNavbar";
 
-
 import {
   loginWithCredentials,
   registerWithEmail,
@@ -15,7 +14,7 @@ import {
   fetchCreditsState,
   setResumeTarget,
   sendAuthMagicLink,
-  updateMarketingConsent, // ✅
+  updateMarketingConsent,
 } from "../../lib/authClient";
 
 // ==========================
@@ -23,7 +22,6 @@ import {
 // ==========================
 const TYPEBOT_DYANA_ID = "dyana-ai";
 
-// Base URL backend AstroBot
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ||
   (typeof window !== "undefined" &&
@@ -32,7 +30,6 @@ const API_BASE =
     ? "http://127.0.0.1:8001"
     : "https://chatbot-test-0h4o.onrender.com");
 
-// JWT fallback (se lo usi ancora)
 const ASTROBOT_JWT_TEMA = process.env.NEXT_PUBLIC_ASTROBOT_JWT_TEMA || "";
 
 // Costi (coerenti con backend)
@@ -43,10 +40,13 @@ const PERIOD_COSTS = {
   annuale: 5,
 };
 
-const OROSCOPO_DRAFT_KEY = "dyana_oroscopo_draft_v1"; 
-const AUTH_DONE_KEY = "dyana_auth_done"; 
+const OROSCOPO_DRAFT_KEY = "dyana_oroscopo_draft_v1";
+const AUTH_DONE_KEY = "dyana_auth_done";
 const POST_LOGIN_ACTION_KEY = "dyana_post_login_action";
 
+// ==========================
+// HELPERS
+// ==========================
 function mapPeriodoToSlug(periodo) {
   const p = (periodo || "").toLowerCase();
   if (p === "giornaliero") return "giornaliero";
@@ -58,6 +58,7 @@ function mapPeriodoToSlug(periodo) {
 
 function decodeJwtPayload(token) {
   try {
+    if (!token) return null;
     const parts = token.split(".");
     if (parts.length < 2) return null;
     const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
@@ -71,6 +72,27 @@ function decodeJwtPayload(token) {
   } catch {
     return null;
   }
+}
+
+function loadOroscopoDraft() {
+  try {
+    const raw = localStorage.getItem(OROSCOPO_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveOroscopoDraft(draft) {
+  try {
+    localStorage.setItem(OROSCOPO_DRAFT_KEY, JSON.stringify(draft));
+  } catch {}
+}
+
+function clearOroscopoDraft() {
+  try {
+    localStorage.removeItem(OROSCOPO_DRAFT_KEY);
+  } catch {}
 }
 
 // ==========================
@@ -162,6 +184,59 @@ function buildInterpretazioneTesto(oroscopoAi, tierRaw) {
 }
 
 // ==========================
+// UI: Banner (sandwich)
+// ==========================
+function InlineBanner({ variant = "info", title, text, actionLabel, onAction, onClose }) {
+  const palette =
+    variant === "success"
+      ? { border: "rgba(130,255,160,0.22)", bg: "rgba(40,80,52,0.18)", color: "#d6ffe3" }
+      : variant === "warn"
+      ? { border: "rgba(255,223,154,0.22)", bg: "rgba(90,70,20,0.16)", color: "#ffdf9a" }
+      : { border: "rgba(255,255,255,0.14)", bg: "rgba(0,0,0,0.22)", color: "rgba(245,245,255,0.92)" };
+
+  return (
+    <div
+      className="card"
+      style={{
+        maxWidth: "850px",
+        margin: "0 auto 16px",
+        border: `1px solid ${palette.border}`,
+        background: palette.bg,
+        padding: "14px 16px",
+      }}
+    >
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+        <div style={{ flex: 1 }}>
+          {title && (
+            <div className="card-text" style={{ fontWeight: 700, marginBottom: 4, color: palette.color }}>
+              {title}
+            </div>
+          )}
+          {text && (
+            <div className="card-text" style={{ fontSize: "0.92rem", opacity: 0.92, whiteSpace: "pre-wrap" }}>
+              {text}
+            </div>
+          )}
+          {actionLabel && onAction && (
+            <div style={{ marginTop: 10 }}>
+              <button type="button" className="btn btn-primary" onClick={onAction}>
+                {actionLabel}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {onClose && (
+          <button type="button" className="btn" onClick={onClose} style={{ whiteSpace: "nowrap" }}>
+            Chiudi
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ==========================
 // COMPONENTI SUPPORTO
 // ==========================
 function MetricheGrafico({ metriche }) {
@@ -206,11 +281,26 @@ function MetricheGrafico({ metriche }) {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
           <thead>
             <tr>
-              <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.08)", whiteSpace: "nowrap" }}>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "6px 8px",
+                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                  whiteSpace: "nowrap",
+                }}
+              >
                 Sottoperiodo
               </th>
               {ambiti.map((a) => (
-                <th key={a} style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.08)", whiteSpace: "nowrap" }}>
+                <th
+                  key={a}
+                  style={{
+                    textAlign: "left",
+                    padding: "6px 8px",
+                    borderBottom: "1px solid rgba(255,255,255,0.08)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   {LABELS[a] || a}
                 </th>
               ))}
@@ -223,15 +313,39 @@ function MetricheGrafico({ metriche }) {
               const intensities = metrics.intensities || metrics.raw_scores || {};
               return (
                 <tr key={idx}>
-                  <td style={{ padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.05)", whiteSpace: "nowrap" }}>
+                  <td
+                    style={{
+                      padding: "6px 8px",
+                      borderBottom: "1px solid rgba(255,255,255,0.05)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     {label}
                   </td>
                   {ambiti.map((a) => {
                     const perc = normalize(intensities[a]);
                     return (
                       <td key={a} style={{ padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                        <div style={{ position: "relative", height: 12, borderRadius: 999, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
-                          <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: `${perc}%`, borderRadius: 999, background: "rgba(255,255,255,0.75)" }} />
+                        <div
+                          style={{
+                            position: "relative",
+                            height: 12,
+                            borderRadius: 999,
+                            background: "rgba(255,255,255,0.06)",
+                            overflow: "hidden",
+                          }}
+                        >
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: 0,
+                              left: 0,
+                              bottom: 0,
+                              width: `${perc}%`,
+                              borderRadius: 999,
+                              background: "rgba(255,255,255,0.75)",
+                            }}
+                          />
                         </div>
                       </td>
                     );
@@ -259,7 +373,6 @@ function AspettiTable({ aspetti }) {
 
   function parseFromKey(chiave) {
     if (!chiave || typeof chiave !== "string") return { tr: "?", asp: "?", nat: "?" };
-
     const parts = chiave.split("_").filter(Boolean);
     if (parts.length >= 3) {
       const tr = parts[0];
@@ -281,10 +394,39 @@ function AspettiTable({ aspetti }) {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
           <thead>
             <tr>
-              <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>Aspetto</th>
-              <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.08)", whiteSpace: "nowrap" }}>Intensità</th>
-              <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.08)", whiteSpace: "nowrap" }}>Durata</th>
-              <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.08)", whiteSpace: "nowrap" }}>Prima attivazione</th>
+              <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                Aspetto
+              </th>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "6px 8px",
+                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Intensità
+              </th>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "6px 8px",
+                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Durata
+              </th>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "6px 8px",
+                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Prima attivazione
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -292,28 +434,13 @@ function AspettiTable({ aspetti }) {
               const chiave = a?.chiave || a?.key || a?.id || "";
               const parsed = parseFromKey(chiave);
 
-              const tr =
-                a?.pianeta_transito ||
-                a?.transit_planet ||
-                a?.transito ||
-                parsed.tr ||
-                "?";
-
-              const nat =
-                a?.pianeta_natale ||
-                a?.natal_planet ||
-                a?.natale ||
-                parsed.nat ||
-                "?";
+              const tr = a?.pianeta_transito || a?.transit_planet || a?.transito || parsed.tr || "?";
+              const nat = a?.pianeta_natale || a?.natal_planet || a?.natale || parsed.nat || "?";
 
               const aspRaw = a?.aspetto || a?.tipo || a?.aspect || parsed.asp || "?";
               const asp = ASP_LABEL[aspRaw] || aspRaw;
 
-              const intensita =
-                a?.intensita_discreta ||
-                a?.intensita ||
-                a?.intensity ||
-                "-";
+              const intensita = a?.intensita_discreta || a?.intensita || a?.intensity || "-";
 
               const pers = a?.persistenza || {};
               const durataGiorni = pers.durata_giorni ?? pers.durata ?? pers.days ?? null;
@@ -324,13 +451,31 @@ function AspettiTable({ aspetti }) {
                   <td style={{ padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
                     {tr} {asp} {nat}
                   </td>
-                  <td style={{ padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.05)", whiteSpace: "nowrap" }}>
+                  <td
+                    style={{
+                      padding: "6px 8px",
+                      borderBottom: "1px solid rgba(255,255,255,0.05)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     {intensita}
                   </td>
-                  <td style={{ padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.05)", whiteSpace: "nowrap" }}>
+                  <td
+                    style={{
+                      padding: "6px 8px",
+                      borderBottom: "1px solid rgba(255,255,255,0.05)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     {durataGiorni != null ? `${durataGiorni} giorno${durataGiorni === 1 ? "" : "i"}` : "-"}
                   </td>
-                  <td style={{ padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.05)", whiteSpace: "nowrap" }}>
+                  <td
+                    style={{
+                      padding: "6px 8px",
+                      borderBottom: "1px solid rgba(255,255,255,0.05)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     {first}
                   </td>
                 </tr>
@@ -361,7 +506,7 @@ export default function OroscopoPage() {
   const [errore, setErrore] = useState("");
   const [noCredits, setNoCredits] = useState(false);
 
-  // Risultati separati: FREE resta, PREMIUM si aggiunge sotto
+  // Risultati separati
   const [freeResult, setFreeResult] = useState(null);
   const [premiumResult, setPremiumResult] = useState(null);
 
@@ -370,12 +515,12 @@ export default function OroscopoPage() {
   const [userCredits, setUserCredits] = useState(0);
   const [userIdForDyana, setUserIdForDyana] = useState("guest_oroscopo");
 
-  // trial guest 1/0 (o null se non disponibile)
+  // trial guest 1/0 (o null)
   const [guestTrialLeft, setGuestTrialLeft] = useState(null);
 
   // Email gate inline
   const [emailGateOpen, setEmailGateOpen] = useState(false);
-const [gateMode, setGateMode] = useState("magic"); // magic | register | login
+  const [gateMode, setGateMode] = useState("magic"); // magic | register | login
   const [gateEmail, setGateEmail] = useState("");
   const [gatePass, setGatePass] = useState("");
   const [gatePass2, setGatePass2] = useState("");
@@ -386,6 +531,9 @@ const [gateMode, setGateMode] = useState("magic"); // magic | register | login
 
   // DYANA
   const [diyanaOpen, setDiyanaOpen] = useState(false);
+
+  // Banner post-login (sandwich)
+  const [authBanner, setAuthBanner] = useState(null);
 
   const [sessionId] = useState(() => `oroscopo_session_${Date.now()}`);
   const isLoggedIn = !!getToken();
@@ -409,7 +557,6 @@ const [gateMode, setGateMode] = useState("magic"); // magic | register | login
 
       const state = await fetchCreditsState(token);
 
-      // supporto shape "flat" e "cs_*"
       const role = state?.role || state?.cs_role || null;
       const remaining =
         typeof state?.remaining_credits === "number"
@@ -433,93 +580,100 @@ const [gateMode, setGateMode] = useState("magic"); // magic | register | login
     }
   }, []);
 
-useEffect(() => {
-  // 1) ripristina bozza form (se esiste)
-  try {
-    const draft = loadOroscopoDraft();
-    if (draft && typeof draft === "object") {
-      if (draft.form) setForm((prev) => ({ ...prev, ...draft.form }));
-      if (typeof draft.oraIgnota === "boolean") setOraIgnota(draft.oraIgnota);
-    }
-  } catch {}
-
-  refreshUserFromToken();
-  (async () => {
-    await ensureGuestToken();
-    await refreshCreditsUI();
-  })();
-}, [refreshUserFromToken, refreshCreditsUI]);
-useEffect(() => {
-  saveOroscopoDraft({
-    form,
-    oraIgnota,
-    ts: Date.now(),
-  });
-}, [form, oraIgnota]);
-
-useEffect(() => {
-async function onAuthDone() {
-  try {
-    console.log("[OROSCOPO][AUTH_DONE] ricevuto evento, riallineo stato...");
-
-    // ✅ Guard: se non ho un JWT "user" valido, NON posso eseguire azioni post-login
-    const tokenNow = getToken();
-    const payloadNow = tokenNow ? decodeJwtPayload(tokenNow) : null;
-    const roleNow = (payloadNow?.role || "").toLowerCase();
-
-    if (!tokenNow || roleNow === "guest") {
-      console.log("[OROSCOPO][AUTH_DONE] skip: token assente o role=guest", { roleNow });
-      return;
-    }
+  // 1) restore draft + init tokens/credits
+  useEffect(() => {
+    try {
+      const draft = loadOroscopoDraft();
+      if (draft && typeof draft === "object") {
+        if (draft.form) setForm((prev) => ({ ...prev, ...draft.form }));
+        if (typeof draft.oraIgnota === "boolean") setOraIgnota(draft.oraIgnota);
+      }
+    } catch {}
 
     refreshUserFromToken();
-    await refreshCreditsUI();
-
-    const pending = (() => {
-      try { return localStorage.getItem(POST_LOGIN_ACTION_KEY); } catch { return null; }
+    (async () => {
+      await ensureGuestToken();
+      await refreshCreditsUI();
     })();
+  }, [refreshUserFromToken, refreshCreditsUI]);
 
+  // 2) autosave draft
+  useEffect(() => {
+    saveOroscopoDraft({ form, oraIgnota, ts: Date.now() });
+  }, [form, oraIgnota]);
 
+  // 3) AUTH_DONE listeners + banner + eventuale azione post-login
+  useEffect(() => {
+    if (typeof window === "undefined") return;
 
-      console.log("[OROSCOPO][AUTH_DONE] pending =", pending);
+    async function onAuthDone() {
+      try {
+        // pulizia chiave (se presente)
+        try { localStorage.removeItem(AUTH_DONE_KEY); } catch {}
 
-      if (pending === "oroscopo_premium") {
-        try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
+        refreshUserFromToken();
+        await refreshCreditsUI();
+
+        // chiudi gate ed errori
         setEmailGateOpen(false);
+        setGateErr("");
+        setGateMsg("");
 
-        console.log("[OROSCOPO][AUTH_DONE] lancio generaPremium()");
-        await generaPremium();
+        // banner per “cliente di ritorno”
+        setAuthBanner({
+          variant: "success",
+          title: "Accesso completato",
+          text:
+            "Perfetto. Ora puoi continuare da qui.\nQuando sei pronto, genera la lettura premium con un click.",
+          actionLabel: "Continua e genera Premium",
+          action: "RUN_PREMIUM",
+        });
+
+        // se avevamo una azione in sospeso (es. magic link)
+        let pending = null;
+        try { pending = localStorage.getItem(POST_LOGIN_ACTION_KEY); } catch {}
+
+        if (pending === "oroscopo_premium") {
+          try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
+          await generaPremium();
+        }
+      } catch (e) {
+        console.warn("[OROSCOPO][AUTH_DONE] errore:", e?.message || e);
       }
-    } catch (e) {
-      console.warn("[OROSCOPO][AUTH_DONE] errore:", e?.message || e);
     }
-  }
 
-  // Fallback cross-tab via localStorage event
-function onStorage(e) {
-  // L'evento di "auth completata" deve arrivare SOLO dalla callback,
-  // non da refresh guest / refresh crediti.
-  if (e.key === AUTH_DONE_KEY) {
-    onAuthDone();
-  }
-}
+    function onStorage(e) {
+      if (e?.key === AUTH_DONE_KEY) onAuthDone();
+    }
 
-  window.addEventListener("storage", onStorage);
+    function onLocalAuthEvent(e) {
+      if (e?.detail?.type === "AUTH_DONE") onAuthDone();
+    }
 
-  // Cross-tab moderno
-  let bc = null;
-  try {
-    bc = new BroadcastChannel("dyana_auth");
-    bc.onmessage = (ev) => {
-      if (ev?.data?.type === "AUTH_DONE") onAuthDone();
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("dyana:auth", onLocalAuthEvent);
+
+    let bc = null;
+    try {
+      bc = new BroadcastChannel("dyana_auth");
+      bc.onmessage = (ev) => {
+        if (ev?.data?.type === "AUTH_DONE") onAuthDone();
+      };
+    } catch {}
+
+    // bootstrap: se la callback ha già scritto AUTH_DONE_KEY e noi siamo già qui
+    try {
+      const pending = localStorage.getItem(AUTH_DONE_KEY);
+      if (pending) onAuthDone();
+    } catch {}
+
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("dyana:auth", onLocalAuthEvent);
+      try { bc && bc.close(); } catch {}
     };
-  } catch {}
-
-  return () => {
-    window.removeEventListener("storage", onStorage);
-    try { bc && bc.close(); } catch {}
-  };
-}, [refreshUserFromToken, refreshCreditsUI]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshUserFromToken, refreshCreditsUI]);
 
   function handleLogout() {
     clearToken();
@@ -531,6 +685,7 @@ function onStorage(e) {
     setPremiumResult(null);
     setDiyanaOpen(false);
     setEmailGateOpen(false);
+    setAuthBanner(null);
 
     (async () => {
       await ensureGuestToken();
@@ -593,6 +748,8 @@ function onStorage(e) {
     setLoading(true);
     setErrore("");
     setNoCredits(false);
+
+    setAuthBanner(null);
     setEmailGateOpen(false);
     setGateErr("");
     setDiyanaOpen(false);
@@ -600,6 +757,7 @@ function onStorage(e) {
 
     try {
       const { res, data } = await callOroscopo({ tier: "free" });
+
       if (!res.ok) {
         const msg =
           (data && (data.error || data.detail || data.message)) ||
@@ -607,6 +765,7 @@ function onStorage(e) {
         setErrore(typeof msg === "string" ? msg : "Errore nella generazione.");
         return;
       }
+
       setFreeResult(data);
       await refreshCreditsUI();
     } catch (e) {
@@ -621,6 +780,15 @@ function onStorage(e) {
     setErrore("");
     setNoCredits(false);
     setGateErr("");
+
+    // banner: durante la generazione
+    setAuthBanner({
+      variant: "info",
+      title: "Sto generando la lettura premium…",
+      text: "Attendi qualche istante. Se il periodo è lungo, può volerci un po’ di più.",
+      actionLabel: null,
+      action: null,
+    });
 
     try {
       const { res, data } = await callOroscopo({ tier: "premium" });
@@ -639,20 +807,34 @@ function onStorage(e) {
         if (isCreditsError) {
           setNoCredits(true);
           setErrore(typeof msg === "string" ? msg : "Crediti insufficienti.");
+          setAuthBanner(null);
           await refreshCreditsUI();
           return;
         }
 
         setErrore(typeof msg === "string" ? msg : "Errore nella generazione.");
+        setAuthBanner(null);
         return;
       }
 
       setPremiumResult(data);
-	  try { clearOroscopoDraft(); } catch {}
+      try { clearOroscopoDraft(); } catch {}
+
       setEmailGateOpen(false);
       setDiyanaOpen(false);
+
+      // banner success
+      setAuthBanner({
+        variant: "success",
+        title: "Lettura premium pronta",
+        text: "Scorri per leggere l’interpretazione completa e, se vuoi, chiedi a DYANA.",
+        actionLabel: null,
+        action: null,
+      });
+
       await refreshCreditsUI();
     } catch (e) {
+      setAuthBanner(null);
       setErrore("Impossibile comunicare con il server. Controlla la connessione e riprova.");
     } finally {
       setLoading(false);
@@ -662,16 +844,14 @@ function onStorage(e) {
   function openEmailGate() {
     setGateErr("");
     setGateLoading(false);
-setGateMode("magic");
+    setGateMode("magic");
     setEmailGateOpen(true);
 
     const trial = guestTrialLeft;
     if (trial === 0) {
-      setGateMsg("Hai finito la tua prova gratuita. Usa Email+Link, accedi o Iscriviti per continuare.");
+      setGateMsg("Hai finito la tua prova gratuita. Usa Email+Link, oppure accedi/iscriviti per continuare.");
     } else {
-      setGateMsg(
-        "Inserisci la tua email per continuare. Ti invieremo anche un link per salvare l’accesso (controlla spam)."
-      );
+      setGateMsg("Inserisci la tua email per continuare. Ti invieremo anche un link per salvare l’accesso (controlla spam).");
     }
   }
 
@@ -692,142 +872,114 @@ setGateMode("magic");
   async function submitInlineAuth(e) {
     e.preventDefault();
 
-    console.debug("[INLINE-AUTH] submit");
     setGateErr("");
     setGateLoading(true);
 
     try {
       const email = (gateEmail || "").trim().toLowerCase();
-      console.debug("[INLINE-AUTH] email =", email);
-
       if (!email || !email.includes("@")) {
-        console.warn("[INLINE-AUTH] email non valida");
         setGateErr("Inserisci un’email valida.");
         return;
       }
 
-      // salva “resume”
-      try {
-        localStorage.setItem("dyana_pending_email", email);
-        console.debug("[INLINE-AUTH] salvata dyana_pending_email");
-      } catch (e) {
-        console.warn("[INLINE-AUTH] impossibile salvare dyana_pending_email", e);
-      }
+      try { localStorage.setItem("dyana_pending_email", email); } catch {}
 
       setResumeTarget({ path: "/oroscopo", readingId: "oroscopo_inline" });
-      console.debug("[INLINE-AUTH] resume target impostato");
 
-      console.info("[INLINE-AUTH] guestTrialLeft =", guestTrialLeft);
-      console.info("[INLINE-AUTH] gateMode =", gateMode);
+      const redirectUrl =
+        (typeof window !== "undefined" && window.location?.origin)
+          ? `${window.location.origin.replace(/\/+$/, "")}/auth/callback`
+          : "https://dyana.app/auth/callback";
 
       // --------------------------------------------------
-      // TRIAL ESAURITO → LOGIN / REGISTER / MAGIC LINK
+      // TRIAL ESAURITO → MAGIC LINK / LOGIN / REGISTER
       // --------------------------------------------------
       if (guestTrialLeft === 0) {
-        console.info("[INLINE-AUTH] trial esaurito → auth");
+        if (gateMode === "magic") {
+          setGateMsg("Ti ho inviato un link di accesso via email. Aprilo per entrare (controlla anche spam).");
+          try { localStorage.setItem(POST_LOGIN_ACTION_KEY, "oroscopo_premium"); } catch {}
+          await sendAuthMagicLink(email, redirectUrl);
 
-const redirectUrl =
-  (typeof window !== "undefined" && window.location?.origin)
-    ? `${window.location.origin.replace(/\/+$/, "")}/auth/callback`
-    : "https://dyana.app/auth/callback";
+          // banner “azione pendente”
+          setAuthBanner({
+            variant: "info",
+            title: "Controlla la tua email",
+            text: "Apri il link per entrare. Al ritorno su questa pagina potrai continuare subito.",
+            actionLabel: null,
+            action: null,
+          });
 
+          return;
+        }
 
-        // ✅ MAGIC LINK LOGIN (passwordless)
-if (gateMode === "magic") {
-  setGateMsg("Ti ho inviato un link di accesso via email...");
-  try {
-  localStorage.setItem(POST_LOGIN_ACTION_KEY, "oroscopo_premium");
-} catch {}
-  await sendAuthMagicLink(email, redirectUrl);
-  return;
-}
-
-        // LOGIN / REGISTER con password (come prima)
+        // LOGIN / REGISTER con password
         if (gateMode === "login") {
           if (!gatePass) {
-            console.warn("[INLINE-AUTH] password mancante (login)");
             setGateErr("Inserisci la password per accedere.");
             return;
           }
-          console.info("[INLINE-AUTH] loginWithCredentials()");
           await loginWithCredentials(email, gatePass);
         } else {
           if (!gatePass || gatePass.length < 6) {
-            console.warn("[INLINE-AUTH] password troppo corta (register)");
             setGateErr("La password deve essere lunga almeno 6 caratteri.");
             return;
           }
           if (gatePass !== gatePass2) {
-            console.warn("[INLINE-AUTH] password mismatch");
             setGateErr("Le password non coincidono.");
             return;
           }
-          console.info("[INLINE-AUTH] registerWithEmail()");
           await registerWithEmail(email, gatePass);
         }
-
-        console.info("[INLINE-AUTH] auth password OK");
 
         refreshUserFromToken();
         await refreshCreditsUI();
 
-        console.info("[INLINE-AUTH] generaPremium()");
-        await generaPremium();
+        setAuthBanner({
+          variant: "success",
+          title: "Accesso completato",
+          text: "Perfetto. Ora continuo con la lettura premium.",
+          actionLabel: null,
+          action: null,
+        });
 
+        await generaPremium();
         return;
       }
 
       // --------------------------------------------------
-      // TRIAL DISPONIBILE → AVVIO SUBITO + MAGIC LINK BEST-EFFORT
+      // TRIAL DISPONIBILE → premium subito + invio link best-effort
       // --------------------------------------------------
-      console.info("[INLINE-AUTH] trial disponibile → avvio Approfondisci + invio magic link in background");
+      setGateMsg("Attendi, sto generando…");
 
-      setGateMsg("Attendi, sto generando il tuo oroscopo…");
-
-      const siteBase = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
-      const redirectUrl = `${siteBase}/auth/callback`;
-
-      // 0) marketing consent: SOLO utente loggato (token "diyana_jwt"), mai guest
+      // marketing consent: solo se token utente valido (non guest)
       try {
         const userToken = getToken();
-        if (!userToken) {
-          console.info("[INLINE-AUTH] updateMarketingConsent skip: userToken assente (guest)");
-        } else {
+        if (userToken) {
           const payload = decodeJwtPayload(userToken);
           const role = (payload?.role || "").toLowerCase();
           const sub = payload?.sub || "";
-          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sub);
+          const isUuid =
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sub);
 
-          if (role === "guest" || !isUuid) {
-            console.info("[INLINE-AUTH] updateMarketingConsent skip: role/sub non validi", { role, sub });
-          } else {
-            console.info("[INLINE-AUTH] updateMarketingConsent =", !!gateMarketing);
+          if (role !== "guest" && isUuid) {
             await updateMarketingConsent(userToken, !!gateMarketing);
-            console.info("[INLINE-AUTH] updateMarketingConsent OK");
           }
         }
       } catch (err) {
-        console.warn("[INLINE-AUTH] updateMarketingConsent fallito (non blocco):", err?.message || err);
+        console.warn("[OROSCOPO][INLINE-AUTH] updateMarketingConsent fallito (non blocco):", err?.message || err);
       }
 
-      // 1) invio magic link BEST-EFFORT
+      // magic link best-effort
       try {
-        console.info("[INLINE-AUTH] sendAuthMagicLink() [best-effort]");
         await sendAuthMagicLink(email, redirectUrl);
-        console.info("[INLINE-AUTH] magic link inviato");
       } catch (err) {
-        console.warn("[INLINE-AUTH] magic link NON inviato (non blocco):", err?.message || err);
+        console.warn("[OROSCOPO][INLINE-AUTH] magic link non inviato (non blocco):", err?.message || err);
       }
 
-      // 2) apri subito Approfondisci
       await generaPremium();
-
-      // 3) riallinea UI crediti/ruolo
       await refreshCreditsUI();
-
       return;
     } catch (err) {
-      console.error("[INLINE-AUTH] errore:", err);
       setGateErr(err?.message || "Operazione non riuscita. Riprova.");
     } finally {
       setGateLoading(false);
@@ -839,17 +991,15 @@ if (gateMode === "magic") {
   // ==========================
   const currentCost = PERIOD_COSTS[form.periodo] != null ? PERIOD_COSTS[form.periodo] : 0;
 
-  // FREE view
-const freeTier = freeResult?.oroscopo_ai?.meta?.tier || "free";
-const freeAi =
-  freeResult?.oroscopo_ai?.content ||
-  freeResult?.oroscopo_ai ||
-  freeResult?.content ||
-  freeResult ||
-  null;
-
-const freeText = freeAi ? buildInterpretazioneTesto(freeAi, freeTier) : "";
-const hasFree = !!freeResult;
+  const freeTier = freeResult?.oroscopo_ai?.meta?.tier || "free";
+  const freeAi =
+    freeResult?.oroscopo_ai?.content ||
+    freeResult?.oroscopo_ai ||
+    freeResult?.content ||
+    freeResult ||
+    null;
+  const freeText = freeAi ? buildInterpretazioneTesto(freeAi, freeTier) : "";
+  const hasFree = !!freeResult;
 
   const freePeriodoKey = freeResult?.engine_result?.periodo_ita || form.periodo || "giornaliero";
   const freePeriodBlock =
@@ -859,16 +1009,15 @@ const hasFree = !!freeResult;
   const freeMetriche = freePeriodBlock?.metriche_grafico || null;
   const freeAspetti = Array.isArray(freePeriodBlock?.aspetti_rilevanti) ? freePeriodBlock.aspetti_rilevanti : [];
 
-  // PREMIUM view
-const premiumTier = premiumResult?.oroscopo_ai?.meta?.tier || "premium";
-const premiumAi =
-  premiumResult?.oroscopo_ai?.content ||
-  premiumResult?.oroscopo_ai ||
-  premiumResult?.content ||
-  premiumResult ||
-  null;
-const hasPremium = !!premiumResult;
-const premiumText = premiumAi ? buildInterpretazioneTesto(premiumAi, premiumTier) : "";
+  const premiumTier = premiumResult?.oroscopo_ai?.meta?.tier || "premium";
+  const premiumAi =
+    premiumResult?.oroscopo_ai?.content ||
+    premiumResult?.oroscopo_ai ||
+    premiumResult?.content ||
+    premiumResult ||
+    null;
+  const hasPremium = !!premiumResult;
+  const premiumText = premiumAi ? buildInterpretazioneTesto(premiumAi, premiumTier) : "";
 
   const premiumPeriodoKey = premiumResult?.engine_result?.periodo_ita || form.periodo || "giornaliero";
   const premiumPeriodBlock =
@@ -898,28 +1047,18 @@ const premiumText = premiumAi ? buildInterpretazioneTesto(premiumAi, premiumTier
     }
   }, [userIdForDyana, sessionId, premiumResult, premiumText, premiumPeriodoKey]);
 
+  // banner action
+  const handleBannerAction = async () => {
+    if (!authBanner?.action) return;
+    if (authBanner.action === "RUN_PREMIUM") {
+      await handleApprofondisciClick();
+    }
+  };
 
+  const primaryBusy = loading || gateLoading;
+  const primaryLabel = primaryBusy ? "Attendi, sto generando…" : "🔮 Inizia la lettura";
+  const premiumBusyLabel = primaryBusy ? "Attendi, sto generando…" : "✨ Approfondisci con DYANA";
 
-function loadOroscopoDraft() {
-  try {
-    const raw = localStorage.getItem(OROSCOPO_DRAFT_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveOroscopoDraft(draft) {
-  try {
-    localStorage.setItem(OROSCOPO_DRAFT_KEY, JSON.stringify(draft));
-  } catch {}
-}
-
-function clearOroscopoDraft() {
-  try {
-    localStorage.removeItem(OROSCOPO_DRAFT_KEY);
-  } catch {}
-}
   // ==========================
   // RENDER
   // ==========================
@@ -934,6 +1073,18 @@ function clearOroscopoDraft() {
             Inserisci i tuoi dati di nascita e scegli il periodo che ti interessa.
           </p>
         </header>
+
+        {/* Banner post-login / stato */}
+        {authBanner && (
+          <InlineBanner
+            variant={authBanner.variant}
+            title={authBanner.title}
+            text={authBanner.text}
+            actionLabel={authBanner.actionLabel}
+            onAction={authBanner.action ? handleBannerAction : null}
+            onClose={() => setAuthBanner(null)}
+          />
+        )}
 
         {/* FORM */}
         <section className="section">
@@ -963,13 +1114,7 @@ function clearOroscopoDraft() {
 
               <div>
                 <label className="card-text">Data di nascita</label>
-                <input
-                  type="date"
-                  name="data"
-                  value={form.data}
-                  onChange={handleChange}
-                  className="form-input"
-                />
+                <input type="date" name="data" value={form.data} onChange={handleChange} className="form-input" />
               </div>
 
               <div>
@@ -984,7 +1129,10 @@ function clearOroscopoDraft() {
                     disabled={oraIgnota}
                     style={oraIgnota ? { opacity: 0.4, pointerEvents: "none" } : undefined}
                   />
-                  <label className="card-text" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem", cursor: "pointer" }}>
+                  <label
+                    className="card-text"
+                    style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem", cursor: "pointer" }}
+                  >
                     <input type="checkbox" checked={oraIgnota} onChange={handleOraIgnotaChange} style={{ width: 14, height: 14 }} />
                     <span>Non conosco l&apos;ora esatta (uso un oroscopo con ora neutra)</span>
                   </label>
@@ -1004,13 +1152,8 @@ function clearOroscopoDraft() {
                 </p>
               </div>
 
-              <button
-                onClick={generaFree}
-                className="btn btn-primary"
-                disabled={loading}
-                style={{ marginTop: "14px" }}
-              >
-                {loading ? "Attendi, sto generando…" : "🔮 Inizia la lettura"}
+              <button onClick={generaFree} className="btn btn-primary" disabled={primaryBusy} style={{ marginTop: "14px" }}>
+                {primaryLabel}
               </button>
 
               {/* Errori */}
@@ -1031,7 +1174,7 @@ function clearOroscopoDraft() {
                       <>
                         <p>Hai finito la tua prova gratuita.</p>
                         <p style={{ marginTop: 8, fontSize: "0.9rem", opacity: 0.9 }}>
-                          Iscriviti, accedi o usa Magic Link per continuare a leggere.
+                          Usa Email+Link, oppure accedi/iscriviti per continuare.
                         </p>
                       </>
                     )}
@@ -1056,29 +1199,27 @@ function clearOroscopoDraft() {
               <h4 className="card-subtitle" style={{ marginTop: 24 }}>Interpretazione</h4>
               <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>{freeText}</p>
 
-              {!hasPremium && (
-                <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                  <button type="button" className="btn btn-primary" onClick={handleApprofondisciClick} disabled={loading}>
-                  {loading ? "Attendi, sto generando…" : "✨ Approfondisci con DYANA"}
-                  </button>
+              <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <button type="button" className="btn btn-primary" onClick={handleApprofondisciClick} disabled={primaryBusy}>
+                  {premiumBusyLabel}
+                </button>
 
-                  {isLoggedIn && currentCost > 0 && (
-                    <span
-                      className="card-text"
-                      style={{
-                        fontSize: "0.8rem",
-                        opacity: 0.85,
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        padding: "6px 10px",
-                        borderRadius: 999,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      Costo: {currentCost} credito{currentCost === 1 ? "" : "i"}
-                    </span>
-                  )}
-                </div>
-              )}
+                {isLoggedIn && currentCost > 0 && (
+                  <span
+                    className="card-text"
+                    style={{
+                      fontSize: "0.8rem",
+                      opacity: 0.85,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      padding: "6px 10px",
+                      borderRadius: 999,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Costo: {currentCost} credito{currentCost === 1 ? "" : "i"}
+                  </span>
+                )}
+              </div>
 
               {/* EMAIL GATE INLINE */}
               {emailGateOpen && !hasPremium && (
@@ -1093,33 +1234,38 @@ function clearOroscopoDraft() {
                   <h4 className="card-subtitle" style={{ marginBottom: 6 }}>
                     {guestTrialLeft === 0 ? "Hai finito la tua prova gratuita." : "Continua con la tua email"}
                   </h4>
+
                   <p className="card-text" style={{ opacity: 0.9 }}>{gateMsg}</p>
 
                   <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
                     {guestTrialLeft === 0 && (
                       <>
-					     <button
+                        <button
                           type="button"
                           className={gateMode === "magic" ? "btn btn-primary" : "btn"}
                           onClick={() => setGateMode("magic")}
+                          disabled={primaryBusy}
                         >
                           Email+Link
                         </button>
+
                         <button
                           type="button"
                           className={gateMode === "register" ? "btn btn-primary" : "btn"}
                           onClick={() => setGateMode("register")}
+                          disabled={primaryBusy}
                         >
                           Iscriviti
                         </button>
+
                         <button
                           type="button"
                           className={gateMode === "login" ? "btn btn-primary" : "btn"}
                           onClick={() => setGateMode("login")}
+                          disabled={primaryBusy}
                         >
                           Accedi
                         </button>
- 
                       </>
                     )}
 
@@ -1128,6 +1274,7 @@ function clearOroscopoDraft() {
                       className="btn"
                       onClick={() => setEmailGateOpen(false)}
                       style={{ marginLeft: "auto" }}
+                      disabled={primaryBusy}
                     >
                       Chiudi
                     </button>
@@ -1140,6 +1287,7 @@ function clearOroscopoDraft() {
                       placeholder="La tua email"
                       value={gateEmail}
                       onChange={(e) => setGateEmail(e.target.value)}
+                      disabled={primaryBusy}
                     />
 
                     {/* CONSENSO MARKETING + LINK CONDIZIONI SOLO PER TRIAL DISPONIBILE */}
@@ -1150,7 +1298,7 @@ function clearOroscopoDraft() {
                             type="checkbox"
                             checked={gateMarketing}
                             onChange={(e) => setGateMarketing(e.target.checked)}
-                            disabled={gateLoading || loading}
+                            disabled={primaryBusy}
                             style={{ width: 14, height: 14, marginTop: 3 }}
                           />
                           <span style={{ fontSize: "0.85rem", opacity: 0.9 }}>
@@ -1172,7 +1320,7 @@ function clearOroscopoDraft() {
                       </div>
                     )}
 
-                    {/* ✅ PASSWORD SOLO SE TRIAL=0 E NON MAGIC */}
+                    {/* PASSWORD SOLO SE TRIAL=0 E NON MAGIC */}
                     {guestTrialLeft === 0 && gateMode !== "magic" && (
                       <>
                         <input
@@ -1182,6 +1330,7 @@ function clearOroscopoDraft() {
                           value={gatePass}
                           onChange={(e) => setGatePass(e.target.value)}
                           autoComplete="current-password"
+                          disabled={primaryBusy}
                         />
                         {gateMode === "register" && (
                           <input
@@ -1191,14 +1340,15 @@ function clearOroscopoDraft() {
                             value={gatePass2}
                             onChange={(e) => setGatePass2(e.target.value)}
                             autoComplete="new-password"
+                            disabled={primaryBusy}
                           />
                         )}
                       </>
                     )}
 
-                    <button type="submit" className="btn btn-primary" disabled={gateLoading || loading}>
-                      {gateLoading
-                        ? "Attendi... Sto generando il tuo oroscopo"
+                    <button type="submit" className="btn btn-primary" disabled={primaryBusy}>
+                      {(gateLoading || loading)
+                        ? "Attendi, sto generando…"
                         : guestTrialLeft === 0
                         ? (gateMode === "magic"
                             ? "Invia link su email e aprilo per entrare"
@@ -1220,74 +1370,73 @@ function clearOroscopoDraft() {
           </section>
         )}
 
-{/* BLOCCO PREMIUM */}
-{hasPremium && (
-  <section className="section">
-    <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
-      <h3 className="card-title">La tua lettura completa</h3>
-
-      {premiumMetriche && <MetricheGrafico metriche={premiumMetriche} />}
-      {premiumAspetti.length > 0 && <AspettiTable aspetti={premiumAspetti} />}
-
-      <h4 className="card-subtitle" style={{ marginTop: 24 }}>Interpretazione</h4>
-      <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
-        {premiumText || "Lettura completata. (Testo non disponibile in questo formato risposta.)"}
-      </p>
-    </div>
-  </section>
-)}
-
-
-    {/* BLOCCO DYANA Q&A: solo se premium presente */}
+        {/* BLOCCO PREMIUM */}
         {hasPremium && (
-          <section className="section">
-            <div style={{ display: "flex", justifyContent: "center", marginTop: 32 }}>
-              <div
-                className="card"
-                style={{
-                  maxWidth: 950,
-                  width: "100%",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  boxShadow: "0 18px 40px rgba(0,0,0,0.75)",
-                }}
-              >
-                <p className="card-text" style={{ fontSize: "0.8rem", opacity: 0.8, marginBottom: 4 }}>
-                  DYANA • Q&amp;A sul tuo Oroscopo
-                </p>
+          <>
+            <section className="section">
+              <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
+                <h3 className="card-title">La tua lettura completa</h3>
 
-                <h3 className="card-title" style={{ marginBottom: 6 }}>
-                  Hai domande su questa lettura?
-                </h3>
+                {premiumMetriche && <MetricheGrafico metriche={premiumMetriche} />}
+                {premiumAspetti.length > 0 && <AspettiTable aspetti={premiumAspetti} />}
 
-                <p className="card-text" style={{ marginBottom: 4, opacity: 0.9 }}>
-                  DYANA conosce già l&apos;oroscopo che hai appena generato e può aiutarti a interpretarlo meglio.
-                </p>
-
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ marginTop: 16 }}
-                  onClick={() => setDiyanaOpen((prev) => !prev)}
-                >
-                  {diyanaOpen ? "Chiudi DYANA" : "Chiedi a DYANA"}
-                </button>
-
-                {diyanaOpen && (
-                  <div style={{ marginTop: 16, width: "100%", height: 560, borderRadius: 18, overflow: "hidden" }}>
-                    <iframe
-                      src={typebotUrl}
-                      style={{ border: "none", width: "100%", height: "100%" }}
-                      allow="clipboard-write; microphone; camera"
-                    />
-                  </div>
-                )}
-
-                <p className="card-text" style={{ marginTop: 8, fontSize: "0.75rem", opacity: 0.65, textAlign: "right" }}>
-                  DYANA risponde solo su questo oroscopo, non su argomenti generici.
+                <h4 className="card-subtitle" style={{ marginTop: 24 }}>Interpretazione</h4>
+                <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
+                  {premiumText || "Lettura completata. (Testo non disponibile in questo formato risposta.)"}
                 </p>
               </div>
-            </div>
-          </section>
+            </section>
+
+            {/* BLOCCO DYANA Q&A */}
+            <section className="section">
+              <div style={{ display: "flex", justifyContent: "center", marginTop: 32 }}>
+                <div
+                  className="card"
+                  style={{
+                    maxWidth: 950,
+                    width: "100%",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    boxShadow: "0 18px 40px rgba(0,0,0,0.75)",
+                  }}
+                >
+                  <p className="card-text" style={{ fontSize: "0.8rem", opacity: 0.8, marginBottom: 4 }}>
+                    DYANA • Q&amp;A sul tuo Oroscopo
+                  </p>
+
+                  <h3 className="card-title" style={{ marginBottom: 6 }}>
+                    Hai domande su questa lettura?
+                  </h3>
+
+                  <p className="card-text" style={{ marginBottom: 4, opacity: 0.9 }}>
+                    DYANA conosce già l&apos;oroscopo che hai appena generato e può aiutarti a interpretarlo meglio.
+                  </p>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ marginTop: 16 }}
+                    onClick={() => setDiyanaOpen((prev) => !prev)}
+                  >
+                    {diyanaOpen ? "Chiudi DYANA" : "Chiedi a DYANA"}
+                  </button>
+
+                  {diyanaOpen && (
+                    <div style={{ marginTop: 16, width: "100%", height: 560, borderRadius: 18, overflow: "hidden" }}>
+                      <iframe
+                        src={typebotUrl}
+                        style={{ border: "none", width: "100%", height: "100%" }}
+                        allow="clipboard-write; microphone; camera"
+                      />
+                    </div>
+                  )}
+
+                  <p className="card-text" style={{ marginTop: 8, fontSize: "0.75rem", opacity: 0.65, textAlign: "right" }}>
+                    DYANA risponde solo su questo oroscopo, non su argomenti generici.
+                  </p>
+                </div>
+              </div>
+            </section>
+          </>
         )}
       </section>
     </main>
