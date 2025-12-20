@@ -4,7 +4,6 @@ export default function ComeFunziona() {
   return (
     <main className="page-root">
       <section className="landing-wrapper">
-
         {/* TITOLO PAGINA */}
         <header className="section">
           <h1 className="section-title">Come funziona DYANA</h1>
@@ -16,7 +15,6 @@ export default function ComeFunziona() {
         {/* SEZIONE A STEP */}
         <section className="section">
           <div className="cards-grid">
-
             <article className="card">
               <h3 className="card-title">1. Raccolta delle informazioni</h3>
               <p className="card-text">
@@ -49,26 +47,36 @@ export default function ComeFunziona() {
               </p>
             </article>
 
+            {/* ✅ NUOVO BOX 5 */}
+            <article className="card">
+              <h3 className="card-title">5. Come si usano i crediti</h3>
+              <p className="card-text">
+                Le funzionalità premium consumano crediti. Quando avvii una lettura premium, DYANA verifica il tuo
+                saldo e scala automaticamente i crediti necessari. Se non hai crediti sufficienti, ti verrà mostrato un
+                messaggio con la soluzione (es. acquistare un pacchetto crediti).
+              </p>
+              <p className="card-text" style={{ opacity: 0.85, marginTop: 10 }}>
+                I crediti servono per sbloccare letture più complete e personalizzate (es. approfondimenti, periodi più
+                lunghi, analisi più dettagliate).
+              </p>
+            </article>
+
+            {/* ✅ NUOVO BOX 6 */}
+            <article className="card">
+              <h3 className="card-title">6. Crediti gratuiti: 5 all’iscrizione + 1 al giorno</h3>
+              <p className="card-text">
+                Quando ti iscrivi, ricevi subito <strong>5 crediti gratuiti</strong> per iniziare a usare DYANA in modo
+                completo. In più, ogni giorno ricevi <strong>1 credito gratuito</strong> per continuare a leggere anche
+                senza acquistare.
+              </p>
+              <p className="card-text" style={{ opacity: 0.85, marginTop: 10 }}>
+                Nota: i crediti gratuiti giornalieri vengono assegnati automaticamente secondo la logica del tuo account.
+              </p>
+            </article>
           </div>
         </section>
 
-        {/* CALL TO ACTION */}
-        <section className="section section-chat">
-          <p className="section-subtitle">
-            Ora che sai come funziona, puoi iniziare a parlare direttamente con DYANA.
-          </p>
-
-          <div className="chat-placeholder">
-            <p className="chat-placeholder-text">
-              Vai alla{" "}
-              <a href="/chat" className="btn btn-primary">
-                chat di DYANA
-              </a>{" "}
-              e inizia la tua esperienza personale.
-            </p>
-          </div>
-        </section>
-
+        {/* ✅ CTA rimossa (non più necessaria) */}
       </section>
     </main>
   );
