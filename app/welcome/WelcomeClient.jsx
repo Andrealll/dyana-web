@@ -92,7 +92,7 @@ export default function WelcomeClient() {
             Accesso completato.
           </p>
           <p className="card-text" style={{ opacity: 0.9 }}>
-            Hai dei <strong>crediti gratuiti</strong> per iniziare. Inoltre, riceverai <strong>1 credito gratuito al giorno</strong>.
+            Hai <strong>5 crediti gratuiti</strong> per iniziare. Inoltre, riceverai <strong>1 credito gratuito al giorno</strong> per calcolare i tuoi oroscopi!.
           </p>
         </>
       ) : (
