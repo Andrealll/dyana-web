@@ -1,4 +1,3 @@
-// app/layout.jsx
 import "./globals.css";
 import Script from "next/script";
 import CookieBanner from "../components/CookieBanner";
@@ -12,18 +11,13 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="it">
-      <body>
-        {children}
-
-        <DyanaFooter />
-        <CookieBanner />
-
+      <head>
         {/* Google Analytics */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-FP10KYRWX5"
-          strategy="afterInteractive"
+          strategy="beforeInteractive"
         />
-        <Script id="gtag-init" strategy="afterInteractive">
+        <Script id="gtag-init" strategy="beforeInteractive">
           {`
             window.dataLayer = window.dataLayer || [];
             function gtag(){window.dataLayer.push(arguments);}
@@ -31,6 +25,12 @@ export default function RootLayout({ children }) {
             gtag('config', 'G-FP10KYRWX5');
           `}
         </Script>
+      </head>
+
+      <body>
+        {children}
+        <DyanaFooter />
+        <CookieBanner />
       </body>
     </html>
   );

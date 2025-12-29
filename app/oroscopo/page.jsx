@@ -39,11 +39,12 @@ const PERIOD_COSTS = {
   mensile: 3,
   annuale: 5,
 };
-
+const ENABLE_EMAIL_GATE = false;
+const ENABLE_EMAIL_GATE_WHEN_TRIAL_OVER = true;
 const OROSCOPO_DRAFT_KEY = "dyana_oroscopo_draft_v1";
 const AUTH_DONE_KEY = "dyana_auth_done";
 const POST_LOGIN_ACTION_KEY = "dyana_post_login_action";
-
+const SHOW_TABLES_IN_FREE = false;
 // ==========================
 // HELPERS
 // ==========================
@@ -491,6 +492,33 @@ function AspettiTable({ aspetti }) {
 // ==========================
 // PAGINA
 // ==========================
+
+function buildFreeTeaser(oroscopoAi) {
+  if (!oroscopoAi || typeof oroscopoAi !== "object") return "";
+
+  // prova a prendere un intro o sintesi breve
+  const intro = (
+    oroscopoAi.intro ||
+    oroscopoAi.sintesi_periodo ||
+    oroscopoAi.sintesi ||
+    ""
+  ).trim();
+
+  // fallback: pesca una sezione (emozioni/relazioni/lavoro) ma corta
+  const sections = oroscopoAi.sections && typeof oroscopoAi.sections === "object" ? oroscopoAi.sections : {};
+  const pick =
+    (sections.emozioni || sections.relazioni || sections.panorama || sections.lavoro || "").trim();
+
+  const base = intro || pick || "";
+
+  // teaser: max ~450-600 caratteri, senza chiudere "il cerchio"
+  const cut = base.length > 520 ? base.slice(0, 520).replace(/\s+\S*$/, "") + "…" : base;
+
+  // se è vuoto, fallback
+  return cut || "In questo periodo emerge un tema centrale che influenza il tuo modo di reagire e prendere decisioni. La parte più importante è capire perché si attiva proprio ora.";
+}
+
+
 export default function OroscopoPage() {
   const [form, setForm] = useState({
     nome: "",
@@ -528,6 +556,7 @@ export default function OroscopoPage() {
   const [gateErr, setGateErr] = useState("");
   const [gateLoading, setGateLoading] = useState(false);
   const [gateMarketing, setGateMarketing] = useState(true);
+  const [showPeriodo, setShowPeriodo] = useState(false);
 
   // DYANA
   const [diyanaOpen, setDiyanaOpen] = useState(false);
@@ -809,6 +838,12 @@ export default function OroscopoPage() {
           setErrore(typeof msg === "string" ? msg : "Crediti insufficienti.");
           setAuthBanner(null);
           await refreshCreditsUI();
+		  if (!isLoggedIn && ENABLE_EMAIL_GATE_WHEN_TRIAL_OVER) {
+			// se siamo guest e i crediti non bastano, proponi subito il gate
+			if (guestTrialLeft === 0) {
+			openEmailGate();
+  }
+}
           return;
         }
 
@@ -854,20 +889,30 @@ export default function OroscopoPage() {
       setGateMsg("Inserisci la tua email per continuare. Ti invieremo anche un link per salvare l’accesso (controlla spam).");
     }
   }
+async function handleApprofondisciClick() {
+  setErrore("");
+  setNoCredits(false);
 
-  async function handleApprofondisciClick() {
-    setErrore("");
-    setNoCredits(false);
+  if (premiumResult) return;
 
-    if (premiumResult) return;
-
-    if (isLoggedIn) {
-      await generaPremium();
-      return;
-    }
-
-    openEmailGate();
+  if (isLoggedIn) {
+    await generaPremium();
+    return;
   }
+
+  // IMPORTANT: rileggo lo stato crediti/Trial prima di decidere
+  await refreshCreditsUI();
+
+  // Dopo refresh, se trial finito => apro gate
+  if (guestTrialLeft === 0) {
+    openEmailGate();
+    return;
+  }
+
+  // Altrimenti provo premium diretto (trial disponibile)
+  await generaPremium();
+}
+
 
   async function submitInlineAuth(e) {
     e.preventDefault();
@@ -999,6 +1044,8 @@ export default function OroscopoPage() {
     freeResult ||
     null;
   const freeText = freeAi ? buildInterpretazioneTesto(freeAi, freeTier) : "";
+  const freeTeaser = freeAi ? buildFreeTeaser(freeAi) : "";
+  
   const hasFree = !!freeResult;
 
   const freePeriodoKey = freeResult?.engine_result?.periodo_ita || form.periodo || "giornaliero";
@@ -1057,7 +1104,7 @@ export default function OroscopoPage() {
 
   const primaryBusy = loading || gateLoading;
   const primaryLabel = primaryBusy ? "Attendi, sto generando…" : "🔮 Inizia la lettura";
-  const premiumBusyLabel = primaryBusy ? "Attendi, sto generando…" : "✨ Approfondisci con DYANA";
+  const premiumBusyLabel = primaryBusy ? "Attendi, sto generando…" : "🔒 Sblocca la lettura completa";
 
   // ==========================
   // RENDER
@@ -1067,12 +1114,16 @@ export default function OroscopoPage() {
       <DyanaNavbar userRole={userRole} credits={userCredits} onLogout={handleLogout} />
 
       <section className="landing-wrapper">
-        <header className="section">
-          <h1 className="section-title">Oroscopo dinamico: giorno, settimana, mese, anno.</h1>
-          <p className="section-subtitle">
-            Inserisci i tuoi dati di nascita e scegli il periodo che ti interessa.
-          </p>
-        </header>
+<header className="section">
+  <h1 className="section-title">Il tuo schema astrologico in questo periodo</h1>
+  <p className="section-subtitle">
+    Non è un oroscopo generico. È una lettura basata su come reagisci davvero quando le cose contano.
+  </p>
+  <p className="card-text" style={{ maxWidth: 850, margin: "10px auto 0", opacity: 0.9 }}>
+    Vediamo se questo schema emerge davvero nel tuo profilo. Inserisci i dati per confermare.
+  </p>
+</header>
+
 
         {/* Banner post-login / stato */}
         {authBanner && (
@@ -1090,27 +1141,21 @@ export default function OroscopoPage() {
         <section className="section">
           <div className="card" style={{ maxWidth: "650px", margin: "0 auto" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
-              <div>
-                <label className="card-text">Nome (opzionale)</label>
-                <input
-                  name="nome"
-                  value={form.nome}
-                  onChange={handleChange}
-                  className="form-input"
-                  placeholder="Come vuoi essere chiamato"
-                />
-              </div>
+              {/* Nome nascosto in questa fase */}
+{false && (
+  <div>
+    <label className="card-text">Nome (opzionale)</label>
+    <input
+      name="nome"
+      value={form.nome}
+      onChange={handleChange}
+      className="form-input"
+      placeholder="Come vuoi essere chiamato"
+    />
+  </div>
+)}
 
-              <div>
-                <label className="card-text">Città di nascita</label>
-                <input
-                  name="citta"
-                  value={form.citta}
-                  onChange={handleChange}
-                  className="form-input"
-                  placeholder="Es. Milano, Roma, Napoli…"
-                />
-              </div>
+
 
               <div>
                 <label className="card-text">Data di nascita</label>
@@ -1137,20 +1182,48 @@ export default function OroscopoPage() {
                     <span>Non conosco l&apos;ora esatta (uso un oroscopo con ora neutra)</span>
                   </label>
                 </div>
+				              <div>
+                <label className="card-text">Città di nascita</label>
+                <input
+                  name="citta"
+                  value={form.citta}
+                  onChange={handleChange}
+                  className="form-input"
+                  placeholder="Es. Milano, Roma, Napoli…"
+                />
               </div>
+				
+              </div>
+<div style={{ marginTop: 10 }}>
+  <p className="card-text" style={{ fontSize: "0.85rem", opacity: 0.8, marginBottom: 8 }}>
+    Vuoi una visione più ampia?
+  </p>
 
-              <div>
-                <label className="card-text">Periodo</label>
-                <select name="periodo" value={form.periodo} onChange={handleChange} className="form-input">
-                  <option value="giornaliero">Giornaliero</option>
-                  <option value="settimanale">Settimanale</option>
-                  <option value="mensile">Mensile</option>
-                  <option value="annuale">Annuale</option>
-                </select>
-                <p className="card-text" style={{ fontSize: "0.8rem", opacity: 0.75, marginTop: 4 }}>
-                  Scegli se vuoi una fotografia della giornata, della settimana, del mese o dell&apos;anno.
-                </p>
-              </div>
+  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+    {[
+      ["giornaliero", "Giorno"],
+      ["settimanale", "Settimana"],
+      ["mensile", "Mese"],
+      ["annuale", "Anno"],
+    ].map(([val, label]) => (
+      <button
+        key={val}
+        type="button"
+        className={form.periodo === val ? "btn btn-primary" : "btn"}
+        onClick={() => setForm((p) => ({ ...p, periodo: val }))}
+        disabled={primaryBusy}
+        style={{ padding: "8px 12px", borderRadius: 999 }}
+      >
+        {label}
+      </button>
+    ))}
+  </div>
+
+  <p className="card-text" style={{ fontSize: "0.8rem", opacity: 0.7, marginTop: 8 }}>
+
+  </p>
+</div>
+
 
               <button onClick={generaFree} className="btn btn-primary" disabled={primaryBusy} style={{ marginTop: "14px" }}>
                 {primaryLabel}
@@ -1193,11 +1266,25 @@ export default function OroscopoPage() {
             <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
               <h3 className="card-title">La tua sintesi</h3>
 
-              {freeMetriche && <MetricheGrafico metriche={freeMetriche} />}
-              {freeAspetti.length > 0 && <AspettiTable aspetti={freeAspetti} />}
+{SHOW_TABLES_IN_FREE && freeMetriche && <MetricheGrafico metriche={freeMetriche} />}
+{SHOW_TABLES_IN_FREE && freeAspetti.length > 0 && <AspettiTable aspetti={freeAspetti} />}
 
-              <h4 className="card-subtitle" style={{ marginTop: 24 }}>Interpretazione</h4>
-              <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>{freeText}</p>
+
+<h4 className="card-subtitle" style={{ marginTop: 24 }}>Quello che emerge ora</h4>
+<p className="card-text" style={{ whiteSpace: "pre-wrap" }}>{freeTeaser}</p>
+
+<div style={{ marginTop: 14, padding: "12px 14px", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14 }}>
+  <div className="card-text" style={{ fontWeight: 700, marginBottom: 6 }}>
+    Nel report completo DYANA analizza:
+  </div>
+  <div className="card-text" style={{ opacity: 0.9, whiteSpace: "pre-wrap" }}>
+    • perché questo schema si attiva proprio ora{"\n"}
+    • in quali momenti è più forte{"\n"}
+    • quanto durerà davvero{"\n"}
+    • come lavorarci in modo consapevole
+  </div>
+</div>
+
 
               <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <button type="button" className="btn btn-primary" onClick={handleApprofondisciClick} disabled={primaryBusy}>
@@ -1410,15 +1497,51 @@ export default function OroscopoPage() {
                   <p className="card-text" style={{ marginBottom: 4, opacity: 0.9 }}>
                     DYANA conosce già l&apos;oroscopo che hai appena generato e può aiutarti a interpretarlo meglio.
                   </p>
+<button
+  type="button"
+  className="btn btn-primary"
+  style={{
+    marginTop: 16,
+    width: "100%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    padding: "14px 16px",
+    borderRadius: 18,
+  }}
+  onClick={() => setDiyanaOpen((prev) => !prev)}
+>
+  <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+    <span style={{ fontWeight: 800 }}>
+      {diyanaOpen ? "Chiudi DYANA" : "Chiedi a DYANA"}
+    </span>
+    <span style={{ fontSize: "0.85rem", opacity: 0.9, fontWeight: 500 }}>
+      Fai una domanda su questa lettura.
+    </span>
+  </span>
 
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    style={{ marginTop: 16 }}
-                    onClick={() => setDiyanaOpen((prev) => !prev)}
-                  >
-                    {diyanaOpen ? "Chiudi DYANA" : "Chiedi a DYANA"}
-                  </button>
+  <span
+    style={{
+      width: 46,
+      height: 46,
+      borderRadius: 14,
+      display: "grid",
+      placeItems: "center",
+      background: "rgba(0,0,0,0.22)",
+      border: "1px solid rgba(255,255,255,0.14)",
+      flex: "0 0 auto",
+    }}
+  >
+    <img
+      src="/dyana-logo-NAV.PNG"
+      alt="DYANA"
+      style={{ width: 28, height: 28, objectFit: "contain" }}
+    />
+  </span>
+</button>
+
+
 
                   {diyanaOpen && (
                     <div style={{ marginTop: 16, width: "100%", height: 560, borderRadius: 18, overflow: "hidden" }}>

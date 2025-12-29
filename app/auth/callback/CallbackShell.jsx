@@ -2,7 +2,6 @@
 "use client";
 
 import DyanaNavbar from "../../../components/DyanaNavbar";
-import DyanaFooter from "../../../components/DyanaFooter";
 import { clearToken } from "../../../lib/authClient";
 
 export default function CallbackShell({ children }) {
@@ -20,7 +19,6 @@ export default function CallbackShell({ children }) {
         </section>
       </section>
 
-      <DyanaFooter />
     </main>
   );
 }

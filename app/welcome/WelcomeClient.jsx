@@ -13,15 +13,26 @@ export default function WelcomeClient() {
   const [error, setError] = useState("");
   const [credits, setCredits] = useState(null);
 
-  const resumeUrl = useMemo(() => {
-    try {
-      const path = localStorage.getItem("dyana_resume_path") || "/";
-      const qs = localStorage.getItem("dyana_resume_qs") || "";
-      return qs ? `${path}?${qs}` : path;
-    } catch {
-      return "/";
-    }
-  }, []);
+function buildResumeUrl(fallback = "/") {
+  try {
+    let path = localStorage.getItem("dyana_resume_path") || "";
+    let qs = localStorage.getItem("dyana_resume_qs") || "";
+
+    path = (path || "").trim();
+    qs = (qs || "").trim();
+
+    if (!path) return fallback;
+    if (!path.startsWith("/")) path = `/${path}`;
+
+    if (!qs) return path;
+
+    // qs può essere "a=b&c=d" oppure "?a=b"
+    return qs.startsWith("?") ? `${path}${qs}` : `${path}?${qs}`;
+  } catch {
+    return fallback;
+  }
+}
+;
 
   function clearResume() {
     try {
@@ -115,9 +126,9 @@ export default function WelcomeClient() {
           <button
             className="btn btn-primary"
             onClick={() => {
-              const target = resumeUrl;
-              clearResume();
-              router.push(target);
+const target = buildResumeUrl("/");
+clearResume();
+router.replace(target);
             }}
           >
             Continua

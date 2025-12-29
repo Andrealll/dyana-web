@@ -5,21 +5,14 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import {
-  // ✅ nuovo flow: token_hash -> /auth/magic-link/verify -> JWT DYANA già pronto
   verifyMagicLink,
-
-  // ✅ vecchio flow (fallback): access_token supabase -> /auth/exchange -> JWT DYANA
   exchangeSupabaseTokenForDyanaJwt,
-
   clearToken,
 } from "../../../lib/authClient";
 
 const WELCOME_PATH = "/welcome";
+const AUTH_DONE_KEY = "dyana_auth_done";
 
-/**
- * Resume target salvato prima di aprire il gate (quando chiedi email / login)
- * Lo teniamo per poter “continuare” dopo (dalla welcome), ma qui non ci torniamo più direttamente.
- */
 function clearResumeTarget() {
   try {
     localStorage.removeItem("dyana_resume_path");
@@ -29,7 +22,14 @@ function clearResumeTarget() {
 }
 
 function notifyAuthDone() {
-  try { localStorage.setItem("dyana_auth_done", String(Date.now())); } catch {}
+  try { localStorage.setItem(AUTH_DONE_KEY, String(Date.now())); } catch {}
+
+  // evento locale (stessa tab)
+  try {
+    window.dispatchEvent(new CustomEvent("dyana:auth", { detail: { type: "AUTH_DONE", ts: Date.now() } }));
+  } catch {}
+
+  // broadcast (altre tab)
   try {
     const bc = new BroadcastChannel("dyana_auth");
     bc.postMessage({ type: "AUTH_DONE", ts: Date.now() });
@@ -38,9 +38,7 @@ function notifyAuthDone() {
 }
 
 function resolveWelcomeMode(typeQ) {
-  // nuovi utenti: signup / invite
   if (typeQ === "signup" || typeQ === "invite") return "new";
-  // tutto il resto: ritorno (magiclink / recovery / ecc.)
   return "back";
 }
 
@@ -48,16 +46,13 @@ export default function CallbackClient() {
   const router = useRouter();
   const sp = useSearchParams();
 
-  const [status, setStatus] = useState("loading"); // loading | error
+  const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
 
   useEffect(() => {
     async function run() {
       try {
-        // -----------------------------
-        // 1) NUOVO FLOW:
-        // /auth/callback?token_hash=...&type=magiclink|signup|recovery|invite
-        // -----------------------------
+        // 1) NUOVO FLOW (token_hash)
         const tokenHash = sp?.get("token_hash");
         const typeQ = sp?.get("type") || "magiclink";
 
@@ -66,18 +61,13 @@ export default function CallbackClient() {
           notifyAuthDone();
 
           const mode = resolveWelcomeMode(typeQ);
-
-          // Per i nuovi: evitiamo di portarci dietro resume "sporchi" di pagine a metà
-          if (mode === "new") clearResumeTarget();
+         // if (mode === "new") clearResumeTarget();  NON cancelliamo mai il resume qui: serve a /welcome -> "Continua"
 
           router.replace(`${WELCOME_PATH}?mode=${mode}`);
           return;
         }
 
-        // -----------------------------
-        // 2) FALLBACK: FLOW SUPABASE HASH
-        // /auth/callback#access_token=...&type=...
-        // -----------------------------
+        // 2) FALLBACK (hash access_token)
         const hash = typeof window !== "undefined" ? window.location.hash : "";
         const hp = new URLSearchParams((hash || "").replace("#", ""));
         const sbAccessToken = hp.get("access_token");
@@ -88,15 +78,13 @@ export default function CallbackClient() {
           notifyAuthDone();
 
           const mode = resolveWelcomeMode(typeHash);
-          if (mode === "new") clearResumeTarget();
+          //if (mode === "new") clearResumeTarget(); NON cancelliamo mai il resume qui: serve a /welcome -> "Continua"
+
 
           router.replace(`${WELCOME_PATH}?mode=${mode}`);
           return;
         }
 
-        // -----------------------------
-        // 3) NIENTE TOKEN: errore
-        // -----------------------------
         throw new Error("Token mancante nel link. Richiedi un nuovo magic link.");
       } catch (e) {
         try { clearToken(); } catch {}
@@ -112,9 +100,7 @@ export default function CallbackClient() {
     return (
       <div className="card">
         <h1 className="card-title">Errore accesso</h1>
-        <p className="card-text" style={{ color: "#ff9a9a" }}>
-          {error}
-        </p>
+        <p className="card-text" style={{ color: "#ff9a9a" }}>{error}</p>
       </div>
     );
   }
