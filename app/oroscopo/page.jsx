@@ -42,6 +42,7 @@ const PERIOD_COSTS = {
 const ENABLE_EMAIL_GATE = false;
 const ENABLE_EMAIL_GATE_WHEN_TRIAL_OVER = true;
 const OROSCOPO_DRAFT_KEY = "dyana_oroscopo_draft_v1";
+const OROSCOPO_FREE_SNAPSHOT_KEY = "dyana_oroscopo_free_snapshot_v1";
 const AUTH_DONE_KEY = "dyana_auth_done";
 const POST_LOGIN_ACTION_KEY = "dyana_post_login_action";
 const SHOW_TABLES_IN_FREE = false;
@@ -93,6 +94,26 @@ function saveOroscopoDraft(draft) {
 function clearOroscopoDraft() {
   try {
     localStorage.removeItem(OROSCOPO_DRAFT_KEY);
+  } catch {}
+}
+function loadFreeSnapshot() {
+  try {
+    const raw = localStorage.getItem(OROSCOPO_FREE_SNAPSHOT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveFreeSnapshot(snapshot) {
+  try {
+    localStorage.setItem(OROSCOPO_FREE_SNAPSHOT_KEY, JSON.stringify(snapshot));
+  } catch {}
+}
+
+function clearFreeSnapshot() {
+  try {
+    localStorage.removeItem(OROSCOPO_FREE_SNAPSHOT_KEY);
   } catch {}
 }
 
@@ -609,22 +630,32 @@ export default function OroscopoPage() {
     }
   }, []);
 
-  // 1) restore draft + init tokens/credits
-  useEffect(() => {
-    try {
-      const draft = loadOroscopoDraft();
-      if (draft && typeof draft === "object") {
-        if (draft.form) setForm((prev) => ({ ...prev, ...draft.form }));
-        if (typeof draft.oraIgnota === "boolean") setOraIgnota(draft.oraIgnota);
-      }
-    } catch {}
+ // 1) restore draft + init tokens/credits
+useEffect(() => {
+  try {
+    // ---- restore FORM draft ----
+    const draft = loadOroscopoDraft();
+    if (draft && typeof draft === "object") {
+      if (draft.form) setForm((prev) => ({ ...prev, ...draft.form }));
+      if (typeof draft.oraIgnota === "boolean") setOraIgnota(draft.oraIgnota);
+    }
 
-    refreshUserFromToken();
-    (async () => {
-      await ensureGuestToken();
-      await refreshCreditsUI();
-    })();
-  }, [refreshUserFromToken, refreshCreditsUI]);
+    // ---- restore FREE snapshot (PEZZO B) ----
+    const snap = loadFreeSnapshot();
+    if (snap?.freeResult) {
+      if (snap.form) setForm((prev) => ({ ...prev, ...snap.form }));
+      if (typeof snap.oraIgnota === "boolean") setOraIgnota(snap.oraIgnota);
+      setFreeResult(snap.freeResult);
+    }
+  } catch {}
+
+  refreshUserFromToken();
+  (async () => {
+    await ensureGuestToken();
+    await refreshCreditsUI();
+  })();
+}, [refreshUserFromToken, refreshCreditsUI]);
+
 
   // 2) autosave draft
   useEffect(() => {
@@ -796,6 +827,15 @@ export default function OroscopoPage() {
       }
 
       setFreeResult(data);
+	  try {
+  saveFreeSnapshot({
+    ts: Date.now(),
+    form,
+    oraIgnota,
+    freeResult: data,
+  });
+} catch {}
+
       await refreshCreditsUI();
     } catch (e) {
       setErrore("Impossibile comunicare con il server. Controlla la connessione e riprova.");
