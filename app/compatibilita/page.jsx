@@ -561,54 +561,57 @@ export default function CompatibilitaPage() {
   // ======================================================
   // Gate open / Approfondisci click
   // ======================================================
-  function openEmailGate() {
-    setGateErr("");
-    setGateLoading(false);
+function openEmailGate() {
+  if (guestTrialLeft !== 0) return; // trial disponibile? non aprire mai gate
 
-    // default: magic link preselezionato
-    setGateMode("magic");
-    setEmailGateOpen(true);
+  setGateErr("");
+  setGateLoading(false);
 
-    const trial = guestTrialLeft;
-    if (trial === 0) {
-      setGateMsg(
-        "Hai finito la prova gratuita. Per continuare, accedi: puoi ricevere un link via email oppure usare la password."
-      );
-    } else {
-      setGateMsg(
-        "Inserisci la tua email per continuare. Ti invierò anche un link di accesso per salvare l’account."
-      );
+  // default: magic link preselezionato
+  setGateMode("magic");
+  setEmailGateOpen(true);
+
+  setGateMsg(
+    "Hai finito la prova gratuita. Per continuare, accedi: puoi ricevere un link via email oppure usare la password."
+  );
+}
+
+
+async function handleApprofondisciClick() {
+  setErrore("");
+  setNoCredits(false);
+
+  if (premiumResult) return;
+
+  // feedback immediato sul bottone + messaggio
+  setPremiumCtaLoading(true);
+  setSlowLoading(false);
+  const slowTimer = setTimeout(() => setSlowLoading(true), 12000);
+
+  try {
+    // 1) Se loggato → premium diretto
+    if (isLoggedIn) {
+      await generaPremium();
+      return;
     }
-  }
 
-  async function handleApprofondisciClick() {
-    setErrore("");
-    setNoCredits(false);
+    // 2) Guest con trial disponibile → premium diretto (NO email gate)
+    if (guestTrialLeft === 1) {
+      await generaPremium();
+      return;
+    }
 
-    if (premiumResult) return;
-
-    // feedback immediato sul bottone + messaggio
-    setPremiumCtaLoading(true);
+    // 3) Guest senza trial → gate email/login
+    openEmailGate();
+  } catch (e) {
+    // errori gestiti da generaPremium / catch generale
+  } finally {
+    clearTimeout(slowTimer);
+    setPremiumCtaLoading(false);
     setSlowLoading(false);
-    const slowTimer = setTimeout(() => setSlowLoading(true), 12000);
-
-    try {
-      if (isLoggedIn) {
-        await generaPremium();
-        return;
-      }
-
-      // guest: apri gate, quindi non stai caricando premium
-      clearTimeout(slowTimer);
-      setPremiumCtaLoading(false);
-      setSlowLoading(false);
-      openEmailGate();
-    } catch (e) {
-      clearTimeout(slowTimer);
-      setPremiumCtaLoading(false);
-      setSlowLoading(false);
-    }
   }
+}
+
 
   // ======================================================
   // Submit gate
@@ -1257,7 +1260,7 @@ export default function CompatibilitaPage() {
                   </div>
 
                   {/* EMAIL GATE INLINE */}
-                  {emailGateOpen && !hasPremium && (
+                  {emailGateOpen && !hasPremium && guestTrialLeft === 0 &&(
                     <div
                       className="card"
                       style={{

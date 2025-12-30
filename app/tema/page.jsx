@@ -146,7 +146,7 @@ const [slowLoading, setSlowLoading] = useState(false);
   // Consenso marketing: prefleggato a sì
   const [gateMarketing, setGateMarketing] = useState(true);
 
-const isLoggedIn = userRole !== "guest";
+const isLoggedIn = !!getToken() && userRole !== "guest";
 
   const isPremium = premiumLoaded;
 
@@ -238,7 +238,18 @@ const isLoggedIn = userRole !== "guest";
     } catch (e) {
       console.warn("[TEMA] refreshCreditsUI failed:", e?.message || e);
     }
-  }, []);
+   }, []);
+
+useEffect(() => {
+  // bootstrap iniziale (come /compatibilita e /oroscopo)
+  refreshUserFromToken();
+
+  (async () => {
+    await ensureGuestToken();
+    await refreshCreditsUI();
+  })();
+}, [refreshUserFromToken, refreshCreditsUI]);
+
 
 useEffect(() => {
   if (typeof window === "undefined") return;
@@ -253,15 +264,12 @@ useEffect(() => {
     setGateErr("");
     setGateMsg("");
 
-    let action = null;
-    try { action = localStorage.getItem(POST_LOGIN_ACTION_KEY); } catch {}
+    setJustLoggedIn(true);
+    setPostAuthToast("Accesso completato. Ora puoi cliccare “Approfondisci con DYANA” per la lettura Premium.");
+    setTimeout(() => setJustLoggedIn(false), 6000);
 
-    if (action === "tema_premium") {
-      try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
-      if (interpretazione) {
-        await generaPremium();
-      }
-    }
+    // non fare auto-premium qui
+    try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
   };
 
   const storageHandler = (e) => {
@@ -283,7 +291,7 @@ useEffect(() => {
     };
   } catch {}
 
-  // bootstrap
+  // bootstrap (se il flag era rimasto)
   try {
     const pending = localStorage.getItem(AUTH_DONE_KEY);
     if (pending) onAuthDone();
@@ -294,7 +302,8 @@ useEffect(() => {
     window.removeEventListener("dyana:auth", localHandler);
     try { bc && bc.close(); } catch {}
   };
-}, [refreshUserFromToken, refreshCreditsUI, interpretazione]);
+}, [refreshUserFromToken, refreshCreditsUI]);
+
 
   function handleLogout() {
     clearToken();
@@ -561,6 +570,7 @@ setKbTags(kbFromBackend);
   // Gate open / Approfondisci click
   // ======================================================
   function openEmailGate() {
+	    if (guestTrialLeft !== 0) return; // trial disponibile? non aprire mai gate
     setGateErr("");
     setGateLoading(false);
 setGateMode(guestTrialLeft === 0 ? "magic" : "register");
@@ -582,28 +592,35 @@ async function handleApprofondisciClick() {
 
   if (premiumLoaded) return;
 
-  // UX loading immediato
+  // loading UX
   setPremiumCtaLoading(true);
   setSlowLoading(false);
   const slowTimer = setTimeout(() => setSlowLoading(true), 12000);
 
   try {
+    // Se loggato → premium diretto
     if (isLoggedIn) {
       await generaPremium();
       return;
     }
 
-    // guest: apri gate, NON stai caricando premium => spegni loading
-    clearTimeout(slowTimer);
-    setPremiumCtaLoading(false);
-    setSlowLoading(false);
+    // Guest con trial disponibile → premium diretto (NO email gate)
+    if (guestTrialLeft === 1) {
+      await generaPremium();
+      return;
+    }
+
+    // Guest senza trial → allora sì, gate email/login
     openEmailGate();
   } catch (e) {
+    // lascia errore gestito da generaPremium / catch generale se serve
+  } finally {
     clearTimeout(slowTimer);
     setPremiumCtaLoading(false);
     setSlowLoading(false);
   }
 }
+
 
 
   // ======================================================
@@ -632,13 +649,11 @@ async function handleApprofondisciClick() {
 if (guestTrialLeft === 0) {
   // 1) Se sceglie magic link: invio link e basta.
 if (gateMode === "magic") {
-  setGateErr("");
-  setGateErr("");
+  const redirectUrl =
+    (typeof window !== "undefined" && window.location?.origin)
+      ? `${window.location.origin.replace(/\/+$/, "")}/auth/callback`
+      : "https://dyana.app/auth/callback";
 
-  const siteBase = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
-  const redirectUrl = `${siteBase}/auth/callback`;
-
-  // ✅ NON impostare azioni automatiche post-login
   try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
 
   await sendAuthMagicLink(email, redirectUrl);
@@ -646,12 +661,8 @@ if (gateMode === "magic") {
   setGateMsg("Link inviato. Apri l’email e clicca il link di accesso per completare. Poi torna qui e premi “Approfondisci con DYANA”.");
   setGateLoading(false);
   return;
-
-  // Messaggio corretto (non "sto generando")
-  setGateMsg("Link inviato. Apri l’email e clicca il link di accesso per completare. Poi torna qui: “Approfondisci” funzionerà.");
-  setGateLoading(false);
-  return;
 }
+
 
   // 2) Altrimenti password login/register
   if (gateMode === "login") {
@@ -1125,7 +1136,7 @@ if (gateMode === "magic") {
               )}
 
               {/* EMAIL GATE INLINE (sparisce appena arriva premium) */}
-              {emailGateOpen && !premiumLoaded && (
+              {emailGateOpen && !premiumLoaded && guestTrialLeft === 0 && (
                 <div
                   className="card"
                   style={{
