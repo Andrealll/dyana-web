@@ -209,33 +209,57 @@ export default function Oroscopo2026Page() {
           </p>
         </section>
 
-        {/* FAQ */}
-        <section className="section section-features">
-          <h2 className="section-title">FAQ</h2>
+{/* FAQ */}
+<section className="section section-features">
+  <h2 className="section-title">Domande frequenti sull’Oroscopo 2026</h2>
 
-          <div className="cards-grid">
-            <article className="card">
-              <h3 className="card-title">È un oroscopo per segno?</h3>
-              <p className="card-text">
-                No. Il segno da solo non basta per descrivere un anno intero.
-              </p>
-            </article>
+  <div className="cards-grid">
+    <article className="card">
+      <h3 className="card-title">
+        Questo è un oroscopo 2026 personalizzato o uguale per tutti?
+      </h3>
+      <p className="card-text">
+        È un <strong>oroscopo 2026 personalizzato</strong>. DYANA lavora sui tuoi dati di nascita
+        e analizza come i transiti astrologici del 2026 agiscono sulla tua carta natale.
+        Non esistono testi standard validi per tutti.
+      </p>
+    </article>
 
-            <article className="card">
-              <h3 className="card-title">È gratis?</h3>
-              <p className="card-text">
-                Puoi iniziare gratuitamente e decidere se approfondire.
-              </p>
-            </article>
+    <article className="card">
+      <h3 className="card-title">
+        Su cosa si basano le previsioni astrologiche 2026 di DYANA?
+      </h3>
+      <p className="card-text">
+        Le <strong>previsioni 2026</strong> si basano sull’analisi dei principali movimenti planetari
+        dell’anno applicati al tuo profilo astrologico.
+        Questo permette di individuare periodi di spinta, blocco o trasformazione in modo mirato.
+      </p>
+    </article>
 
-            <article className="card">
-              <h3 className="card-title">Serve l’ora di nascita?</h3>
-              <p className="card-text">
-                Se la hai, la lettura è più precisa. Se no, puoi comunque iniziare.
-              </p>
-            </article>
-          </div>
-        </section>
+    <article className="card">
+      <h3 className="card-title">
+        In cosa questo oroscopo 2026 è diverso dagli oroscopi tradizionali?
+      </h3>
+      <p className="card-text">
+        Gli oroscopi tradizionali del 2026 sono generici e identici per milioni di persone.
+        DYANA costruisce una lettura individuale, coerente con il tuo cielo,
+        senza frasi copia-incolla o promesse vaghe.
+      </p>
+    </article>
+
+    <article className="card">
+      <h3 className="card-title">
+        Devo conoscere l’astrologia per capire il mio oroscopo 2026?
+      </h3>
+      <p className="card-text">
+        No. L’oroscopo 2026 di DYANA è scritto in modo chiaro e diretto:
+        niente gergo tecnico, niente simbolismi inutili.
+        Solo indicazioni leggibili e applicabili alla tua vita reale.
+      </p>
+    </article>
+  </div>
+</section>
+
 
         <footer className="footer">
           <p className="footer-text">

@@ -43,22 +43,29 @@ export default function Home() {
 
             {/* BLOCCO AZIONI PRINCIPALI */}
             <div className="splash-column splash-column-actions">
-              <h2 className="section-title" style={{ marginBottom: "1rem" }}>
+              <h2 className="section-title" style={{ marginBottom: "1.5rem" }}>
                 Da dove vuoi iniziare?
               </h2>
 
-              {/* PRIMA RIGA: PRODOTTI PRINCIPALI */}
-              <div className="hero-actions">
-                <a href="/oroscopo" className="btn btn-primary">
-                  Oroscopo personalizzato
-                </a>
-                <a href="/tema" className="btn btn-primary">
-                  Tema natale completo
-                </a>
-                <a href="/compatibilita" className="btn btn-primary">
-                  Compatibilità tra due persone
-                </a>
-              </div>
+{/* PRIMA RIGA: PRODOTTI PRINCIPALI */}
+<div className="hero-actions" style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+  <a href="/oroscopo" className="btn btn-primary">
+    Oroscopo personalizzato
+  </a>
+  <a href="/tema" className="btn btn-primary">
+    Tema natale completo
+  </a>
+  <a href="/compatibilita" className="btn btn-primary">
+    Compatibilità tra due persone
+  </a>
+</div>
+
+{/* SECONDA RIGA: LINK EXTRA */}
+<div className="hero-actions" style={{ marginTop: "1rem", display: "flex", flexWrap: "wrap", gap: 12 }}>
+  <a href="/oroscopo2026" className="btn btn-secondary">
+    Oroscopo 2026
+  </a>
+</div>
 
               {/* SECONDA RIGA: INFO + ACCOUNT + CREDITI + PRIVACY */}
               <div className="hero-actions" style={{ marginTop: "1.5rem" }}>

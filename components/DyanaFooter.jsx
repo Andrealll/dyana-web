@@ -26,6 +26,9 @@ export default function DyanaFooter() {
             Scrivimi
           </a>
         </div>
+		<a href="/oroscopo2026" className="footer-link">
+  Oroscopo 2026
+</a>
       </div>
     </footer>
   );

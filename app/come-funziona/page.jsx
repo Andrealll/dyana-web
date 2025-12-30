@@ -73,6 +73,21 @@ export default function ComeFunziona() {
                 Nota: i crediti gratuiti giornalieri vengono assegnati automaticamente secondo la logica del tuo account.
               </p>
             </article>
+			            {/* ✅ BOX 7: Oroscopo 2026 */}
+            <article className="card">
+              <h3 className="card-title">7. Oroscopo 2026 (senza copia-incolla)</h3>
+              <p className="card-text">
+                Se ti interessa una lettura annuale, DYANA non fa “segno per segno” generico: parte dal tuo profilo e
+                costruisce un <strong>Oroscopo 2026 personalizzato</strong>.
+              </p>
+              <p className="card-text" style={{ opacity: 0.85, marginTop: 10 }}>
+                Vai alla pagina dedicata:{" "}
+<a href="/oroscopo2026" style={{ textDecoration: "underline" }}>
+  Oroscopo 2026 personalizzato
+</a>
+              </p>
+            </article>
+
           </div>
         </section>
 
