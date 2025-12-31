@@ -8,13 +8,16 @@ export const metadata = {
   description: "L'assistente intuitivo che unisce astrologia e AI.",
 };
 
+const GA4_ID = "G-FP10KYRWX5";
+const ADS_ID = "AW-17796576310";
+
 export default function RootLayout({ children }) {
   return (
     <html lang="it">
       <head>
-        {/* Google Analytics */}
+        {/* Google tag (carica gtag una sola volta) */}
         <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-FP10KYRWX5"
+          src={`https://www.googletagmanager.com/gtag/js?id=${GA4_ID}`}
           strategy="beforeInteractive"
         />
         <Script id="gtag-init" strategy="beforeInteractive">
@@ -22,7 +25,12 @@ export default function RootLayout({ children }) {
             window.dataLayer = window.dataLayer || [];
             function gtag(){window.dataLayer.push(arguments);}
             gtag('js', new Date());
-            gtag('config', 'G-FP10KYRWX5');
+
+            // GA4
+            gtag('config', '${GA4_ID}');
+
+            // Google Ads
+            gtag('config', '${ADS_ID}');
           `}
         </Script>
       </head>

@@ -46,6 +46,8 @@ const OROSCOPO_FREE_SNAPSHOT_KEY = "dyana_oroscopo_free_snapshot_v1";
 const AUTH_DONE_KEY = "dyana_auth_done";
 const POST_LOGIN_ACTION_KEY = "dyana_post_login_action";
 const SHOW_TABLES_IN_FREE = false;
+const ADS_ID = "AW-17796576310";
+const ADS_CONV_LABEL = "INCOLLA_QUI_LA_TUA_LABEL"; // quella di Google Ads > Conversioni
 // ==========================
 // HELPERS
 // ==========================
@@ -115,6 +117,19 @@ function clearFreeSnapshot() {
   try {
     localStorage.removeItem(OROSCOPO_FREE_SNAPSHOT_KEY);
   } catch {}
+}
+function fireAdsConversion(sendTo) {
+  try {
+    if (typeof window === "undefined") return;
+    if (typeof window.gtag !== "function") {
+      console.warn("[ADS] gtag non disponibile");
+      return;
+    }
+    window.gtag("event", "conversion", { send_to: sendTo });
+    console.log("[ADS] conversion fired:", sendTo);
+  } catch (e) {
+    console.warn("[ADS] conversion fire failed:", e?.message || e);
+  }
 }
 
 // ==========================
@@ -893,6 +908,10 @@ useEffect(() => {
       }
 
       setPremiumResult(data);
+	  // 🔥 QUI: conversione “premium generata”
+if (ADS_CONV_LABEL && ADS_CONV_LABEL !== "INCOLLA_QUI_LA_TUA_LABEL") {
+  fireAdsConversion(`${ADS_ID}/${ADS_CONV_LABEL}`);
+}
       try { clearOroscopoDraft(); } catch {}
 
       setEmailGateOpen(false);
