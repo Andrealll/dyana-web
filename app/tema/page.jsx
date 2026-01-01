@@ -579,9 +579,9 @@ setGateMode(guestTrialLeft === 0 ? "magic" : "register");
 const trial = guestTrialLeft;
 
 if (trial === 0) {
-  setGateMsg("Hai finito la prova gratuita. Per continuare, accedi: puoi ricevere un link via email oppure usare password.");
+  setGateMsg("Puoi continuare ad utilizzare Dyana, inserendo la tua email.");
 } else {
-  setGateMsg("Inserisci la tua email per continuare. Genero subito il Premium; in parallelo ti invio un link per salvare l’accesso.");
+  setGateMsg("Inserisci la tua email per continuare. Riceverai un messaggio con un link che ti permetterà di accedere.");
 }
 
   }
@@ -930,7 +930,7 @@ if (gateMode === "magic") {
                       </>
                     ) : (
                       <>
-                        <p>Hai finito la tua prova gratuita.</p>
+                        <p>Hai completato il tuo primo oroscopo.</p>
                         <p style={{ marginTop: 8, fontSize: "0.9rem", opacity: 0.9 }}>
                           Iscriviti o accedi per continuare.
                         </p>
@@ -1260,7 +1260,7 @@ if (gateMode === "magic") {
         : "Attendi... sto completando")
     : guestTrialLeft === 0
     ? (gateMode === "magic"
-        ? "Invia link di accesso"
+        ? "Apri l'e-mail e clicca il link per procedere al calcolo"
         : gateMode === "login"
         ? "Accedi e continua"
         : "Iscriviti e continua")

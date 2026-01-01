@@ -943,9 +943,9 @@ if (ADS_CONV_LABEL && ADS_CONV_LABEL !== "INCOLLA_QUI_LA_TUA_LABEL") {
 
     const trial = guestTrialLeft;
     if (trial === 0) {
-      setGateMsg("Hai finito la tua prova gratuita. Usa Email+Link, oppure accedi/iscriviti per continuare.");
+      setGateMsg("Puoi continuare ad utilizzare Dyana, inserendo la tua email.");
     } else {
-      setGateMsg("Inserisci la tua email per continuare. Ti invieremo anche un link per salvare l’accesso (controlla spam).");
+      setGateMsg("Inserisci la tua email per continuare. Riceverai un messaggio con un link che ti permetterà di accedere.");
     }
   }
 async function handleApprofondisciClick() {
@@ -1304,7 +1304,7 @@ async function handleApprofondisciClick() {
                       </>
                     ) : (
                       <>
-                        <p>Hai finito la tua prova gratuita.</p>
+                        <p>Hai completato il tuo primo oroscopo.</p>
                         <p style={{ marginTop: 8, fontSize: "0.9rem", opacity: 0.9 }}>
                           Usa Email+Link, oppure accedi/iscriviti per continuare.
                         </p>
@@ -1497,7 +1497,7 @@ async function handleApprofondisciClick() {
                         ? "Attendi, sto generando…"
                         : guestTrialLeft === 0
                         ? (gateMode === "magic"
-                            ? "Invia link su email e aprilo per entrare"
+                            ? "Apri l'e-mail e clicca il link per procedere al calcolo"
                             : (gateMode === "login" ? "Accedi e continua" : "Iscriviti e continua"))
                         : "Continua"}
                     </button>

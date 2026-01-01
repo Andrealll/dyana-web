@@ -572,7 +572,7 @@ function openEmailGate() {
   setEmailGateOpen(true);
 
   setGateMsg(
-    "Hai finito la prova gratuita. Per continuare, accedi: puoi ricevere un link via email oppure usare la password."
+    "Puoi continuare ad utilizzare Dyana, inserendo la tua email."
   );
 }
 
@@ -1045,7 +1045,7 @@ async function handleApprofondisciClick() {
                       </>
                     ) : (
                       <>
-                        <p>Hai finito la tua prova gratuita.</p>
+                        <p>Hai completato il tuo primo oroscopo.</p>
                         <p style={{ marginTop: 8, fontSize: "0.9rem", opacity: 0.9 }}>
                           Usa Email+Link, oppure accedi/iscriviti per continuare.
                         </p>
@@ -1383,7 +1383,7 @@ async function handleApprofondisciClick() {
                             ? "Attendi…"
                             : guestTrialLeft === 0
                             ? (gateMode === "magic"
-                                ? "Invia link di accesso"
+                                ? "Apri l'e-mail e clicca il link per procedere al calcolo"
                                 : (gateMode === "login" ? "Accedi e continua" : "Iscriviti e continua"))
                             : "Continua"}
                         </button>
