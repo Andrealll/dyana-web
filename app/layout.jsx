@@ -3,14 +3,27 @@ import Script from "next/script";
 import CookieBanner from "../components/CookieBanner";
 import DyanaFooter from "../components/DyanaFooter";
 
+// ==========================
+// SEO METADATA (CANONICAL HOME)
+// ==========================
 export const metadata = {
+  metadataBase: new URL("https://dyana.app"),
   title: "DYANA",
   description: "L'assistente intuitivo che unisce astrologia e AI.",
+  alternates: {
+    canonical: "/",
+  },
 };
 
+// ==========================
+// TRACKING IDS
+// ==========================
 const GA4_ID = "G-FP10KYRWX5";
 const ADS_ID = "AW-17796576310";
 
+// ==========================
+// ROOT LAYOUT
+// ==========================
 export default function RootLayout({ children }) {
   return (
     <html lang="it">
