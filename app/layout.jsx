@@ -28,19 +28,22 @@ export default function RootLayout({ children }) {
   return (
     <html lang="it">
       <head>
-        {/* Google tag (carica gtag una sola volta) */}
+        {/* Google tag globale */}
         <Script
-          src={`https://www.googletagmanager.com/gtag/js?id=${GA4_ID}`}
-          strategy="beforeInteractive"
+          src="https://www.googletagmanager.com/gtag/js"
+          strategy="afterInteractive"
         />
-        <Script id="gtag-init" strategy="beforeInteractive">
+
+        <Script id="gtag-init" strategy="afterInteractive">
           {`
             window.dataLayer = window.dataLayer || [];
-            function gtag(){window.dataLayer.push(arguments);}
+            function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
 
             // GA4
-            gtag('config', '${GA4_ID}');
+            gtag('config', '${GA4_ID}', {
+              send_page_view: true
+            });
 
             // Google Ads
             gtag('config', '${ADS_ID}');
