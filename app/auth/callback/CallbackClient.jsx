@@ -58,7 +58,7 @@ export default function CallbackClient() {
 
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
-
+  const [debugUrl, setDebugUrl] = useState("");
   useEffect(() => {
     async function run() {
       try {
@@ -123,7 +123,7 @@ export default function CallbackClient() {
         setError(e?.message || "Impossibile completare l’accesso.");
       }
     }
-
+    try { setDebugUrl(window.location.href); } catch {}
     run();
   }, [router, sp]);
 
@@ -132,6 +132,10 @@ export default function CallbackClient() {
       <div className="card">
         <h1 className="card-title">Errore accesso</h1>
         <p className="card-text" style={{ color: "#ff9a9a" }}>{error}</p>
+		<p className="card-text" style={{ opacity: 0.7, fontSize: "0.75rem", wordBreak: "break-all" }}>
+        {debugUrl}
+      </p>
+
       </div>
     );
   }
@@ -140,6 +144,9 @@ export default function CallbackClient() {
     <div className="card">
       <h1 className="card-title">Sto completando l’accesso…</h1>
       <p className="card-text" style={{ opacity: 0.85 }}>Un momento.</p>
+	  <p className="card-text" style={{ opacity: 0.7, fontSize: "0.75rem", wordBreak: "break-all" }}>
+        {debugUrl}
+      </p>
     </div>
   );
 }
