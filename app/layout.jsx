@@ -58,7 +58,7 @@ export default function RootLayout({ children }) {
   {children}
   <DyanaFooter />
   <CookieBanner />
-</body>
+
       <body>
         {/* Flag solo-client: se siamo in Capacitor aggiunge html.is-capacitor */}
         <CapacitorFlag />
