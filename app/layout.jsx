@@ -3,7 +3,7 @@ import Script from "next/script";
 import CookieBanner from "../components/CookieBanner";
 import DyanaFooter from "../components/DyanaFooter";
 import CapacitorFlag from "./CapacitorFlag";
-
+import DeepLinkHandler from "./DeepLinkHandler";
 // ==========================
 // SEO METADATA (CANONICAL HOME)
 // ==========================
@@ -51,7 +51,14 @@ export default function RootLayout({ children }) {
           `}
         </Script>
       </head>
+<body>
+  <CapacitorFlag />
+  <DeepLinkHandler />
 
+  {children}
+  <DyanaFooter />
+  <CookieBanner />
+</body>
       <body>
         {/* Flag solo-client: se siamo in Capacitor aggiunge html.is-capacitor */}
         <CapacitorFlag />
