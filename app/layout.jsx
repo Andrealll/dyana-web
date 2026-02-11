@@ -2,6 +2,7 @@ import "./globals.css";
 import Script from "next/script";
 import CookieBanner from "../components/CookieBanner";
 import DyanaFooter from "../components/DyanaFooter";
+import CapacitorFlag from "./CapacitorFlag";
 
 // ==========================
 // SEO METADATA (CANONICAL HOME)
@@ -52,6 +53,9 @@ export default function RootLayout({ children }) {
       </head>
 
       <body>
+        {/* Flag solo-client: se siamo in Capacitor aggiunge html.is-capacitor */}
+        <CapacitorFlag />
+
         {children}
         <DyanaFooter />
         <CookieBanner />

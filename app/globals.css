@@ -22,6 +22,29 @@ html {
   --dyana-bg: #15191c;
   --dyana-gold: #bb9a63;
   --dyana-blue: #2c4050;
+
+  /* =======================================
+     CAPACITOR APP FIX (Android WebView)
+     Sposta la navbar sticky fuori dalla zona "non tappabile"
+     ======================================= */
+  --app-safe-top: 0px;
+}
+
+/* Solo quando siamo dentro l'app (CapacitorFlag aggiunge html.is-capacitor) */
+html.is-capacitor {
+  /* MVP: valore safe. Se vuoi rifinire: 28/30/34/36 */
+  --app-safe-top: 32px;
+}
+
+/* La tua navbar è sticky top:0 -> in app la spostiamo sotto la system bar */
+html.is-capacitor .dyana-navbar {
+  top: var(--app-safe-top);
+}
+
+/* Extra safety: evita che qualche overlay blocchi i tap sulla navbar */
+html.is-capacitor .dyana-navbar,
+html.is-capacitor .dyana-navbar * {
+  pointer-events: auto;
 }
 
 body {
@@ -282,6 +305,7 @@ body {
     transform: scale(1.06);
   }
 }
+
 .form-input {
   width: 100%;
   padding: 10px 14px;
@@ -290,13 +314,13 @@ body {
   background: rgba(12, 16, 22, 0.8);
   color: #f5f5ff;
   font-size: 0.95rem;
-  
 }
 .form-input:focus {
   outline: none;
   border-color: var(--dyana-gold);
   box-shadow: 0 0 8px rgba(187, 154, 99, 0.4);
 }
+
 /* NAVBAR DYANA */
 .dyana-navbar {
   position: sticky;
@@ -369,7 +393,7 @@ body {
   flex-direction: column;
   font-size: 0.7rem;
   line-height: 1.25;
-  text-align: left;          /* SINISTRA */
+  text-align: left; /* SINISTRA */
   white-space: normal;
   word-break: break-word;
 }
@@ -470,9 +494,6 @@ body {
   }
 }
 
-
-
-
 /* ==========================
    COOKIE MODAL DYANA
    ========================== */
@@ -539,6 +560,7 @@ body {
   transform: translateY(1px);
   box-shadow: none;
 }
+
 .cookie-reject-btn {
   display: inline-flex;
   align-items: center;
@@ -563,6 +585,7 @@ body {
 .cookie-reject-btn:active {
   opacity: 0.8;
 }
+
 .diyana-footer {
   width: 100%;
   margin-top: 3rem;
@@ -581,7 +604,7 @@ body {
 }
 
 .diyana-footer-inner {
-  max-width: 1100px;              /* come .dyana-navbar-inner */
+  max-width: 1100px; /* come .dyana-navbar-inner */
   width: 100%;
   display: flex;
   align-items: flex-start;
@@ -592,7 +615,7 @@ body {
 .diyana-footer-text {
   max-width: 780px;
   line-height: 1.55;
-  color: #d0d7ff;                 /* come .card-text */
+  color: #d0d7ff; /* come .card-text */
   margin: 0;
 }
 
