@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.dyana.mobile",
+      "sha256_cert_fingerprints": [SHA256: 8E:10:6E:00:35:9D:A3:22:A0:8D:17:7B:9A:9D:10:FF:2C:D0:B1:42:C0:32:63:C9:8F:B0:6B:03:C1:09:C9:F6]
+    }
+  }
+]
