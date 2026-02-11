@@ -62,6 +62,7 @@ export default function CallbackClient() {
   useEffect(() => {
     async function run() {
       try {
+		console.log("DYANA CALLBACK URL:", window.location.href);
 		// 0) PKCE FLOW (?code=...)
         const code = sp?.get("code");
         if (code) {
