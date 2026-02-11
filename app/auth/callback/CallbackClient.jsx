@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
 
 import {
   verifyMagicLink,
@@ -12,6 +13,15 @@ import {
 
 const WELCOME_PATH = "/welcome";
 const AUTH_DONE_KEY = "dyana_auth_done";
+
+function getSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anon) {
+    throw new Error("Config mancante: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  }
+  return createClient(url, anon);
+}
 
 function clearResumeTarget() {
   try {
@@ -52,6 +62,26 @@ export default function CallbackClient() {
   useEffect(() => {
     async function run() {
       try {
+		// 0) PKCE FLOW (?code=...)
+        const code = sp?.get("code");
+        if (code) {
+          const supabase = getSupabase();
+
+          // Scambia code -> sessione Supabase (set cookie/storage nella WebView)
+          const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
+          if (exErr) throw exErr;
+
+          notifyAuthDone();
+
+          // Se Supabase passa type=signup/invite lo usiamo, altrimenti "magiclink"
+          const typeQ0 = sp?.get("type") || "magiclink";
+          const mode = resolveWelcomeMode(typeQ0);
+
+          router.replace(`${WELCOME_PATH}?mode=${mode}`);
+          return;
+        }
+
+		  
         // 1) NUOVO FLOW (token_hash)
         const tokenHash = sp?.get("token_hash");
         const typeQ = sp?.get("type") || "magiclink";
