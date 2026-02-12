@@ -8,19 +8,28 @@ import {
   verifyMagicLink,
   exchangeSupabaseTokenForDyanaJwt,
   clearToken,
-  getToken,
 } from "../../../lib/authClient";
 
 const WELCOME_PATH = "/welcome";
 const AUTH_DONE_KEY = "dyana_auth_done";
 
+const DEBUG =
+  typeof process !== "undefined" &&
+  process?.env?.NEXT_PUBLIC_DEBUG &&
+  String(process.env.NEXT_PUBLIC_DEBUG) !== "0" &&
+  String(process.env.NEXT_PUBLIC_DEBUG).toLowerCase() !== "false";
+
+function dlog(...args) {
+  if (!DEBUG) return;
+  // eslint-disable-next-line no-console
+  console.log(...args);
+}
+
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) {
-    throw new Error(
-      "Config mancante: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY"
-    );
+    throw new Error("Config mancante: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY");
   }
   return createClient(url, anon);
 }
@@ -38,16 +47,12 @@ function notifyAuthDone() {
     localStorage.setItem(AUTH_DONE_KEY, String(Date.now()));
   } catch {}
 
-  // evento locale (stessa tab)
   try {
     window.dispatchEvent(
-      new CustomEvent("dyana:auth", {
-        detail: { type: "AUTH_DONE", ts: Date.now() },
-      })
+      new CustomEvent("dyana:auth", { detail: { type: "AUTH_DONE", ts: Date.now() } })
     );
   } catch {}
 
-  // broadcast (altre tab)
   try {
     const bc = new BroadcastChannel("dyana_auth");
     bc.postMessage({ type: "AUTH_DONE", ts: Date.now() });
@@ -71,25 +76,18 @@ export default function CallbackClient() {
   useEffect(() => {
     async function run() {
       try {
-        console.log("DYANA CALLBACK URL:", window.location.href);
+        dlog("[CALLBACK] URL:", window.location.href);
 
         // 0) PKCE FLOW (?code=...)
         const code = sp?.get("code");
         if (code) {
-          console.log(
-            "[CALLBACK] PKCE code present, exchanging code for session..."
-          );
           const supabase = getSupabase();
 
-          // Scambia code -> sessione Supabase (set cookie/storage nella WebView)
-          const { error: exErr } = await supabase.auth.exchangeCodeForSession(
-            code
-          );
+          const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
           if (exErr) throw exErr;
 
           notifyAuthDone();
 
-          // Se Supabase passa type=signup/invite lo usiamo, altrimenti "magiclink"
           const typeQ0 = sp?.get("type") || "magiclink";
           const mode = resolveWelcomeMode(typeQ0);
 
@@ -97,31 +95,15 @@ export default function CallbackClient() {
           return;
         }
 
-        // 1) FLOW token_hash (quello che arriva davvero in Capacitor)
+        // 1) FLOW token_hash (auth_pub)
         const tokenHash = sp?.get("token_hash");
         const typeQ = sp?.get("type") || "magiclink";
 
         if (tokenHash) {
-          console.log(
-            "[CALLBACK] token_hash present, verifying magic link via AUTH_PUB...",
-            {
-              type: typeQ,
-              tokenHashPrefix: String(tokenHash).slice(0, 6) + "...",
-            }
-          );
-
           await verifyMagicLink(tokenHash, typeQ);
-
-          // Debug utile per mobile: conferma che dyana_jwt è stato salvato
-          try {
-            const t = getToken();
-            console.log("[CALLBACK] after verifyMagicLink, has dyana_jwt:", !!t);
-          } catch {}
-
           notifyAuthDone();
 
           const mode = resolveWelcomeMode(typeQ);
-          // if (mode === "new") clearResumeTarget();  NON cancelliamo mai il resume qui: serve a /welcome -> "Continua"
 
           router.replace(`${WELCOME_PATH}?mode=${mode}`);
           return;
@@ -134,15 +116,10 @@ export default function CallbackClient() {
         const typeHash = hp.get("type") || "magiclink";
 
         if (sbAccessToken) {
-          console.log(
-            "[CALLBACK] hash access_token present, exchanging supabase token -> dyana jwt..."
-          );
           await exchangeSupabaseTokenForDyanaJwt(sbAccessToken);
-
           notifyAuthDone();
 
           const mode = resolveWelcomeMode(typeHash);
-          //if (mode === "new") clearResumeTarget(); NON cancelliamo mai il resume qui: serve a /welcome -> "Continua"
 
           router.replace(`${WELCOME_PATH}?mode=${mode}`);
           return;
@@ -165,7 +142,6 @@ export default function CallbackClient() {
     run();
   }, [router, sp]);
 
-  // --- UI (FIX: JSX valido) ---
   if (status === "error") {
     return (
       <div className="card">
@@ -173,12 +149,15 @@ export default function CallbackClient() {
         <p className="card-text" style={{ color: "#ff9a9a" }}>
           {error}
         </p>
-        <p
-          className="card-text"
-          style={{ opacity: 0.7, fontSize: "0.75rem", wordBreak: "break-all" }}
-        >
-          {debugUrl}
-        </p>
+
+        {DEBUG ? (
+          <p
+            className="card-text"
+            style={{ opacity: 0.7, fontSize: "0.75rem", wordBreak: "break-all" }}
+          >
+            {debugUrl}
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -189,12 +168,15 @@ export default function CallbackClient() {
       <p className="card-text" style={{ opacity: 0.85 }}>
         Un momento.
       </p>
-      <p
-        className="card-text"
-        style={{ opacity: 0.7, fontSize: "0.75rem", wordBreak: "break-all" }}
-      >
-        {debugUrl}
-      </p>
+
+      {DEBUG ? (
+        <p
+          className="card-text"
+          style={{ opacity: 0.7, fontSize: "0.75rem", wordBreak: "break-all" }}
+        >
+          {debugUrl}
+        </p>
+      ) : null}
     </div>
   );
 }
