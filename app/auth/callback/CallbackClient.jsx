@@ -1,4 +1,3 @@
-// app/auth/callback/CallbackClient.jsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -19,7 +18,9 @@ function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) {
-    throw new Error("Config mancante: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY");
+    throw new Error(
+      "Config mancante: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY"
+    );
   }
   return createClient(url, anon);
 }
@@ -33,12 +34,16 @@ function clearResumeTarget() {
 }
 
 function notifyAuthDone() {
-  try { localStorage.setItem(AUTH_DONE_KEY, String(Date.now())); } catch {}
+  try {
+    localStorage.setItem(AUTH_DONE_KEY, String(Date.now()));
+  } catch {}
 
   // evento locale (stessa tab)
   try {
     window.dispatchEvent(
-      new CustomEvent("dyana:auth", { detail: { type: "AUTH_DONE", ts: Date.now() } })
+      new CustomEvent("dyana:auth", {
+        detail: { type: "AUTH_DONE", ts: Date.now() },
+      })
     );
   } catch {}
 
@@ -71,11 +76,15 @@ export default function CallbackClient() {
         // 0) PKCE FLOW (?code=...)
         const code = sp?.get("code");
         if (code) {
-          console.log("[CALLBACK] PKCE code present, exchanging code for session...");
+          console.log(
+            "[CALLBACK] PKCE code present, exchanging code for session..."
+          );
           const supabase = getSupabase();
 
           // Scambia code -> sessione Supabase (set cookie/storage nella WebView)
-          const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
+          const { error: exErr } = await supabase.auth.exchangeCodeForSession(
+            code
+          );
           if (exErr) throw exErr;
 
           notifyAuthDone();
@@ -93,14 +102,17 @@ export default function CallbackClient() {
         const typeQ = sp?.get("type") || "magiclink";
 
         if (tokenHash) {
-          console.log("[CALLBACK] token_hash present, verifying magic link via AUTH_PUB...", {
-            type: typeQ,
-            tokenHashPrefix: String(tokenHash).slice(0, 6) + "...",
-          });
+          console.log(
+            "[CALLBACK] token_hash present, verifying magic link via AUTH_PUB...",
+            {
+              type: typeQ,
+              tokenHashPrefix: String(tokenHash).slice(0, 6) + "...",
+            }
+          );
 
           await verifyMagicLink(tokenHash, typeQ);
 
-          // ADD-ON: check token (utile per debug mobile)
+          // Debug utile per mobile: conferma che dyana_jwt è stato salvato
           try {
             const t = getToken();
             console.log("[CALLBACK] after verifyMagicLink, has dyana_jwt:", !!t);
@@ -122,7 +134,9 @@ export default function CallbackClient() {
         const typeHash = hp.get("type") || "magiclink";
 
         if (sbAccessToken) {
-          console.log("[CALLBACK] hash access_token present, exchanging supabase token -> dyana jwt...");
+          console.log(
+            "[CALLBACK] hash access_token present, exchanging supabase token -> dyana jwt..."
+          );
           await exchangeSupabaseTokenForDyanaJwt(sbAccessToken);
 
           notifyAuthDone();
@@ -136,22 +150,33 @@ export default function CallbackClient() {
 
         throw new Error("Token mancante nel link. Richiedi un nuovo magic link.");
       } catch (e) {
-        try { clearToken(); } catch {}
+        try {
+          clearToken();
+        } catch {}
         setStatus("error");
         setError(e?.message || "Impossibile completare l’accesso.");
       }
     }
 
-    try { setDebugUrl(window.location.href); } catch {}
+    try {
+      setDebugUrl(window.location.href);
+    } catch {}
+
     run();
   }, [router, sp]);
 
+  // --- UI (FIX: JSX valido) ---
   if (status === "error") {
     return (
       <div className="card">
         <h1 className="card-title">Errore accesso</h1>
-        <p className="card-text" style={{ color: "#ff9a9a" }}>{error}</p>
-        <p className="card-text" style={{ opacity: 0.7, fontSize: "0.75rem", wordBreak: "break-all" }}>
+        <p className="card-text" style={{ color: "#ff9a9a" }}>
+          {error}
+        </p>
+        <p
+          className="card-text"
+          style={{ opacity: 0.7, fontSize: "0.75rem", wordBreak: "break-all" }}
+        >
           {debugUrl}
         </p>
       </div>
@@ -160,11 +185,16 @@ export default function CallbackClient() {
 
   return (
     <div className="card">
-      <h1
-
+      <h1 className="card-title">Sto completando l’accesso…</h1>
+      <p className="card-text" style={{ opacity: 0.85 }}>
+        Un momento.
+      </p>
+      <p
+        className="card-text"
+        style={{ opacity: 0.7, fontSize: "0.75rem", wordBreak: "break-all" }}
       >
-        Sto completando l’accesso…
-      </div>
+        {debugUrl}
+      </p>
     </div>
   );
 }
