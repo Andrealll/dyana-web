@@ -9,6 +9,7 @@ import {
   verifyMagicLink,
   exchangeSupabaseTokenForDyanaJwt,
   clearToken,
+  getToken,
 } from "../../../lib/authClient";
 
 const WELCOME_PATH = "/welcome";
@@ -36,7 +37,9 @@ function notifyAuthDone() {
 
   // evento locale (stessa tab)
   try {
-    window.dispatchEvent(new CustomEvent("dyana:auth", { detail: { type: "AUTH_DONE", ts: Date.now() } }));
+    window.dispatchEvent(
+      new CustomEvent("dyana:auth", { detail: { type: "AUTH_DONE", ts: Date.now() } })
+    );
   } catch {}
 
   // broadcast (altre tab)
@@ -59,13 +62,16 @@ export default function CallbackClient() {
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
   const [debugUrl, setDebugUrl] = useState("");
+
   useEffect(() => {
     async function run() {
       try {
-		console.log("DYANA CALLBACK URL:", window.location.href);
-		// 0) PKCE FLOW (?code=...)
+        console.log("DYANA CALLBACK URL:", window.location.href);
+
+        // 0) PKCE FLOW (?code=...)
         const code = sp?.get("code");
         if (code) {
+          console.log("[CALLBACK] PKCE code present, exchanging code for session...");
           const supabase = getSupabase();
 
           // Scambia code -> sessione Supabase (set cookie/storage nella WebView)
@@ -82,17 +88,28 @@ export default function CallbackClient() {
           return;
         }
 
-		  
-        // 1) NUOVO FLOW (token_hash)
+        // 1) FLOW token_hash (quello che arriva davvero in Capacitor)
         const tokenHash = sp?.get("token_hash");
         const typeQ = sp?.get("type") || "magiclink";
 
         if (tokenHash) {
+          console.log("[CALLBACK] token_hash present, verifying magic link via AUTH_PUB...", {
+            type: typeQ,
+            tokenHashPrefix: String(tokenHash).slice(0, 6) + "...",
+          });
+
           await verifyMagicLink(tokenHash, typeQ);
+
+          // ADD-ON: check token (utile per debug mobile)
+          try {
+            const t = getToken();
+            console.log("[CALLBACK] after verifyMagicLink, has dyana_jwt:", !!t);
+          } catch {}
+
           notifyAuthDone();
 
           const mode = resolveWelcomeMode(typeQ);
-         // if (mode === "new") clearResumeTarget();  NON cancelliamo mai il resume qui: serve a /welcome -> "Continua"
+          // if (mode === "new") clearResumeTarget();  NON cancelliamo mai il resume qui: serve a /welcome -> "Continua"
 
           router.replace(`${WELCOME_PATH}?mode=${mode}`);
           return;
@@ -105,12 +122,13 @@ export default function CallbackClient() {
         const typeHash = hp.get("type") || "magiclink";
 
         if (sbAccessToken) {
+          console.log("[CALLBACK] hash access_token present, exchanging supabase token -> dyana jwt...");
           await exchangeSupabaseTokenForDyanaJwt(sbAccessToken);
+
           notifyAuthDone();
 
           const mode = resolveWelcomeMode(typeHash);
           //if (mode === "new") clearResumeTarget(); NON cancelliamo mai il resume qui: serve a /welcome -> "Continua"
-
 
           router.replace(`${WELCOME_PATH}?mode=${mode}`);
           return;
@@ -123,6 +141,7 @@ export default function CallbackClient() {
         setError(e?.message || "Impossibile completare l’accesso.");
       }
     }
+
     try { setDebugUrl(window.location.href); } catch {}
     run();
   }, [router, sp]);
@@ -132,21 +151,20 @@ export default function CallbackClient() {
       <div className="card">
         <h1 className="card-title">Errore accesso</h1>
         <p className="card-text" style={{ color: "#ff9a9a" }}>{error}</p>
-		<p className="card-text" style={{ opacity: 0.7, fontSize: "0.75rem", wordBreak: "break-all" }}>
-        {debugUrl}
-      </p>
-
+        <p className="card-text" style={{ opacity: 0.7, fontSize: "0.75rem", wordBreak: "break-all" }}>
+          {debugUrl}
+        </p>
       </div>
     );
   }
 
   return (
     <div className="card">
-      <h1 className="card-title">Sto completando l’accesso…</h1>
-      <p className="card-text" style={{ opacity: 0.85 }}>Un momento.</p>
-	  <p className="card-text" style={{ opacity: 0.7, fontSize: "0.75rem", wordBreak: "break-all" }}>
-        {debugUrl}
-      </p>
+      <h1
+
+      >
+        Sto completando l’accesso…
+      </div>
     </div>
   );
 }
