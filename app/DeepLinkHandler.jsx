@@ -4,31 +4,49 @@ import { useEffect } from "react";
 
 export default function DeepLinkHandler() {
   useEffect(() => {
-    const isCapacitor = typeof window !== "undefined" && window.Capacitor;
-    if (!isCapacitor) return;
-
     let removeListener = null;
 
     (async () => {
       try {
+        const { Capacitor } = await import("@capacitor/core");
+        if (!Capacitor?.isNativePlatform?.()) return;
+
         const { App } = await import("@capacitor/app");
 
-        const handler = (event) => {
-          const url = event?.url;
-          if (!url) return;
-
-          // Se arriva un deep link verso dyana.app/auth/callback?... -> naviga dentro la WebView
-          if (url.includes("https://dyana.app/")) {
-            // Usa replace per evitare history “strana”
-            window.location.replace(url);
+        const go = (url) => {
+          try {
+            if (!url) return;
+            // Forziamo la WebView a navigare: così /auth/callback viene realmente caricato
+            console.log("[DEEPLINK] navigate to:", url);
+            window.location.href = url;
+          } catch (e) {
+            console.error("[DEEPLINK] navigate error:", e);
           }
         };
 
-        const res = await App.addListener("appUrlOpen", handler);
-        removeListener = res?.remove || null;
+        // 1) Cold start: app aperta *direttamente* dal link
+        try {
+          const launch = await App.getLaunchUrl();
+          const launchUrl = launch?.url || null;
+          if (launchUrl) {
+            console.log("[DEEPLINK] launchUrl:", launchUrl);
+            go(launchUrl);
+          }
+        } catch (e) {
+          console.warn("[DEEPLINK] getLaunchUrl failed:", e);
+        }
+
+        // 2) App già in memoria: arriva un nuovo deep link
+        const handler = (event) => {
+          const url = event?.url || null;
+          console.log("[DEEPLINK] appUrlOpen:", url);
+          go(url);
+        };
+
+        const sub = await App.addListener("appUrlOpen", handler);
+        removeListener = () => sub?.remove?.();
       } catch (e) {
-        // se per qualche motivo non carica il plugin, non blocchiamo nulla
-        console.warn("DeepLinkHandler: unable to init", e);
+        console.warn("[DEEPLINK] not available:", e);
       }
     })();
 
