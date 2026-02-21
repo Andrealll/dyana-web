@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import DyanaNavbar from "../../components/DyanaNavbar";
-
+import { enqueueConversionEvent } from "../../components/ConversionTracker";
 import {
   loginWithCredentials,
   registerWithEmail,
@@ -554,7 +554,11 @@ setKbTags(kbFromBackend);
 
       applyTemaResponse(data);
       setPremiumLoaded(true);
-
+// ✅ TRACKING: premium sinastria completata
+enqueueConversionEvent("tema_completed", {
+  feature: "tema",
+  tier: "premium",
+});
       setEmailGateOpen(false);
       setDiyanaOpen(false);
       await refreshCreditsUI();

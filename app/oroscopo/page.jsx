@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import DyanaNavbar from "../../components/DyanaNavbar";
-
+import { enqueueConversionEvent } from "../../components/ConversionTracker";
 import {
   loginWithCredentials,
   registerWithEmail,
@@ -906,12 +906,17 @@ useEffect(() => {
         setAuthBanner(null);
         return;
       }
+setPremiumResult(data);
 
-      setPremiumResult(data);
-	  // 🔥 QUI: conversione “premium generata”
-if (ADS_CONV_LABEL && ADS_CONV_LABEL !== "INCOLLA_QUI_LA_TUA_LABEL") {
-  fireAdsConversion(`${ADS_ID}/${ADS_CONV_LABEL}`);
-}
+// ✅ TRACKING: oroscopo premium completato (GA4 + Ads via tracker centralizzato)
+enqueueConversionEvent("oroscopo_completed", {
+  feature: "oroscopo",
+  tier: "premium",
+});
+
+
+
+
       try { clearOroscopoDraft(); } catch {}
 
       setEmailGateOpen(false);

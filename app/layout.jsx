@@ -4,6 +4,7 @@ import CookieBanner from "../components/CookieBanner";
 import DyanaFooter from "../components/DyanaFooter";
 import CapacitorFlag from "./CapacitorFlag";
 import DeepLinkHandler from "./DeepLinkHandler";
+import ConversionTracker from "../components/ConversionTracker";
 
 // ==========================
 // SEO METADATA (CANONICAL HOME)
@@ -32,14 +33,15 @@ export default function RootLayout({ children }) {
       <head>
         {/* Google tag globale */}
         <Script
-          src="https://www.googletagmanager.com/gtag/js"
-          strategy="afterInteractive"
+          src={`https://www.googletagmanager.com/gtag/js?id=${GA4_ID}`}
+          strategy="beforeInteractive"
         />
 
-        <Script id="gtag-init" strategy="afterInteractive">
+        <Script id="gtag-init" strategy="beforeInteractive">
           {`
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
+            window.gtag = gtag;
             gtag('js', new Date());
 
             // GA4
@@ -48,7 +50,9 @@ export default function RootLayout({ children }) {
             });
 
             // Google Ads
-            gtag('config', '${ADS_ID}');
+            gtag('config', '${ADS_ID}', {
+              send_page_view: false
+            });
           `}
         </Script>
       </head>
@@ -57,7 +61,11 @@ export default function RootLayout({ children }) {
         <CapacitorFlag />
         <DeepLinkHandler />
 
+        {/* Tracker conversioni globale */}
+        <ConversionTracker />
+
         {children}
+
         <DyanaFooter />
         <CookieBanner />
       </body>
