@@ -10,8 +10,8 @@ export const metadata = {
 export default function ProfiloPersonaleLandingPage() {
   const year = new Date().getFullYear();
 
-  // ✅ Cambia QUI se vuoi puntare a un’altra pagina
-  const CTA_HREF = "/tema"; // oppure "/profilo" se hai già un form dedicato
+  // ✅ CTA verso /tema (come mi hai detto)
+  const CTA_HREF = "/tema";
 
   return (
     <main className="page-root">
@@ -65,7 +65,6 @@ export default function ProfiloPersonaleLandingPage() {
 
       {/* CONTENUTO */}
       <section className="landing-wrapper">
-        {/* STOP TEST GENERICI */}
         <section className="section section-features">
           <h2 className="section-title">Basta etichette e frasi fatte</h2>
           <p className="section-subtitle">
@@ -82,7 +81,6 @@ export default function ProfiloPersonaleLandingPage() {
           </p>
         </section>
 
-        {/* COSA SCOPRI */}
         <section className="section section-features">
           <h2 className="section-title">Cosa scopri nel tuo profilo</h2>
 
@@ -123,7 +121,6 @@ export default function ProfiloPersonaleLandingPage() {
           </div>
         </section>
 
-        {/* COME FUNZIONA */}
         <section className="section section-features">
           <h2 className="section-title">Come funziona</h2>
           <p className="section-subtitle">Semplice. Diretto. In pochi minuti.</p>
@@ -152,7 +149,6 @@ export default function ProfiloPersonaleLandingPage() {
           </div>
         </section>
 
-        {/* FAQ */}
         <section className="section section-features">
           <h2 className="section-title">Domande frequenti</h2>
 
@@ -187,7 +183,6 @@ export default function ProfiloPersonaleLandingPage() {
           </div>
         </section>
 
-        {/* CTA FINALE */}
         <section className="section section-features">
           <h2 className="section-title">Ok. E tu, come sei fatto davvero?</h2>
 
