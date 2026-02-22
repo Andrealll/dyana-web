@@ -427,36 +427,40 @@ console.log("[TEMA][CALL] token present?", !!token);
     }
 
 // ---- Parsing robusto (supporta più shape di response) ----
+// ---- Parsing robusto (tema_ai) ----
+setRisultato(data?.result || null);
 
-// content può arrivare in vari posti a seconda del backend
+// content: il JSON interpretativo vero è data.result.content
 const content =
-  data?.result?.content ||
-  data?.tema_ai?.content ||
-  data?.content ||
-  data?.result ||
-  data?.tema_ai ||
+  data?.result?.content ??
+  data?.tema_ai?.content ??
+  data?.tema_ai ??
+  data?.content ??
   null;
 
 setContenuto(content);
 
-// interpretazione: prova più chiavi possibili
-const profiloGenerale =
-  content?.profilo_generale ||
-  content?.interpretazione ||
-  data?.tema_ai?.profilo_generale ||
-  data?.result?.content?.profilo_generale ||
-  "";
+// Se c'è errore parsing dal backend: STOP (niente sintesi)
+const resultWrapper = data?.result || null;
+if (resultWrapper?.error) {
+  setInterpretazione("");
+  setErrore(
+    `Errore AI: ${resultWrapper.error}` +
+      (resultWrapper.parse_error ? ` — ${resultWrapper.parse_error}` : "")
+  );
+  // Mantieni reading payload per debug/telemetria se ti serve
+  setReadingPayload(data);
+  return;
+}
 
-setInterpretazione(
-  profiloGenerale || "Interpretazione non disponibile (profilo_generale vuoto)."
-);
+// interpretazione: SOLO da content
+const profiloGenerale = (content?.profilo_generale || "").trim();
+setInterpretazione(profiloGenerale || "Interpretazione non disponibile.");
 
-// meta può arrivare in result.meta oppure in payload_ai.meta oppure in tema_ai.meta
+// meta: viene da payload_ai.meta (shape attuale backend)
 const meta =
-  data?.result?.meta ||
-  data?.payload_ai?.meta ||
-  data?.tema_ai?.meta ||
-  content?.meta ||
+  data?.payload_ai?.meta ??
+  content?.meta ??
   {};
 
 const readingIdFromBackend =
@@ -465,12 +469,8 @@ const readingIdFromBackend =
 setReadingId(readingIdFromBackend);
 setReadingPayload(data);
 
-const kbFromBackend =
-  meta.kb_tags ||
-  meta.kb ||
-  ["tema_natale"];
+setKbTags(meta.kb_tags || meta.kb || ["tema_natale"]);
 
-setKbTags(kbFromBackend);
 
   }
 
