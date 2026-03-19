@@ -48,6 +48,7 @@ const POST_LOGIN_ACTION_KEY = "dyana_post_login_action";
 const SHOW_TABLES_IN_FREE = false;
 const ADS_ID = "AW-17796576310";
 const ADS_CONV_LABEL = "INCOLLA_QUI_LA_TUA_LABEL"; // quella di Google Ads > Conversioni
+
 // ==========================
 // HELPERS
 // ==========================
@@ -133,10 +134,255 @@ function fireAdsConversion(sendTo) {
 }
 
 // ==========================
+// NUOVO SUPPORTO SCHEMA COMPACT DAILY
+// ==========================
+function isDailyCompactSchema(oroscopoAi) {
+  return !!(
+    oroscopoAi &&
+    typeof oroscopoAi === "object" &&
+    (
+      oroscopoAi.schema_type === "daily_compact" ||
+      (typeof oroscopoAi.headline === "string" && Array.isArray(oroscopoAi.highlights))
+    )
+  );
+}
+
+function renderDailyCompactText(oroscopoAi, tierRaw) {
+  if (!oroscopoAi || typeof oroscopoAi !== "object") return "";
+
+  const tier = (tierRaw || "free").toLowerCase();
+  const isPremium = tier === "premium";
+  const parts = [];
+
+  if (oroscopoAi.headline) parts.push(oroscopoAi.headline);
+  if (oroscopoAi.mood) parts.push(`Mood: ${oroscopoAi.mood}`);
+
+  if (Array.isArray(oroscopoAi.highlights) && oroscopoAi.highlights.length) {
+    parts.push(oroscopoAi.highlights.map((x) => `• ${x}`).join("\n"));
+  }
+
+  if (oroscopoAi.focus) {
+    parts.push(`Focus\n${oroscopoAi.focus}`);
+  }
+
+  if (isPremium) {
+    if (oroscopoAi.actions?.do) {
+      parts.push(`Cosa fare\n${oroscopoAi.actions.do}`);
+    }
+    if (oroscopoAi.actions?.avoid) {
+      parts.push(`Cosa evitare\n${oroscopoAi.actions.avoid}`);
+    }
+    if (oroscopoAi.love) {
+      parts.push(`Relazioni\n${oroscopoAi.love}`);
+    }
+    if (oroscopoAi.work) {
+      parts.push(`Lavoro\n${oroscopoAi.work}`);
+    }
+    if (oroscopoAi.summary) {
+      parts.push(oroscopoAi.summary);
+    }
+  } else {
+    if (oroscopoAi.cta_premium) {
+      parts.push(oroscopoAi.cta_premium);
+    }
+  }
+
+  return parts.filter(Boolean).join("\n\n");
+}
+
+function DailyCompactCard({ data, tier = "free" }) {
+  if (!data || typeof data !== "object") return null;
+
+  const isPremium = (tier || "free").toLowerCase() === "premium";
+  const highlights = Array.isArray(data.highlights) ? data.highlights.filter(Boolean) : [];
+
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      {data.headline && (
+        <div
+          style={{
+            padding: "14px 16px",
+            borderRadius: 16,
+            border: "1px solid rgba(255,255,255,0.10)",
+            background: "rgba(255,255,255,0.03)",
+          }}
+        >
+          <div className="card-text" style={{ fontWeight: 800, fontSize: "1.02rem" }}>
+            {data.headline}
+          </div>
+          {data.mood && (
+            <div className="card-text" style={{ marginTop: 6, opacity: 0.82 }}>
+              Mood: {data.mood}
+            </div>
+          )}
+        </div>
+      )}
+
+      {highlights.length > 0 && (
+        <div
+          style={{
+            padding: "14px 16px",
+            borderRadius: 16,
+            border: "1px solid rgba(255,255,255,0.10)",
+            background: "rgba(255,255,255,0.02)",
+          }}
+        >
+          <div className="card-text" style={{ fontWeight: 700, marginBottom: 8 }}>
+            Punti chiave
+          </div>
+          <div className="card-text" style={{ display: "grid", gap: 8 }}>
+            {highlights.map((item, idx) => (
+              <div key={idx}>• {item}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {data.focus && (
+        <div
+          style={{
+            padding: "14px 16px",
+            borderRadius: 16,
+            border: "1px solid rgba(255,255,255,0.10)",
+            background: "rgba(255,255,255,0.02)",
+          }}
+        >
+          <div className="card-text" style={{ fontWeight: 700, marginBottom: 8 }}>
+            Focus
+          </div>
+          <div className="card-text">{data.focus}</div>
+        </div>
+      )}
+
+      {isPremium && (
+        <>
+          {(data.actions?.do || data.actions?.avoid) && (
+            <div
+              style={{
+                display: "grid",
+                gap: 12,
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              }}
+            >
+              {data.actions?.do && (
+                <div
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: 16,
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background: "rgba(255,255,255,0.02)",
+                  }}
+                >
+                  <div className="card-text" style={{ fontWeight: 700, marginBottom: 8 }}>
+                    Cosa fare
+                  </div>
+                  <div className="card-text">{data.actions.do}</div>
+                </div>
+              )}
+
+              {data.actions?.avoid && (
+                <div
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: 16,
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background: "rgba(255,255,255,0.02)",
+                  }}
+                >
+                  <div className="card-text" style={{ fontWeight: 700, marginBottom: 8 }}>
+                    Cosa evitare
+                  </div>
+                  <div className="card-text">{data.actions.avoid}</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {(data.love || data.work) && (
+            <div
+              style={{
+                display: "grid",
+                gap: 12,
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              }}
+            >
+              {data.love && (
+                <div
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: 16,
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background: "rgba(255,255,255,0.02)",
+                  }}
+                >
+                  <div className="card-text" style={{ fontWeight: 700, marginBottom: 8 }}>
+                    Relazioni
+                  </div>
+                  <div className="card-text">{data.love}</div>
+                </div>
+              )}
+
+              {data.work && (
+                <div
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: 16,
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background: "rgba(255,255,255,0.02)",
+                  }}
+                >
+                  <div className="card-text" style={{ fontWeight: 700, marginBottom: 8 }}>
+                    Lavoro
+                  </div>
+                  <div className="card-text">{data.work}</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {data.summary && (
+            <div
+              style={{
+                padding: "14px 16px",
+                borderRadius: 16,
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: "rgba(255,255,255,0.03)",
+              }}
+            >
+              <div className="card-text" style={{ fontWeight: 700, marginBottom: 8 }}>
+                Sintesi finale
+              </div>
+              <div className="card-text">{data.summary}</div>
+            </div>
+          )}
+        </>
+      )}
+
+      {!isPremium && data.cta_premium && (
+        <div
+          style={{
+            padding: "14px 16px",
+            borderRadius: 16,
+            border: "1px solid rgba(255,255,255,0.10)",
+            background: "rgba(255,255,255,0.03)",
+          }}
+        >
+          <div className="card-text">{data.cta_premium}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================
 // TESTO INTERPRETAZIONE
 // ==========================
 function buildInterpretazioneTesto(oroscopoAi, tierRaw) {
   if (!oroscopoAi || typeof oroscopoAi !== "object") return "";
+
+  if (isDailyCompactSchema(oroscopoAi)) {
+    return renderDailyCompactText(oroscopoAi, tierRaw);
+  }
 
   const tier = (tierRaw || "free").toLowerCase();
   const isPremium = tier === "premium";
@@ -528,11 +774,25 @@ function AspettiTable({ aspetti }) {
 // ==========================
 // PAGINA
 // ==========================
-
 function buildFreeTeaser(oroscopoAi) {
   if (!oroscopoAi || typeof oroscopoAi !== "object") return "";
 
-  // prova a prendere un intro o sintesi breve
+  if (isDailyCompactSchema(oroscopoAi)) {
+    const parts = [];
+
+    if (oroscopoAi.headline) parts.push(oroscopoAi.headline);
+    if (oroscopoAi.focus) parts.push(oroscopoAi.focus);
+
+    if (Array.isArray(oroscopoAi.highlights) && oroscopoAi.highlights.length) {
+      parts.push(oroscopoAi.highlights.slice(0, 2).map((x) => `• ${x}`).join("\n"));
+    }
+
+    return (
+      parts.filter(Boolean).join("\n\n") ||
+      "Oggi emerge un punto chiave che vale la pena osservare meglio."
+    );
+  }
+
   const intro = (
     oroscopoAi.intro ||
     oroscopoAi.sintesi_periodo ||
@@ -540,20 +800,16 @@ function buildFreeTeaser(oroscopoAi) {
     ""
   ).trim();
 
-  // fallback: pesca una sezione (emozioni/relazioni/lavoro) ma corta
   const sections = oroscopoAi.sections && typeof oroscopoAi.sections === "object" ? oroscopoAi.sections : {};
   const pick =
     (sections.emozioni || sections.relazioni || sections.panorama || sections.lavoro || "").trim();
 
   const base = intro || pick || "";
 
-  // teaser: max ~450-600 caratteri, senza chiudere "il cerchio"
   const cut = base.length > 520 ? base.slice(0, 520).replace(/\s+\S*$/, "") + "…" : base;
 
-  // se è vuoto, fallback
   return cut || "In questo periodo emerge un tema centrale che influenza il tuo modo di reagire e prendere decisioni. La parte più importante è capire perché si attiva proprio ora.";
 }
-
 
 export default function OroscopoPage() {
   const [form, setForm] = useState({
@@ -645,32 +901,31 @@ export default function OroscopoPage() {
     }
   }, []);
 
- // 1) restore draft + init tokens/credits
-useEffect(() => {
-  try {
-    // ---- restore FORM draft ----
-    const draft = loadOroscopoDraft();
-    if (draft && typeof draft === "object") {
-      if (draft.form) setForm((prev) => ({ ...prev, ...draft.form }));
-      if (typeof draft.oraIgnota === "boolean") setOraIgnota(draft.oraIgnota);
-    }
+  // 1) restore draft + init tokens/credits
+  useEffect(() => {
+    try {
+      // ---- restore FORM draft ----
+      const draft = loadOroscopoDraft();
+      if (draft && typeof draft === "object") {
+        if (draft.form) setForm((prev) => ({ ...prev, ...draft.form }));
+        if (typeof draft.oraIgnota === "boolean") setOraIgnota(draft.oraIgnota);
+      }
 
-    // ---- restore FREE snapshot (PEZZO B) ----
-    const snap = loadFreeSnapshot();
-    if (snap?.freeResult) {
-      if (snap.form) setForm((prev) => ({ ...prev, ...snap.form }));
-      if (typeof snap.oraIgnota === "boolean") setOraIgnota(snap.oraIgnota);
-      setFreeResult(snap.freeResult);
-    }
-  } catch {}
+      // ---- restore FREE snapshot (PEZZO B) ----
+      const snap = loadFreeSnapshot();
+      if (snap?.freeResult) {
+        if (snap.form) setForm((prev) => ({ ...prev, ...snap.form }));
+        if (typeof snap.oraIgnota === "boolean") setOraIgnota(snap.oraIgnota);
+        setFreeResult(snap.freeResult);
+      }
+    } catch {}
 
-  refreshUserFromToken();
-  (async () => {
-    await ensureGuestToken();
-    await refreshCreditsUI();
-  })();
-}, [refreshUserFromToken, refreshCreditsUI]);
-
+    refreshUserFromToken();
+    (async () => {
+      await ensureGuestToken();
+      await refreshCreditsUI();
+    })();
+  }, [refreshUserFromToken, refreshCreditsUI]);
 
   // 2) autosave draft
   useEffect(() => {
@@ -684,7 +939,9 @@ useEffect(() => {
     async function onAuthDone() {
       try {
         // pulizia chiave (se presente)
-        try { localStorage.removeItem(AUTH_DONE_KEY); } catch {}
+        try {
+          localStorage.removeItem(AUTH_DONE_KEY);
+        } catch {}
 
         refreshUserFromToken();
         await refreshCreditsUI();
@@ -706,10 +963,14 @@ useEffect(() => {
 
         // se avevamo una azione in sospeso (es. magic link)
         let pending = null;
-        try { pending = localStorage.getItem(POST_LOGIN_ACTION_KEY); } catch {}
+        try {
+          pending = localStorage.getItem(POST_LOGIN_ACTION_KEY);
+        } catch {}
 
         if (pending === "oroscopo_premium") {
-          try { localStorage.removeItem(POST_LOGIN_ACTION_KEY); } catch {}
+          try {
+            localStorage.removeItem(POST_LOGIN_ACTION_KEY);
+          } catch {}
           await generaPremium();
         }
       } catch (e) {
@@ -745,7 +1006,9 @@ useEffect(() => {
     return () => {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("dyana:auth", onLocalAuthEvent);
-      try { bc && bc.close(); } catch {}
+      try {
+        bc && bc.close();
+      } catch {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshUserFromToken, refreshCreditsUI]);
@@ -842,14 +1105,14 @@ useEffect(() => {
       }
 
       setFreeResult(data);
-	  try {
-  saveFreeSnapshot({
-    ts: Date.now(),
-    form,
-    oraIgnota,
-    freeResult: data,
-  });
-} catch {}
+      try {
+        saveFreeSnapshot({
+          ts: Date.now(),
+          form,
+          oraIgnota,
+          freeResult: data,
+        });
+      } catch {}
 
       await refreshCreditsUI();
     } catch (e) {
@@ -893,12 +1156,12 @@ useEffect(() => {
           setErrore(typeof msg === "string" ? msg : "Crediti insufficienti.");
           setAuthBanner(null);
           await refreshCreditsUI();
-		  if (!isLoggedIn && ENABLE_EMAIL_GATE_WHEN_TRIAL_OVER) {
-			// se siamo guest e i crediti non bastano, proponi subito il gate
-			if (guestTrialLeft === 0) {
-			openEmailGate();
-  }
-}
+          if (!isLoggedIn && ENABLE_EMAIL_GATE_WHEN_TRIAL_OVER) {
+            // se siamo guest e i crediti non bastano, proponi subito il gate
+            if (guestTrialLeft === 0) {
+              openEmailGate();
+            }
+          }
           return;
         }
 
@@ -906,18 +1169,17 @@ useEffect(() => {
         setAuthBanner(null);
         return;
       }
-setPremiumResult(data);
+      setPremiumResult(data);
 
-// ✅ TRACKING: oroscopo premium completato (GA4 + Ads via tracker centralizzato)
-enqueueConversionEvent("oroscopo_completed", {
-  feature: "oroscopo",
-  tier: "premium",
-});
+      // ✅ TRACKING: oroscopo premium completato (GA4 + Ads via tracker centralizzato)
+      enqueueConversionEvent("oroscopo_completed", {
+        feature: "oroscopo",
+        tier: "premium",
+      });
 
-
-
-
-      try { clearOroscopoDraft(); } catch {}
+      try {
+        clearOroscopoDraft();
+      } catch {}
 
       setEmailGateOpen(false);
       setDiyanaOpen(false);
@@ -953,30 +1215,30 @@ enqueueConversionEvent("oroscopo_completed", {
       setGateMsg("Inserisci la tua email per continuare. Riceverai un messaggio con un link che ti permetterà di accedere.");
     }
   }
-async function handleApprofondisciClick() {
-  setErrore("");
-  setNoCredits(false);
 
-  if (premiumResult) return;
+  async function handleApprofondisciClick() {
+    setErrore("");
+    setNoCredits(false);
 
-  if (isLoggedIn) {
+    if (premiumResult) return;
+
+    if (isLoggedIn) {
+      await generaPremium();
+      return;
+    }
+
+    // IMPORTANT: rileggo lo stato crediti/Trial prima di decidere
+    await refreshCreditsUI();
+
+    // Dopo refresh, se trial finito => apro gate
+    if (guestTrialLeft === 0) {
+      openEmailGate();
+      return;
+    }
+
+    // Altrimenti provo premium diretto (trial disponibile)
     await generaPremium();
-    return;
   }
-
-  // IMPORTANT: rileggo lo stato crediti/Trial prima di decidere
-  await refreshCreditsUI();
-
-  // Dopo refresh, se trial finito => apro gate
-  if (guestTrialLeft === 0) {
-    openEmailGate();
-    return;
-  }
-
-  // Altrimenti provo premium diretto (trial disponibile)
-  await generaPremium();
-}
-
 
   async function submitInlineAuth(e) {
     e.preventDefault();
@@ -991,12 +1253,14 @@ async function handleApprofondisciClick() {
         return;
       }
 
-      try { localStorage.setItem("dyana_pending_email", email); } catch {}
+      try {
+        localStorage.setItem("dyana_pending_email", email);
+      } catch {}
 
       setResumeTarget({ path: "/oroscopo", readingId: "oroscopo_inline" });
 
       const redirectUrl =
-        (typeof window !== "undefined" && window.location?.origin)
+        typeof window !== "undefined" && window.location?.origin
           ? `${window.location.origin.replace(/\/+$/, "")}/auth/callback`
           : "https://dyana.app/auth/callback";
 
@@ -1006,7 +1270,9 @@ async function handleApprofondisciClick() {
       if (guestTrialLeft === 0) {
         if (gateMode === "magic") {
           setGateMsg("Ti ho inviato un link di accesso via email. Aprilo per entrare (controlla anche spam).");
-          try { localStorage.setItem(POST_LOGIN_ACTION_KEY, "oroscopo_premium"); } catch {}
+          try {
+            localStorage.setItem(POST_LOGIN_ACTION_KEY, "oroscopo_premium");
+          } catch {}
           await sendAuthMagicLink(email, redirectUrl);
 
           // banner “azione pendente”
@@ -1109,7 +1375,8 @@ async function handleApprofondisciClick() {
     null;
   const freeText = freeAi ? buildInterpretazioneTesto(freeAi, freeTier) : "";
   const freeTeaser = freeAi ? buildFreeTeaser(freeAi) : "";
-  
+  const isFreeDailyCompact = isDailyCompactSchema(freeAi);
+
   const hasFree = !!freeResult;
 
   const freePeriodoKey = freeResult?.engine_result?.periodo_ita || form.periodo || "giornaliero";
@@ -1129,6 +1396,7 @@ async function handleApprofondisciClick() {
     null;
   const hasPremium = !!premiumResult;
   const premiumText = premiumAi ? buildInterpretazioneTesto(premiumAi, premiumTier) : "";
+  const isPremiumDailyCompact = isDailyCompactSchema(premiumAi);
 
   const premiumPeriodoKey = premiumResult?.engine_result?.periodo_ita || form.periodo || "giornaliero";
   const premiumPeriodBlock =
@@ -1178,16 +1446,15 @@ async function handleApprofondisciClick() {
       <DyanaNavbar userRole={userRole} credits={userCredits} onLogout={handleLogout} />
 
       <section className="landing-wrapper">
-<header className="section">
-  <h1 className="section-title">Il tuo schema astrologico in questo periodo</h1>
-  <p className="section-subtitle">
-    Non è un oroscopo generico. È una lettura basata su come reagisci davvero quando le cose contano.
-  </p>
-  <p className="card-text" style={{ maxWidth: 850, margin: "10px auto 0", opacity: 0.9 }}>
-    Vediamo se questo schema emerge davvero nel tuo profilo. Inserisci i dati per confermare.
-  </p>
-</header>
-
+        <header className="section">
+          <h1 className="section-title">Il tuo schema astrologico in questo periodo</h1>
+          <p className="section-subtitle">
+            Non è un oroscopo generico. È una lettura basata su come reagisci davvero quando le cose contano.
+          </p>
+          <p className="card-text" style={{ maxWidth: 850, margin: "10px auto 0", opacity: 0.9 }}>
+            Vediamo se questo schema emerge davvero nel tuo profilo. Inserisci i dati per confermare.
+          </p>
+        </header>
 
         {/* Banner post-login / stato */}
         {authBanner && (
@@ -1206,20 +1473,18 @@ async function handleApprofondisciClick() {
           <div className="card" style={{ maxWidth: "650px", margin: "0 auto" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
               {/* Nome nascosto in questa fase */}
-{false && (
-  <div>
-    <label className="card-text">Nome (opzionale)</label>
-    <input
-      name="nome"
-      value={form.nome}
-      onChange={handleChange}
-      className="form-input"
-      placeholder="Come vuoi essere chiamato"
-    />
-  </div>
-)}
-
-
+              {false && (
+                <div>
+                  <label className="card-text">Nome (opzionale)</label>
+                  <input
+                    name="nome"
+                    value={form.nome}
+                    onChange={handleChange}
+                    className="form-input"
+                    placeholder="Come vuoi essere chiamato"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="card-text">Data di nascita</label>
@@ -1246,48 +1511,45 @@ async function handleApprofondisciClick() {
                     <span>Non conosco l&apos;ora esatta (uso un oroscopo con ora neutra)</span>
                   </label>
                 </div>
-				              <div>
-                <label className="card-text">Città di nascita</label>
-                <input
-                  name="citta"
-                  value={form.citta}
-                  onChange={handleChange}
-                  className="form-input"
-                  placeholder="Es. Milano, Roma, Napoli…"
-                />
+                <div>
+                  <label className="card-text">Città di nascita</label>
+                  <input
+                    name="citta"
+                    value={form.citta}
+                    onChange={handleChange}
+                    className="form-input"
+                    placeholder="Es. Milano, Roma, Napoli…"
+                  />
+                </div>
               </div>
-				
+
+              <div style={{ marginTop: 10 }}>
+                <p className="card-text" style={{ fontSize: "0.85rem", opacity: 0.8, marginBottom: 8 }}>
+                  Vuoi una visione più ampia?
+                </p>
+
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {[
+                    ["giornaliero", "Giorno"],
+                    ["settimanale", "Settimana"],
+                    ["mensile", "Mese"],
+                    ["annuale", "Anno"],
+                  ].map(([val, label]) => (
+                    <button
+                      key={val}
+                      type="button"
+                      className={form.periodo === val ? "btn btn-primary" : "btn"}
+                      onClick={() => setForm((p) => ({ ...p, periodo: val }))}
+                      disabled={primaryBusy}
+                      style={{ padding: "8px 12px", borderRadius: 999 }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <p className="card-text" style={{ fontSize: "0.8rem", opacity: 0.7, marginTop: 8 }}></p>
               </div>
-<div style={{ marginTop: 10 }}>
-  <p className="card-text" style={{ fontSize: "0.85rem", opacity: 0.8, marginBottom: 8 }}>
-    Vuoi una visione più ampia?
-  </p>
-
-  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-    {[
-      ["giornaliero", "Giorno"],
-      ["settimanale", "Settimana"],
-      ["mensile", "Mese"],
-      ["annuale", "Anno"],
-    ].map(([val, label]) => (
-      <button
-        key={val}
-        type="button"
-        className={form.periodo === val ? "btn btn-primary" : "btn"}
-        onClick={() => setForm((p) => ({ ...p, periodo: val }))}
-        disabled={primaryBusy}
-        style={{ padding: "8px 12px", borderRadius: 999 }}
-      >
-        {label}
-      </button>
-    ))}
-  </div>
-
-  <p className="card-text" style={{ fontSize: "0.8rem", opacity: 0.7, marginTop: 8 }}>
-
-  </p>
-</div>
-
 
               <button onClick={generaFree} className="btn btn-primary" disabled={primaryBusy} style={{ marginTop: "14px" }}>
                 {primaryLabel}
@@ -1330,25 +1592,28 @@ async function handleApprofondisciClick() {
             <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
               <h3 className="card-title">La tua sintesi</h3>
 
-{SHOW_TABLES_IN_FREE && freeMetriche && <MetricheGrafico metriche={freeMetriche} />}
-{SHOW_TABLES_IN_FREE && freeAspetti.length > 0 && <AspettiTable aspetti={freeAspetti} />}
+              {SHOW_TABLES_IN_FREE && freeMetriche && <MetricheGrafico metriche={freeMetriche} />}
+              {SHOW_TABLES_IN_FREE && freeAspetti.length > 0 && <AspettiTable aspetti={freeAspetti} />}
 
+              <h4 className="card-subtitle" style={{ marginTop: 24 }}>Quello che emerge ora</h4>
 
-<h4 className="card-subtitle" style={{ marginTop: 24 }}>Quello che emerge ora</h4>
-<p className="card-text" style={{ whiteSpace: "pre-wrap" }}>{freeTeaser}</p>
+              {isFreeDailyCompact ? (
+                <DailyCompactCard data={freeAi} tier={freeTier} />
+              ) : (
+                <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>{freeTeaser}</p>
+              )}
 
-<div style={{ marginTop: 14, padding: "12px 14px", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14 }}>
-  <div className="card-text" style={{ fontWeight: 700, marginBottom: 6 }}>
-    Nel report completo DYANA analizza:
-  </div>
-  <div className="card-text" style={{ opacity: 0.9, whiteSpace: "pre-wrap" }}>
-    • perché questo schema si attiva proprio ora{"\n"}
-    • in quali momenti è più forte{"\n"}
-    • quanto durerà davvero{"\n"}
-    • come lavorarci in modo consapevole
-  </div>
-</div>
-
+              <div style={{ marginTop: 14, padding: "12px 14px", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14 }}>
+                <div className="card-text" style={{ fontWeight: 700, marginBottom: 6 }}>
+                  Nel report completo DYANA analizza:
+                </div>
+                <div className="card-text" style={{ opacity: 0.9, whiteSpace: "pre-wrap" }}>
+                  • perché questo schema si attiva proprio ora{"\n"}
+                  • in quali momenti è più forte{"\n"}
+                  • quanto durerà davvero{"\n"}
+                  • come lavorarci in modo consapevole
+                </div>
+              </div>
 
               <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <button type="button" className="btn btn-primary" onClick={handleApprofondisciClick} disabled={primaryBusy}>
@@ -1532,9 +1797,14 @@ async function handleApprofondisciClick() {
                 {premiumAspetti.length > 0 && <AspettiTable aspetti={premiumAspetti} />}
 
                 <h4 className="card-subtitle" style={{ marginTop: 24 }}>Interpretazione</h4>
-                <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
-                  {premiumText || "Lettura completata. (Testo non disponibile in questo formato risposta.)"}
-                </p>
+
+                {isPremiumDailyCompact ? (
+                  <DailyCompactCard data={premiumAi} tier={premiumTier} />
+                ) : (
+                  <p className="card-text" style={{ whiteSpace: "pre-wrap" }}>
+                    {premiumText || "Lettura completata. (Testo non disponibile in questo formato risposta.)"}
+                  </p>
+                )}
               </div>
             </section>
 
@@ -1561,51 +1831,49 @@ async function handleApprofondisciClick() {
                   <p className="card-text" style={{ marginBottom: 4, opacity: 0.9 }}>
                     DYANA conosce già l&apos;oroscopo che hai appena generato e può aiutarti a interpretarlo meglio.
                   </p>
-<button
-  type="button"
-  className="btn btn-primary"
-  style={{
-    marginTop: 16,
-    width: "100%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    padding: "14px 16px",
-    borderRadius: 18,
-  }}
-  onClick={() => setDiyanaOpen((prev) => !prev)}
->
-  <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
-    <span style={{ fontWeight: 800 }}>
-      {diyanaOpen ? "Chiudi DYANA" : "Chiedi a DYANA"}
-    </span>
-    <span style={{ fontSize: "0.85rem", opacity: 0.9, fontWeight: 500 }}>
-      Fai una domanda su questa lettura.
-    </span>
-  </span>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{
+                      marginTop: 16,
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      padding: "14px 16px",
+                      borderRadius: 18,
+                    }}
+                    onClick={() => setDiyanaOpen((prev) => !prev)}
+                  >
+                    <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+                      <span style={{ fontWeight: 800 }}>
+                        {diyanaOpen ? "Chiudi DYANA" : "Chiedi a DYANA"}
+                      </span>
+                      <span style={{ fontSize: "0.85rem", opacity: 0.9, fontWeight: 500 }}>
+                        Fai una domanda su questa lettura.
+                      </span>
+                    </span>
 
-  <span
-    style={{
-      width: 46,
-      height: 46,
-      borderRadius: 14,
-      display: "grid",
-      placeItems: "center",
-      background: "rgba(0,0,0,0.22)",
-      border: "1px solid rgba(255,255,255,0.14)",
-      flex: "0 0 auto",
-    }}
-  >
-    <img
-      src="/dyana-logo-NAV.PNG"
-      alt="DYANA"
-      style={{ width: 28, height: 28, objectFit: "contain" }}
-    />
-  </span>
-</button>
-
-
+                    <span
+                      style={{
+                        width: 46,
+                        height: 46,
+                        borderRadius: 14,
+                        display: "grid",
+                        placeItems: "center",
+                        background: "rgba(0,0,0,0.22)",
+                        border: "1px solid rgba(255,255,255,0.14)",
+                        flex: "0 0 auto",
+                      }}
+                    >
+                      <img
+                        src="/dyana-logo-NAV.PNG"
+                        alt="DYANA"
+                        style={{ width: 28, height: 28, objectFit: "contain" }}
+                      />
+                    </span>
+                  </button>
 
                   {diyanaOpen && (
                     <div style={{ marginTop: 16, width: "100%", height: 560, borderRadius: 18, overflow: "hidden" }}>
