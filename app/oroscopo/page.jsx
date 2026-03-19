@@ -165,7 +165,13 @@ function renderDailyCompactText(oroscopoAi, tierRaw) {
     parts.push(`Focus\n${oroscopoAi.focus}`);
   }
 
-  if (isPremium) {
+ if (isPremium) {
+    if (oroscopoAi.timing?.favorevole) {
+      parts.push(`Momento favorevole\n${oroscopoAi.timing.favorevole}`);
+    }
+    if (oroscopoAi.timing?.delicato) {
+      parts.push(`Momento delicato\n${oroscopoAi.timing.delicato}`);
+    }
     if (oroscopoAi.actions?.do) {
       parts.push(`Cosa fare\n${oroscopoAi.actions.do}`);
     }
@@ -255,7 +261,47 @@ function DailyCompactCard({ data, tier = "free" }) {
       )}
 
       {isPremium && (
-        <>
+        <>          {(data.timing?.favorevole || data.timing?.delicato) && (
+            <div
+              style={{
+                display: "grid",
+                gap: 12,
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              }}
+            >
+              {data.timing?.favorevole && (
+                <div
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: 16,
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background: "rgba(255,255,255,0.02)",
+                  }}
+                >
+                  <div className="card-text" style={{ fontWeight: 700, marginBottom: 8 }}>
+                    Momento favorevole
+                  </div>
+                  <div className="card-text">{data.timing.favorevole}</div>
+                </div>
+              )}
+
+              {data.timing?.delicato && (
+                <div
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: 16,
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background: "rgba(255,255,255,0.02)",
+                  }}
+                >
+                  <div className="card-text" style={{ fontWeight: 700, marginBottom: 8 }}>
+                    Momento delicato
+                  </div>
+                  <div className="card-text">{data.timing.delicato}</div>
+                </div>
+              )}
+            </div>
+          )}
           {(data.actions?.do || data.actions?.avoid) && (
             <div
               style={{
