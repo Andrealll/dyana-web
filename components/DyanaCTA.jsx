@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { enqueueConversionEvent } from "./ConversionTracker";
 
 function getVariant() {
   if (typeof window === "undefined") return "A";
@@ -46,12 +47,23 @@ export default function DyanaCTA({ type = "premium", onClick, disabled = false }
 
   const cta = config[variant]?.[type] || config.A.premium;
 
+  function handleClick() {
+    try {
+      enqueueConversionEvent("dyana_cta_click", {
+        cta_type: type,
+        cta_variant: variant,
+      });
+    } catch {}
+
+    if (onClick) onClick();
+  }
+
   return (
     <div style={{ marginTop: 16 }}>
       <button
         type="button"
         className="btn btn-primary"
-        onClick={onClick}
+        onClick={handleClick}
         disabled={disabled}
         style={{
           width: "100%",

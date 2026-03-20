@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { enqueueConversionEvent } from "./ConversionTracker";
 
 function getVariant() {
   if (typeof window === "undefined") return "A";
@@ -40,6 +41,18 @@ export default function DyanaAskCTA({ open = false, onClick, disabled = false })
   const title = open ? current.openTitle : current.closedTitle;
   const sub = open ? current.openSub : current.closedSub;
 
+  function handleClick() {
+    try {
+      enqueueConversionEvent("dyana_cta_click", {
+        cta_type: "ask",
+        cta_variant: variant,
+        cta_state: open ? "open" : "closed",
+      });
+    } catch {}
+
+    if (onClick) onClick();
+  }
+
   return (
     <button
       type="button"
@@ -54,7 +67,7 @@ export default function DyanaAskCTA({ open = false, onClick, disabled = false })
         padding: "14px 16px",
         borderRadius: 18,
       }}
-      onClick={onClick}
+      onClick={handleClick}
       disabled={disabled}
     >
       <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>

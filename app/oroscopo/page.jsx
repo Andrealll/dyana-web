@@ -858,6 +858,17 @@ function buildFreeTeaser(oroscopoAi) {
   return cut || "In questo periodo emerge un tema centrale che influenza il tuo modo di reagire e prendere decisioni. La parte più importante è capire perché si attiva proprio ora.";
 }
 
+function getStoredCtaVariant() {
+  if (typeof window === "undefined") return "A";
+  try {
+    return localStorage.getItem("dyana_cta_variant") || "A";
+  } catch {
+    return "A";
+  }
+}
+
+
+
 export default function OroscopoPage() {
   const [form, setForm] = useState({
     nome: "",
@@ -979,7 +990,33 @@ export default function OroscopoPage() {
     saveOroscopoDraft({ form, oraIgnota, ts: Date.now() });
   }, [form, oraIgnota]);
 
-  // 3) AUTH_DONE listeners + banner + eventuale azione post-login
+  // 3) tracking bottone cta
+useEffect(() => {
+  if (!hasFree && !hasPremium) return;
+
+  try {
+    const variant = getStoredCtaVariant();
+
+    if (hasFree && !hasPremium) {
+      enqueueConversionEvent("dyana_cta_impression", {
+        cta_type: "premium",
+        cta_variant: variant,
+        page: "oroscopo",
+      });
+    }
+
+    if (hasPremium) {
+      enqueueConversionEvent("dyana_cta_impression", {
+        cta_type: "ask",
+        cta_variant: variant,
+        page: "oroscopo",
+      });
+    }
+  } catch {}
+}, [hasFree, hasPremium]);
+
+
+  // 4) AUTH_DONE listeners + banner + eventuale azione post-login
   useEffect(() => {
     if (typeof window === "undefined") return;
 
