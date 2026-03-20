@@ -990,32 +990,6 @@ export default function OroscopoPage() {
     saveOroscopoDraft({ form, oraIgnota, ts: Date.now() });
   }, [form, oraIgnota]);
 
-  // 3) tracking bottone cta
-useEffect(() => {
-  if (!hasFree && !hasPremium) return;
-
-  try {
-    const variant = getStoredCtaVariant();
-
-    if (hasFree && !hasPremium) {
-      enqueueConversionEvent("dyana_cta_impression", {
-        cta_type: "premium",
-        cta_variant: variant,
-        page: "oroscopo",
-      });
-    }
-
-    if (hasPremium) {
-      enqueueConversionEvent("dyana_cta_impression", {
-        cta_type: "ask",
-        cta_variant: variant,
-        page: "oroscopo",
-      });
-    }
-  } catch {}
-}, [hasFree, hasPremium]);
-
-
   // 4) AUTH_DONE listeners + banner + eventuale azione post-login
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1481,6 +1455,30 @@ useEffect(() => {
   const hasPremium = !!premiumResult;
   const premiumText = premiumAi ? buildInterpretazioneTesto(premiumAi, premiumTier) : "";
   const isPremiumDailyCompact = isDailyCompactSchema(premiumAi);
+// 3) tracking bottone cta
+useEffect(() => {
+  if (!hasFree && !hasPremium) return;
+
+  try {
+    const variant = getStoredCtaVariant();
+
+    if (hasFree && !hasPremium) {
+      enqueueConversionEvent("dyana_cta_impression", {
+        cta_type: "premium",
+        cta_variant: variant,
+        page: "oroscopo",
+      });
+    }
+
+    if (hasPremium) {
+      enqueueConversionEvent("dyana_cta_impression", {
+        cta_type: "ask",
+        cta_variant: variant,
+        page: "oroscopo",
+      });
+    }
+  } catch {}
+}, [hasFree, hasPremium]);
 
   const premiumPeriodoKey = premiumResult?.engine_result?.periodo_ita || form.periodo || "giornaliero";
   const premiumPeriodBlock =
