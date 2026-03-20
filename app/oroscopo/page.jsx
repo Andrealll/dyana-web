@@ -1,5 +1,6 @@
 "use client";
-
+import DyanaCTA from "../../components/DyanaCTA";
+import DyanaAskCTA from "../../components/DyanaAskCTA";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import DyanaNavbar from "../../components/DyanaNavbar";
@@ -1662,9 +1663,11 @@ export default function OroscopoPage() {
               </div>
 
               <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <button type="button" className="btn btn-primary" onClick={handleApprofondisciClick} disabled={primaryBusy}>
-                  {premiumBusyLabel}
-                </button>
+<DyanaCTA
+  type="premium"
+  onClick={handleApprofondisciClick}
+  disabled={primaryBusy}
+/>
 
                 {isLoggedIn && currentCost > 0 && (
                   <span
@@ -1877,49 +1880,11 @@ export default function OroscopoPage() {
                   <p className="card-text" style={{ marginBottom: 4, opacity: 0.9 }}>
                     DYANA conosce già l&apos;oroscopo che hai appena generato e può aiutarti a interpretarlo meglio.
                   </p>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    style={{
-                      marginTop: 16,
-                      width: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      padding: "14px 16px",
-                      borderRadius: 18,
-                    }}
-                    onClick={() => setDiyanaOpen((prev) => !prev)}
-                  >
-                    <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
-                      <span style={{ fontWeight: 800 }}>
-                        {diyanaOpen ? "Chiudi DYANA" : "Chiedi a DYANA"}
-                      </span>
-                      <span style={{ fontSize: "0.85rem", opacity: 0.9, fontWeight: 500 }}>
-                        Fai una domanda su questa lettura.
-                      </span>
-                    </span>
-
-                    <span
-                      style={{
-                        width: 46,
-                        height: 46,
-                        borderRadius: 14,
-                        display: "grid",
-                        placeItems: "center",
-                        background: "rgba(0,0,0,0.22)",
-                        border: "1px solid rgba(255,255,255,0.14)",
-                        flex: "0 0 auto",
-                      }}
-                    >
-                      <img
-                        src="/dyana-logo-NAV.PNG"
-                        alt="DYANA"
-                        style={{ width: 28, height: 28, objectFit: "contain" }}
-                      />
-                    </span>
-                  </button>
+<DyanaAskCTA
+  open={diyanaOpen}
+  onClick={() => setDiyanaOpen((prev) => !prev)}
+  disabled={false}
+/>
 
                   {diyanaOpen && (
                     <div style={{ marginTop: 16, width: "100%", height: 560, borderRadius: 18, overflow: "hidden" }}>
