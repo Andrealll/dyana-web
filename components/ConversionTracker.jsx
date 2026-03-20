@@ -9,6 +9,8 @@ const ALLOWED_EVENTS = new Set([
   "sinastria_completed",
   "tema_completed",
   "oroscopo_completed",
+  "dyana_cta_click",
+  "dyana_cta_impression",
 ]);
 
 // Retry config: se gtag non è pronto, ritenta
