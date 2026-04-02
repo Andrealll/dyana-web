@@ -4,6 +4,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import DyanaNavbar from "../../components/DyanaNavbar";
+import { enqueueConversionEvent } from "../../components/ConversionTracker";
 
 import {
   loginWithCredentials,
@@ -544,7 +545,11 @@ export default function CompatibilitaPage() {
 
       setPremiumResult(data);
       applyBillingAndCredits(data, "sinastria_ai");
-
+// ✅ TRACKING: premium sinastria completata
+enqueueConversionEvent("sinastria_completed", {
+  feature: "compatibilita",
+  tier: "premium",
+});
       setEmailGateOpen(false);
       setDiyanaOpen(false);
 
@@ -1035,7 +1040,7 @@ async function handleApprofondisciClick() {
                   <div className="card-text" style={{ color: "#ffdf9a" }}>
                     {isLoggedIn ? (
                       <>
-                        <p>Crediti insufficienti.</p>
+                        <p>Per continuare con questo contenuto premium ti servono altri crediti.</p>
                         <p style={{ marginTop: 8 }}>
                           <Link href="/crediti" className="link">Vai ai crediti</Link>
                         </p>

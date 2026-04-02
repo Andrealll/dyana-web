@@ -1211,7 +1211,7 @@ export default function OroscopoPage() {
 
         if (isCreditsError) {
           setNoCredits(true);
-          setErrore(typeof msg === "string" ? msg : "Crediti insufficienti.");
+			setErrore("Per continuare con questo contenuto premium ti servono altri crediti.");
           setAuthBanner(null);
           await refreshCreditsUI();
           if (!isLoggedIn && ENABLE_EMAIL_GATE_WHEN_TRIAL_OVER) {

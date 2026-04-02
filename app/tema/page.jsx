@@ -541,12 +541,12 @@ setKbTags(meta.kb_tags || meta.kb || ["tema_natale"]);
           (data && (data.error || data.detail || data.message)) ||
           `Errore nella generazione (status ${res.status}).`;
 
-        if (isCreditsError) {
-          setNoCredits(true);
-          setErrore(typeof msg === "string" ? msg : "Crediti insufficienti.");
-          await refreshCreditsUI();
-          return;
-        }
+if (isCreditsError) {
+  setNoCredits(true);
+  setErrore("Per continuare con questo contenuto premium ti servono altri crediti.");
+  await refreshCreditsUI();
+  return;
+}
 
         setErrore(typeof msg === "string" ? msg : "Errore nella generazione.");
         return;
@@ -554,7 +554,7 @@ setKbTags(meta.kb_tags || meta.kb || ["tema_natale"]);
 
       applyTemaResponse(data);
       setPremiumLoaded(true);
-// ✅ TRACKING: premium sinastria completata
+// ✅ TRACKING: premium tema completato
 enqueueConversionEvent("tema_completed", {
   feature: "tema",
   tier: "premium",
