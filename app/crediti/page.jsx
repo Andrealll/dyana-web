@@ -1,15 +1,25 @@
-// ==========================
-// COSTANTI GLOBALI
-// ==========================
 "use client";
 
 import { useEffect, useState } from "react";
 import DyanaNavbar from "../../components/DyanaNavbar";
 import { getToken, clearToken } from "../../lib/authClient";
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 
-// Se il path reale di DyanaNavbar nelle altre pagine è diverso (es. "../components/DyanaNavbar" vs "../../components"),
-// usa esattamente LO STESSO che hai usato in /tema e /login.
-const API_BASE = process.env.NEXT_PUBLIC_AUTH_BASE; // usiamo il servizio auth_pub
+const API_BASE = process.env.NEXT_PUBLIC_AUTH_BASE;
+
+function decodeJwtPayload(token) {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const json = atob(padded);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
 
 export default function CreditiPage() {
   const [packs, setPacks] = useState([]);
@@ -20,9 +30,8 @@ export default function CreditiPage() {
   const [jwt, setJwt] = useState(null);
 
   const [userRole, setUserRole] = useState("guest");
-  const [userCredits] = useState(0); // per ora non leggiamo i crediti reali qui
+  const [userCredits] = useState(0);
 
-  // Recupero JWT dal client (localStorage) al mount
   useEffect(() => {
     const token = getToken();
     if (token) {
@@ -34,16 +43,17 @@ export default function CreditiPage() {
     }
   }, []);
 
-  // Carica i pacchetti crediti dal backend auth_pub
   useEffect(() => {
     async function fetchPacks() {
       setErrore("");
       setLoading(true);
+
       try {
         const res = await fetch(`${API_BASE}/payments/packs`);
         if (!res.ok) {
           throw new Error("Impossibile caricare i pacchetti crediti.");
         }
+
         const data = await res.json();
         setPacks(data.packs || []);
       } catch (err) {
@@ -61,47 +71,71 @@ export default function CreditiPage() {
     setErrore("");
     setSuccess("");
 
-    // 🔒 ricontrollo il token direttamente da localStorage
     const currentToken = getToken();
     if (!currentToken) {
       setJwt(null);
       setUserRole("guest");
-      setErrore(
-        "Per acquistare crediti devi prima effettuare il login con la tua email."
-      );
+      setErrore("Per acquistare crediti devi prima effettuare il login con la tua email.");
       return;
     }
 
     setJwt(currentToken);
 
+    const payload = decodeJwtPayload(currentToken);
+    const userId = payload?.sub;
+
+    if (!userId) {
+      setErrore("Token utente non valido. Effettua di nuovo il login.");
+      return;
+    }
+
+    const selectedPack = packs.find((p) => p.id === packId);
+    if (!selectedPack?.stripe_price_id) {
+      setErrore("Pacchetto non configurato correttamente.");
+      return;
+    }
+
     setLoadingPack(packId);
+
     try {
-      const res = await fetch(`${API_BASE}/payments/create-checkout-session`, {
+      const successUrl = `${window.location.origin}/crediti/success?session_id={CHECKOUT_SESSION_ID}`;
+      const cancelUrl = `${window.location.origin}/crediti/cancel`;
+
+      const res = await fetch(`${API_BASE}/billing/create-checkout-session`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${currentToken}`, // 👈 JWT fresco
+          Authorization: `Bearer ${currentToken}`,
         },
-        body: JSON.stringify({ pack_id: packId }),
+        body: JSON.stringify({
+          price_id: selectedPack.stripe_price_id,
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+          user_id: userId,
+          pack_id: packId,
+        }),
       });
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(
-          data.detail || "Errore nella creazione della sessione di pagamento."
-        );
+        throw new Error(data.detail || "Errore nella creazione della sessione di pagamento.");
       }
 
       const data = await res.json();
 
       if (data.checkout_url) {
-        // Stripe Checkout reale: reindirizziamo l'utente alla pagina di pagamento
-        window.location.href = data.checkout_url;
-      } else {
-        setSuccess(
-          "Richiesta di pagamento creata, ma manca la checkout_url. Controlla il backend."
-        );
+        const url = data.checkout_url;
+
+        if (Capacitor.isNativePlatform()) {
+          await Browser.open({ url });
+          return;
+        }
+
+        window.location.href = url;
+        return;
       }
+
+      setSuccess("Richiesta di pagamento creata, ma manca la checkout_url. Controlla il backend.");
     } catch (err) {
       console.error("[CREDITI] Errore acquisto:", err);
       setErrore(err.message || "Errore inatteso durante l'acquisto.");
@@ -114,8 +148,6 @@ export default function CreditiPage() {
     clearToken();
     setJwt(null);
     setUserRole("guest");
-    // volendo potresti anche fare un redirect alla home o a /login
-    // window.location.href = "/login";
   }
 
   return (
@@ -184,6 +216,7 @@ export default function CreditiPage() {
                   >
                     {pack.name}
                   </h2>
+
                   <p className="card-text" style={{ marginBottom: 8 }}>
                     {pack.description}
                   </p>
@@ -191,6 +224,7 @@ export default function CreditiPage() {
                   <p className="card-text" style={{ marginBottom: 4 }}>
                     <strong>{pack.credits}</strong> crediti
                   </p>
+
                   <p
                     className="card-text"
                     style={{
@@ -232,6 +266,7 @@ export default function CreditiPage() {
                 {errore}
               </p>
             )}
+
             {success && (
               <p
                 className="card-text"
