@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 
 export default function DeepLinkHandler() {
+  const router = useRouter();
+  const lastUrlRef = useRef(null);
+
   useEffect(() => {
     let removeListener = null;
 
@@ -13,18 +17,30 @@ export default function DeepLinkHandler() {
 
         const { App } = await import("@capacitor/app");
 
-        const go = (url) => {
+        const go = (incomingUrl) => {
           try {
-            if (!url) return;
-            // Forziamo la WebView a navigare: così /auth/callback viene realmente caricato
-            console.log("[DEEPLINK] navigate to:", url);
-            window.location.href = url;
+            if (!incomingUrl) return;
+            if (incomingUrl === lastUrlRef.current) return;
+            lastUrlRef.current = incomingUrl;
+
+            const u = new URL(incomingUrl);
+
+            // accetta solo i link del dominio app
+            if (u.host !== "dyana.app" && u.host !== "www.dyana.app") {
+              console.warn("[DEEPLINK] host non gestito:", u.host);
+              return;
+            }
+
+            const internalPath = `${u.pathname}${u.search}${u.hash}`;
+            console.log("[DEEPLINK] internal navigate to:", internalPath);
+
+            router.replace(internalPath);
           } catch (e) {
             console.error("[DEEPLINK] navigate error:", e);
           }
         };
 
-        // 1) Cold start: app aperta *direttamente* dal link
+        // 1) cold start
         try {
           const launch = await App.getLaunchUrl();
           const launchUrl = launch?.url || null;
@@ -36,15 +52,18 @@ export default function DeepLinkHandler() {
           console.warn("[DEEPLINK] getLaunchUrl failed:", e);
         }
 
-        // 2) App già in memoria: arriva un nuovo deep link
-        const handler = (event) => {
+        // 2) app già aperta
+        const sub = await App.addListener("appUrlOpen", (event) => {
           const url = event?.url || null;
           console.log("[DEEPLINK] appUrlOpen:", url);
           go(url);
-        };
+        });
 
-        const sub = await App.addListener("appUrlOpen", handler);
-        removeListener = () => sub?.remove?.();
+        removeListener = () => {
+          try {
+            sub?.remove?.();
+          } catch {}
+        };
       } catch (e) {
         console.warn("[DEEPLINK] not available:", e);
       }
@@ -55,7 +74,7 @@ export default function DeepLinkHandler() {
         if (removeListener) removeListener();
       } catch {}
     };
-  }, []);
+  }, [router]);
 
   return null;
 }
