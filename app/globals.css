@@ -11,6 +11,8 @@ html,
 body {
   margin: 0;
   padding: 0;
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 /* Scroll morbido */
@@ -163,9 +165,11 @@ body {
 
 /* LANDING */
 .landing-wrapper {
-  padding: 72px 20px 48px;
+  width: 100%;
   max-width: 1100px;
   margin: 0 auto;
+  padding: 72px 16px 48px;
+  box-sizing: border-box;
 }
 
 /* SEZIONI */
@@ -643,4 +647,19 @@ body {
 .diyana-footer-link:hover {
   border-color: rgba(187, 154, 99, 0.9);
   opacity: 1;
+}
+
+
+
+.text-content {
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+
+img,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
 }
