@@ -8,6 +8,8 @@ import {
   verifyMagicLink,
   exchangeSupabaseTokenForDyanaJwt,
   clearToken,
+  getResumeTarget,
+  clearResumeTarget,
 } from "../../../lib/authClient";
 
 const WELCOME_PATH = "/welcome";
@@ -34,13 +36,7 @@ function getSupabase() {
   return createClient(url, anon);
 }
 
-function clearResumeTarget() {
-  try {
-    localStorage.removeItem("dyana_resume_path");
-    localStorage.removeItem("dyana_resume_qs");
-    localStorage.removeItem("dyana_resume_ts");
-  } catch {}
-}
+
 
 function notifyAuthDone() {
   try {
@@ -64,7 +60,18 @@ function resolveWelcomeMode(typeQ) {
   if (typeQ === "signup" || typeQ === "invite") return "new";
   return "back";
 }
+function resolvePostLoginDestination(typeQ) {
+  const resume = getResumeTarget();
 
+  if (resume?.path) {
+    const full = `${resume.path}${resume.qs ? `?${resume.qs}` : ""}`;
+    clearResumeTarget();
+    return full;
+  }
+
+  const mode = resolveWelcomeMode(typeQ);
+  return `${WELCOME_PATH}?mode=${mode}`;
+}
 export default function CallbackClient() {
   const router = useRouter();
   const sp = useSearchParams();
@@ -88,11 +95,11 @@ export default function CallbackClient() {
 
           notifyAuthDone();
 
-          const typeQ0 = sp?.get("type") || "magiclink";
-          const mode = resolveWelcomeMode(typeQ0);
+const typeQ0 = sp?.get("type") || "magiclink";
+const nextUrl = resolvePostLoginDestination(typeQ0);
 
-          router.replace(`${WELCOME_PATH}?mode=${mode}`);
-          return;
+router.replace(nextUrl);
+return;
         }
 
         // 1) FLOW token_hash (auth_pub)
@@ -103,11 +110,10 @@ export default function CallbackClient() {
           await verifyMagicLink(tokenHash, typeQ);
           notifyAuthDone();
 
-          const mode = resolveWelcomeMode(typeQ);
+const nextUrl = resolvePostLoginDestination(typeQ);
 
-          router.replace(`${WELCOME_PATH}?mode=${mode}`);
-          return;
-        }
+router.replace(nextUrl);
+return;
 
         // 2) FALLBACK (hash access_token)
         const hash = typeof window !== "undefined" ? window.location.hash : "";
@@ -119,10 +125,10 @@ export default function CallbackClient() {
           await exchangeSupabaseTokenForDyanaJwt(sbAccessToken);
           notifyAuthDone();
 
-          const mode = resolveWelcomeMode(typeHash);
+const nextUrl = resolvePostLoginDestination(typeHash);
 
-          router.replace(`${WELCOME_PATH}?mode=${mode}`);
-          return;
+router.replace(nextUrl);
+return;
         }
 
         throw new Error("Token mancante nel link. Richiedi un nuovo magic link.");
