@@ -114,7 +114,7 @@ const nextUrl = resolvePostLoginDestination(typeQ);
 
 router.replace(nextUrl);
 return;
-
+		}
         // 2) FALLBACK (hash access_token)
         const hash = typeof window !== "undefined" ? window.location.hash : "";
         const hp = new URLSearchParams((hash || "").replace("#", ""));
