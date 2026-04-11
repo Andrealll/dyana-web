@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import DyanaNavbar from "../../components/DyanaNavbar";
+import { useI18n } from "../../lib/i18n/useI18n";
 import { getToken, clearToken } from "../../lib/authClient";
 import { Capacitor } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
@@ -22,6 +23,8 @@ function decodeJwtPayload(token) {
 }
 
 export default function CreditiPage() {
+  const { t } = useI18n();
+
   const [packs, setPacks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingPack, setLoadingPack] = useState(null);
@@ -51,21 +54,21 @@ export default function CreditiPage() {
       try {
         const res = await fetch(`${API_BASE}/payments/packs`);
         if (!res.ok) {
-          throw new Error("Impossibile caricare i pacchetti crediti.");
+          throw new Error(t("creditsPage.errors.loadPacks"));
         }
 
         const data = await res.json();
         setPacks(data.packs || []);
       } catch (err) {
         console.error("[CREDITI] Errore load packs:", err);
-        setErrore(err.message || "Errore nel caricamento dei pacchetti.");
+        setErrore(err.message || t("creditsPage.errors.loadPacksGeneric"));
       } finally {
         setLoading(false);
       }
     }
 
     fetchPacks();
-  }, []);
+  }, [t]);
 
   async function handleCompra(packId) {
     setErrore("");
@@ -75,7 +78,7 @@ export default function CreditiPage() {
     if (!currentToken) {
       setJwt(null);
       setUserRole("guest");
-      setErrore("Per acquistare crediti devi prima effettuare il login con la tua email.");
+      setErrore(t("creditsPage.errors.loginRequired"));
       return;
     }
 
@@ -85,13 +88,13 @@ export default function CreditiPage() {
     const userId = payload?.sub;
 
     if (!userId) {
-      setErrore("Token utente non valido. Effettua di nuovo il login.");
+      setErrore(t("creditsPage.errors.invalidToken"));
       return;
     }
 
     const selectedPack = packs.find((p) => p.id === packId);
     if (!selectedPack?.stripe_price_id) {
-      setErrore("Pacchetto non configurato correttamente.");
+      setErrore(t("creditsPage.errors.invalidPack"));
       return;
     }
 
@@ -118,7 +121,7 @@ export default function CreditiPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || "Errore nella creazione della sessione di pagamento.");
+        throw new Error(data.detail || t("creditsPage.errors.checkoutSession"));
       }
 
       const data = await res.json();
@@ -135,10 +138,10 @@ export default function CreditiPage() {
         return;
       }
 
-      setSuccess("Richiesta di pagamento creata, ma manca la checkout_url. Controlla il backend.");
+      setSuccess(t("creditsPage.errors.missingCheckoutUrl"));
     } catch (err) {
       console.error("[CREDITI] Errore acquisto:", err);
-      setErrore(err.message || "Errore inatteso durante l'acquisto.");
+      setErrore(err.message || t("creditsPage.errors.unexpectedPurchase"));
     } finally {
       setLoadingPack(null);
     }
@@ -160,16 +163,13 @@ export default function CreditiPage() {
 
       <section className="landing-wrapper">
         <header className="section">
-          <h1 className="section-title">Ricarica i tuoi crediti</h1>
-          <p className="section-subtitle">
-            Scegli un pacchetto crediti per sbloccare le letture premium di
-            DYANA: tema natale, sinastria, oroscopi avanzati e domande extra.
-          </p>
+          <h1 className="section-title">{t("creditsPage.title")}</h1>
+          <p className="section-subtitle">{t("creditsPage.subtitle")}</p>
         </header>
 
         <section className="section">
           {loading && packs.length === 0 ? (
-            <p className="card-text">Caricamento pacchetti in corso...</p>
+            <p className="card-text">{t("creditsPage.loading.packs")}</p>
           ) : (
             <div
               className="card"
@@ -206,7 +206,7 @@ export default function CreditiPage() {
                         marginBottom: 6,
                       }}
                     >
-                      Più conveniente
+                      {t("creditsPage.pack.bestValue")}
                     </div>
                   )}
 
@@ -222,7 +222,7 @@ export default function CreditiPage() {
                   </p>
 
                   <p className="card-text" style={{ marginBottom: 4 }}>
-                    <strong>{pack.credits}</strong> crediti
+                    <strong>{pack.credits}</strong> {t("creditsPage.pack.credits")}
                   </p>
 
                   <p
@@ -243,8 +243,8 @@ export default function CreditiPage() {
                     onClick={() => handleCompra(pack.id)}
                   >
                     {loadingPack === pack.id
-                      ? "Preparazione pagamento..."
-                      : "Acquista ora"}
+                      ? t("creditsPage.pack.preparingPayment")
+                      : t("creditsPage.pack.buyNow")}
                   </button>
                 </div>
               ))}
@@ -280,10 +280,7 @@ export default function CreditiPage() {
               className="card-text"
               style={{ fontSize: "0.85rem", opacity: 0.8 }}
             >
-              I crediti ti permettono di acquistare letture premium (oroscopi
-              giornalieri/settimanali/mensili/annuali, tema natale, sinastria e
-              domande extra a DYANA). Nessun rinnovo automatico: ricarichi solo
-              quando vuoi.
+              {t("creditsPage.info.footer")}
             </p>
           </div>
         </section>

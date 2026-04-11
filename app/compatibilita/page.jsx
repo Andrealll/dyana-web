@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import DyanaNavbar from "../../components/DyanaNavbar";
 import { enqueueConversionEvent } from "../../components/ConversionTracker";
+import { useI18n } from "../../lib/i18n/useI18n";
 
 import {
   loginWithCredentials,
@@ -114,8 +115,10 @@ function formatPianetaPosizione(info) {
 }
 
 // Helper error backend
-function normalizeErrorMessage(data, status) {
-  if (!data) return `Errore nella generazione della compatibilità (status ${status}).`;
+function normalizeErrorMessage(data, status, t) {
+  if (!data) {
+    return t("compatibility.errors.serverGeneration").replace("{status}", status);
+  }
 
   if (typeof data.error === "string") return data.error;
 
@@ -131,7 +134,7 @@ function normalizeErrorMessage(data, status) {
     return detail.msg || JSON.stringify(detail);
   }
 
-  return `Errore nella generazione della compatibilità (status ${status}).`;
+  return t("compatibility.errors.serverGeneration").replace("{status}", status);
 }
 
 // Testo Q&A da sinastria_ai
@@ -151,7 +154,10 @@ function buildSinastriaReadingText(sinastriaAI) {
       return testo ? `• ${titolo}\n${testo}` : `• ${titolo}`;
     });
     parts.push("Capitoli della relazione:\n" + blocchi.join("\n\n"));
-  } else if (Array.isArray(sinastriaAI.aree_relazione) && sinastriaAI.aree_relazione.length > 0) {
+  } else if (
+    Array.isArray(sinastriaAI.aree_relazione) &&
+    sinastriaAI.aree_relazione.length > 0
+  ) {
     const blocchi = sinastriaAI.aree_relazione.map((area) => {
       const titolo = area.titolo || area.id || "Area della relazione";
       const sintesi = area.sintesi || "";
@@ -162,18 +168,28 @@ function buildSinastriaReadingText(sinastriaAI) {
   }
 
   if (Array.isArray(sinastriaAI.punti_forza) && sinastriaAI.punti_forza.length) {
-    parts.push("Punti di forza:\n" + sinastriaAI.punti_forza.map((p) => `- ${p}`).join("\n"));
-  }
-
-  if (Array.isArray(sinastriaAI.punti_criticita) && sinastriaAI.punti_criticita.length) {
     parts.push(
-      "Punti di attenzione:\n" + sinastriaAI.punti_criticita.map((p) => `- ${p}`).join("\n")
+      "Punti di forza:\n" + sinastriaAI.punti_forza.map((p) => `- ${p}`).join("\n")
     );
   }
 
-  if (Array.isArray(sinastriaAI.consigli_finali) && sinastriaAI.consigli_finali.length) {
+  if (
+    Array.isArray(sinastriaAI.punti_criticita) &&
+    sinastriaAI.punti_criticita.length
+  ) {
     parts.push(
-      "Consigli finali:\n" + sinastriaAI.consigli_finali.map((c) => `- ${c}`).join("\n")
+      "Punti di attenzione:\n" +
+        sinastriaAI.punti_criticita.map((p) => `- ${p}`).join("\n")
+    );
+  }
+
+  if (
+    Array.isArray(sinastriaAI.consigli_finali) &&
+    sinastriaAI.consigli_finali.length
+  ) {
+    parts.push(
+      "Consigli finali:\n" +
+        sinastriaAI.consigli_finali.map((c) => `- ${c}`).join("\n")
     );
   }
 
@@ -184,6 +200,8 @@ function buildSinastriaReadingText(sinastriaAI) {
 // PAGINA
 // ==========================
 export default function CompatibilitaPage() {
+  const { t } = useI18n();
+
   const [form, setForm] = useState({
     nomeA: "",
     dataA: "",
@@ -314,9 +332,7 @@ export default function CompatibilitaPage() {
       setGateMsg("");
 
       setJustLoggedIn(true);
-      setPostAuthToast(
-        "Accesso completato. Ora puoi continuare: clicca “Approfondisci con DYANA” per la compatibilità Premium."
-      );
+      setPostAuthToast(t("compatibility.postAuth.continueMessage"));
       setTimeout(() => setJustLoggedIn(false), 6000);
 
       try {
@@ -354,7 +370,7 @@ export default function CompatibilitaPage() {
         bc && bc.close();
       } catch {}
     };
-  }, [refreshUserFromToken, refreshCreditsUI]);
+  }, [refreshUserFromToken, refreshCreditsUI, t]);
 
   function handleLogout() {
     clearToken();
@@ -495,7 +511,7 @@ export default function CompatibilitaPage() {
       const { res, data } = await callSinastria({ tier: "free" });
 
       if (!res.ok) {
-        const msg = normalizeErrorMessage(data, res.status);
+        const msg = normalizeErrorMessage(data, res.status, t);
         setErrore(msg);
         return;
       }
@@ -504,7 +520,7 @@ export default function CompatibilitaPage() {
       applyBillingAndCredits(data, "sinastria_ai");
       await refreshCreditsUI();
     } catch (e) {
-      setErrore("Impossibile comunicare con il server. Controlla la connessione e riprova.");
+      setErrore(t("compatibility.errors.connection"));
     } finally {
       setLoading(false);
     }
@@ -528,9 +544,10 @@ export default function CompatibilitaPage() {
         const isCreditsError =
           res.status === 402 ||
           res.status === 403 ||
-          (typeof errorCode === "string" && errorCode.toLowerCase().includes("credit"));
+          (typeof errorCode === "string" &&
+            errorCode.toLowerCase().includes("credit"));
 
-        const msg = normalizeErrorMessage(data, res.status);
+        const msg = normalizeErrorMessage(data, res.status, t);
 
         if (isCreditsError) {
           setNoCredits(true);
@@ -545,17 +562,19 @@ export default function CompatibilitaPage() {
 
       setPremiumResult(data);
       applyBillingAndCredits(data, "sinastria_ai");
-// ✅ TRACKING: premium sinastria completata
-enqueueConversionEvent("sinastria_completed", {
-  feature: "compatibilita",
-  tier: "premium",
-});
+
+      // ✅ TRACKING: premium sinastria completata
+      enqueueConversionEvent("sinastria_completed", {
+        feature: "compatibilita",
+        tier: "premium",
+      });
+
       setEmailGateOpen(false);
       setDiyanaOpen(false);
 
       await refreshCreditsUI();
     } catch (e) {
-      setErrore("Impossibile comunicare con il server. Controlla la connessione e riprova.");
+      setErrore(t("compatibility.errors.connection"));
     } finally {
       setPremiumCtaLoading(false);
       setSlowLoading(false);
@@ -566,57 +585,53 @@ enqueueConversionEvent("sinastria_completed", {
   // ======================================================
   // Gate open / Approfondisci click
   // ======================================================
-function openEmailGate() {
-  if (guestTrialLeft !== 0) return; // trial disponibile? non aprire mai gate
+  function openEmailGate() {
+    if (guestTrialLeft !== 0) return; // trial disponibile? non aprire mai gate
 
-  setGateErr("");
-  setGateLoading(false);
+    setGateErr("");
+    setGateLoading(false);
 
-  // default: magic link preselezionato
-  setGateMode("magic");
-  setEmailGateOpen(true);
+    // default: magic link preselezionato
+    setGateMode("magic");
+    setEmailGateOpen(true);
 
-  setGateMsg(
-    "Puoi continuare ad utilizzare Dyana, inserendo la tua email."
-  );
-}
-
-
-async function handleApprofondisciClick() {
-  setErrore("");
-  setNoCredits(false);
-
-  if (premiumResult) return;
-
-  // feedback immediato sul bottone + messaggio
-  setPremiumCtaLoading(true);
-  setSlowLoading(false);
-  const slowTimer = setTimeout(() => setSlowLoading(true), 12000);
-
-  try {
-    // 1) Se loggato → premium diretto
-    if (isLoggedIn) {
-      await generaPremium();
-      return;
-    }
-
-    // 2) Guest con trial disponibile → premium diretto (NO email gate)
-    if (guestTrialLeft === 1) {
-      await generaPremium();
-      return;
-    }
-
-    // 3) Guest senza trial → gate email/login
-    openEmailGate();
-  } catch (e) {
-    // errori gestiti da generaPremium / catch generale
-  } finally {
-    clearTimeout(slowTimer);
-    setPremiumCtaLoading(false);
-    setSlowLoading(false);
+    setGateMsg(t("compatibility.gate.continueMessage"));
   }
-}
 
+  async function handleApprofondisciClick() {
+    setErrore("");
+    setNoCredits(false);
+
+    if (premiumResult) return;
+
+    // feedback immediato sul bottone + messaggio
+    setPremiumCtaLoading(true);
+    setSlowLoading(false);
+    const slowTimer = setTimeout(() => setSlowLoading(true), 12000);
+
+    try {
+      // 1) Se loggato → premium diretto
+      if (isLoggedIn) {
+        await generaPremium();
+        return;
+      }
+
+      // 2) Guest con trial disponibile → premium diretto (NO email gate)
+      if (guestTrialLeft === 1) {
+        await generaPremium();
+        return;
+      }
+
+      // 3) Guest senza trial → gate email/login
+      openEmailGate();
+    } catch (e) {
+      // errori gestiti da generaPremium / catch generale
+    } finally {
+      clearTimeout(slowTimer);
+      setPremiumCtaLoading(false);
+      setSlowLoading(false);
+    }
+  }
 
   // ======================================================
   // Submit gate
@@ -630,7 +645,7 @@ async function handleApprofondisciClick() {
     try {
       const email = (gateEmail || "").trim().toLowerCase();
       if (!email || !email.includes("@")) {
-        setGateErr("Inserisci un’email valida.");
+        setGateErr(t("compatibility.errors.invalidEmail"));
         return;
       }
 
@@ -638,10 +653,13 @@ async function handleApprofondisciClick() {
         localStorage.setItem("dyana_pending_email", email);
       } catch {}
 
-      setResumeTarget({ path: "/compatibilita", readingId: "sinastria_inline" });
+      setResumeTarget({
+        path: "/compatibilita",
+        readingId: "sinastria_inline",
+      });
 
       const redirectUrl =
-        (typeof window !== "undefined" && window.location?.origin)
+        typeof window !== "undefined" && window.location?.origin
           ? `${window.location.origin.replace(/\/+$/, "")}/auth/callback`
           : "https://dyana.app/auth/callback";
 
@@ -653,12 +671,13 @@ async function handleApprofondisciClick() {
         if (gateMode === "magic") {
           try {
             await sendAuthMagicLink(email, redirectUrl);
-            setGateMsg(
-              "Link inviato. Apri l’email e clicca il link di accesso per completare. Poi torna qui e premi “Approfondisci con DYANA”."
-            );
+            setGateMsg(t("compatibility.gate.magicLinkSent"));
           } catch (err) {
-            console.warn("[COMPAT][INLINE-AUTH] magic link FAIL:", err?.message || err);
-            setGateErr("Non riesco a inviare il link. Riprova tra poco.");
+            console.warn(
+              "[COMPAT][INLINE-AUTH] magic link FAIL:",
+              err?.message || err
+            );
+            setGateErr(t("compatibility.errors.magicLinkFailed"));
           } finally {
             setGateLoading(false);
           }
@@ -668,17 +687,17 @@ async function handleApprofondisciClick() {
         // LOGIN / REGISTER con password
         if (gateMode === "login") {
           if (!gatePass) {
-            setGateErr("Inserisci la password per accedere.");
+            setGateErr(t("compatibility.errors.passwordRequired"));
             return;
           }
           await loginWithCredentials(email, gatePass);
         } else {
           if (!gatePass || gatePass.length < 6) {
-            setGateErr("La password deve essere lunga almeno 6 caratteri.");
+            setGateErr(t("compatibility.errors.passwordMin"));
             return;
           }
           if (gatePass !== gatePass2) {
-            setGateErr("Le password non coincidono.");
+            setGateErr(t("compatibility.errors.passwordMismatch"));
             return;
           }
           await registerWithEmail(email, gatePass);
@@ -706,7 +725,7 @@ async function handleApprofondisciClick() {
       // --------------------------------------------------
       // TRIAL DISPONIBILE → premium subito + invio link best-effort
       // --------------------------------------------------
-      setGateMsg("Attendi, sto generando la compatibilità Premium…");
+      setGateMsg(t("compatibility.gate.premiumGenerating"));
 
       // marketing consent: SOLO se token utente registrato valido
       try {
@@ -716,21 +735,29 @@ async function handleApprofondisciClick() {
           const role = (payload?.role || "").toLowerCase();
           const sub = payload?.sub || "";
           const isUuid =
-            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sub);
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+              sub
+            );
 
           if (role !== "guest" && isUuid) {
             await updateMarketingConsent(userToken, !!gateMarketing);
           }
         }
       } catch (err) {
-        console.warn("[COMPAT][INLINE-AUTH] updateMarketingConsent fallito (non blocco):", err?.message || err);
+        console.warn(
+          "[COMPAT][INLINE-AUTH] updateMarketingConsent fallito (non blocco):",
+          err?.message || err
+        );
       }
 
       // magic link best-effort (non blocca)
       try {
         await sendAuthMagicLink(email, redirectUrl);
       } catch (err) {
-        console.warn("[COMPAT][INLINE-AUTH] magic link non inviato (non blocco):", err?.message || err);
+        console.warn(
+          "[COMPAT][INLINE-AUTH] magic link non inviato (non blocco):",
+          err?.message || err
+        );
       }
 
       // UX: avvia premium con feedback chiaro
@@ -749,7 +776,7 @@ async function handleApprofondisciClick() {
 
       return;
     } catch (err) {
-      setGateErr(err?.message || "Operazione non riuscita. Riprova.");
+      setGateErr(err?.message || t("compatibility.errors.genericActionFailed"));
     } finally {
       setGateLoading(false);
     }
@@ -764,16 +791,23 @@ async function handleApprofondisciClick() {
   const freeSinVis = freeResult?.sinastria_vis || null;
   const freeTemaVisA = freeSinVis?.A || null;
   const freeTemaVisB = freeSinVis?.B || null;
-  const freeAspettiPrincipali = Array.isArray(freeSinVis?.aspetti_top) ? freeSinVis.aspetti_top : [];
+  const freeAspettiPrincipali = Array.isArray(freeSinVis?.aspetti_top)
+    ? freeSinVis.aspetti_top
+    : [];
 
-  const freeNomeA = freeTemaVisA?.nome || form.nomeA || "Persona A";
-  const freeNomeB = freeTemaVisB?.nome || form.nomeB || "Persona B";
+  const freeNomeA =
+    freeTemaVisA?.nome || form.nomeA || t("compatibility.labels.personA");
+  const freeNomeB =
+    freeTemaVisB?.nome || form.nomeB || t("compatibility.labels.personB");
 
   const freePayloadMeta = freeResult?.payload_ai?.meta || {};
   const freeOraIgnotaAFromPayload = !!freePayloadMeta.ora_ignota_A;
   const freeOraIgnotaBFromPayload = !!freePayloadMeta.ora_ignota_B;
   const freeOraIgnotaGlobal =
-    freeOraIgnotaAFromPayload || freeOraIgnotaBFromPayload || form.oraAIgnota || form.oraBIgnota;
+    freeOraIgnotaAFromPayload ||
+    freeOraIgnotaBFromPayload ||
+    form.oraAIgnota ||
+    form.oraBIgnota;
 
   const hasFree = !!freeResult && (!!freeSinastriaAI?.sintesi_generale || !!freeChartBase64);
 
@@ -786,18 +820,26 @@ async function handleApprofondisciClick() {
   const premiumSinVis = premiumResult?.sinastria_vis || null;
   const premiumTemaVisA = premiumSinVis?.A || null;
   const premiumTemaVisB = premiumSinVis?.B || null;
-  const premiumAspettiPrincipali = Array.isArray(premiumSinVis?.aspetti_top) ? premiumSinVis.aspetti_top : [];
+  const premiumAspettiPrincipali = Array.isArray(premiumSinVis?.aspetti_top)
+    ? premiumSinVis.aspetti_top
+    : [];
 
-  const premiumNomeA = premiumTemaVisA?.nome || form.nomeA || "Persona A";
-  const premiumNomeB = premiumTemaVisB?.nome || form.nomeB || "Persona B";
+  const premiumNomeA =
+    premiumTemaVisA?.nome || form.nomeA || t("compatibility.labels.personA");
+  const premiumNomeB =
+    premiumTemaVisB?.nome || form.nomeB || t("compatibility.labels.personB");
 
   const premiumPayloadMeta = premiumResult?.payload_ai?.meta || {};
   const premiumOraIgnotaAFromPayload = !!premiumPayloadMeta.ora_ignota_A;
   const premiumOraIgnotaBFromPayload = !!premiumPayloadMeta.ora_ignota_B;
   const premiumOraIgnotaGlobal =
-    premiumOraIgnotaAFromPayload || premiumOraIgnotaBFromPayload || form.oraAIgnota || form.oraBIgnota;
+    premiumOraIgnotaAFromPayload ||
+    premiumOraIgnotaBFromPayload ||
+    form.oraAIgnota ||
+    form.oraBIgnota;
 
-  const hasPremium = !!premiumResult && (!!premiumSinastriaAI?.sintesi_generale || !!premiumChartBase64);
+  const hasPremium =
+    !!premiumResult && (!!premiumSinastriaAI?.sintesi_generale || !!premiumChartBase64);
 
   // ==========================
   // TYPEBOT URL (solo premium)
@@ -824,7 +866,10 @@ async function handleApprofondisciClick() {
       params.set("reading_id", readingId);
 
       params.set("reading_type", "sinastria");
-      params.set("reading_label", "Compatibilità di coppia");
+      params.set(
+        "reading_label",
+        t("compatibility.labels.coupleCompatibility")
+      );
 
       const safeReadingText = (premiumReadingTextForDyana || "").slice(0, 6000);
       if (safeReadingText) params.set("reading_text", safeReadingText);
@@ -834,7 +879,7 @@ async function handleApprofondisciClick() {
     } catch {
       return baseUrl;
     }
-  }, [userIdForDyana, sessionId, premiumResult, premiumSinastriaAI, premiumReadingTextForDyana]);
+  }, [userIdForDyana, sessionId, premiumResult, premiumSinastriaAI, premiumReadingTextForDyana, t]);
 
   // ======================================================
   // RENDER
@@ -856,7 +901,7 @@ async function handleApprofondisciClick() {
             }}
           >
             <h4 className="card-subtitle" style={{ marginBottom: 6 }}>
-              Accesso completato
+              {t("compatibility.postAuth.title")}
             </h4>
 
             <p className="card-text" style={{ opacity: 0.9 }}>
@@ -874,11 +919,15 @@ async function handleApprofondisciClick() {
                   if (el && typeof el.focus === "function") el.focus();
                 }}
               >
-                Continua
+                {t("compatibility.postAuth.continue")}
               </button>
 
-              <button type="button" className="btn" onClick={() => setJustLoggedIn(false)}>
-                Chiudi
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setJustLoggedIn(false)}
+              >
+                {t("compatibility.postAuth.close")}
               </button>
             </div>
           </div>
@@ -888,11 +937,9 @@ async function handleApprofondisciClick() {
       <section className="landing-wrapper">
         {/* INTESTAZIONE */}
         <header className="section">
-          <h1 className="section-title">Compatibilità di coppia</h1>
-          <p className="section-subtitle">
-            Inserisci i dati di nascita di entrambe le persone per ottenere una lettura base gratuita.
-            <br />
-            Poi, se vuoi, puoi <strong>approfondire</strong> e sbloccare DYANA (Premium).
+          <h1 className="section-title">{t("compatibility.page.title")}</h1>
+          <p className="section-subtitle" style={{ whiteSpace: "pre-line" }}>
+            {t("compatibility.page.subtitle")}
           </p>
         </header>
 
@@ -903,33 +950,47 @@ async function handleApprofondisciClick() {
               <div style={{ display: "flex", flexWrap: "wrap", gap: "18px" }}>
                 {/* PERSONA A */}
                 <div style={{ flex: 1, minWidth: "260px" }}>
-                  <h3 className="card-title" style={{ marginBottom: "8px" }}>Persona A</h3>
+                  <h3 className="card-title" style={{ marginBottom: "8px" }}>
+                    {t("compatibility.form.personA")}
+                  </h3>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     <div>
-                      <label className="card-text">Nome</label>
-                      <input type="text" name="nomeA" value={form.nomeA} onChange={handleChange} className="form-input" />
+                      <label className="card-text">{t("compatibility.form.name")}</label>
+                      <input
+                        type="text"
+                        name="nomeA"
+                        value={form.nomeA}
+                        onChange={handleChange}
+                        className="form-input"
+                      />
                     </div>
 
                     <div>
-                      <label className="card-text">Luogo di nascita</label>
+                      <label className="card-text">{t("compatibility.form.birthPlace")}</label>
                       <input
                         type="text"
                         name="cittaA"
                         value={form.cittaA}
                         onChange={handleChange}
                         className="form-input"
-                        placeholder="Es. Napoli, IT"
+                        placeholder={t("compatibility.form.birthPlacePlaceholderA")}
                       />
                     </div>
 
                     <div>
-                      <label className="card-text">Data di nascita</label>
-                      <input type="date" name="dataA" value={form.dataA} onChange={handleChange} className="form-input" />
+                      <label className="card-text">{t("compatibility.form.birthDate")}</label>
+                      <input
+                        type="date"
+                        name="dataA"
+                        value={form.dataA}
+                        onChange={handleChange}
+                        className="form-input"
+                      />
                     </div>
 
                     <div>
-                      <label className="card-text">Ora di nascita</label>
+                      <label className="card-text">{t("compatibility.form.birthTime")}</label>
                       <input
                         type="time"
                         name="oraA"
@@ -937,12 +998,23 @@ async function handleApprofondisciClick() {
                         onChange={handleChange}
                         className="form-input"
                         disabled={form.oraAIgnota}
-                        style={form.oraAIgnota ? { opacity: 0.4, pointerEvents: "none" } : undefined}
+                        style={
+                          form.oraAIgnota
+                            ? { opacity: 0.4, pointerEvents: "none" }
+                            : undefined
+                        }
                       />
 
                       <label
                         className="card-text"
-                        style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, fontSize: "0.85rem", cursor: "pointer" }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          marginTop: 4,
+                          fontSize: "0.85rem",
+                          cursor: "pointer",
+                        }}
                       >
                         <input
                           type="checkbox"
@@ -956,7 +1028,7 @@ async function handleApprofondisciClick() {
                           }
                           style={{ width: 14, height: 14 }}
                         />
-                        <span>Non conosco l&apos;ora esatta (ora neutra)</span>
+                        <span>{t("compatibility.form.unknownTime")}</span>
                       </label>
                     </div>
                   </div>
@@ -964,33 +1036,47 @@ async function handleApprofondisciClick() {
 
                 {/* PERSONA B */}
                 <div style={{ flex: 1, minWidth: "260px" }}>
-                  <h3 className="card-title" style={{ marginBottom: "8px" }}>Persona B</h3>
+                  <h3 className="card-title" style={{ marginBottom: "8px" }}>
+                    {t("compatibility.form.personB")}
+                  </h3>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     <div>
-                      <label className="card-text">Nome</label>
-                      <input type="text" name="nomeB" value={form.nomeB} onChange={handleChange} className="form-input" />
+                      <label className="card-text">{t("compatibility.form.name")}</label>
+                      <input
+                        type="text"
+                        name="nomeB"
+                        value={form.nomeB}
+                        onChange={handleChange}
+                        className="form-input"
+                      />
                     </div>
 
                     <div>
-                      <label className="card-text">Luogo di nascita</label>
+                      <label className="card-text">{t("compatibility.form.birthPlace")}</label>
                       <input
                         type="text"
                         name="cittaB"
                         value={form.cittaB}
                         onChange={handleChange}
                         className="form-input"
-                        placeholder="Es. Milano, IT"
+                        placeholder={t("compatibility.form.birthPlacePlaceholderB")}
                       />
                     </div>
 
                     <div>
-                      <label className="card-text">Data di nascita</label>
-                      <input type="date" name="dataB" value={form.dataB} onChange={handleChange} className="form-input" />
+                      <label className="card-text">{t("compatibility.form.birthDate")}</label>
+                      <input
+                        type="date"
+                        name="dataB"
+                        value={form.dataB}
+                        onChange={handleChange}
+                        className="form-input"
+                      />
                     </div>
 
                     <div>
-                      <label className="card-text">Ora di nascita</label>
+                      <label className="card-text">{t("compatibility.form.birthTime")}</label>
                       <input
                         type="time"
                         name="oraB"
@@ -998,12 +1084,23 @@ async function handleApprofondisciClick() {
                         onChange={handleChange}
                         className="form-input"
                         disabled={form.oraBIgnota}
-                        style={form.oraBIgnota ? { opacity: 0.4, pointerEvents: "none" } : undefined}
+                        style={
+                          form.oraBIgnota
+                            ? { opacity: 0.4, pointerEvents: "none" }
+                            : undefined
+                        }
                       />
 
                       <label
                         className="card-text"
-                        style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, fontSize: "0.85rem", cursor: "pointer" }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          marginTop: 4,
+                          fontSize: "0.85rem",
+                          cursor: "pointer",
+                        }}
                       >
                         <input
                           type="checkbox"
@@ -1017,7 +1114,7 @@ async function handleApprofondisciClick() {
                           }
                           style={{ width: 14, height: 14 }}
                         />
-                        <span>Non conosco l&apos;ora esatta (ora neutra)</span>
+                        <span>{t("compatibility.form.unknownTime")}</span>
                       </label>
                     </div>
                   </div>
@@ -1031,36 +1128,41 @@ async function handleApprofondisciClick() {
                 disabled={loading || gateLoading}
                 style={{ marginTop: "14px" }}
               >
-                {(loading || gateLoading) ? "Attendi, sto generando…" : "🔮 Inizia la lettura"}
+                {loading || gateLoading
+                  ? t("compatibility.form.generating")
+                  : t("compatibility.form.generate")}
               </button>
 
               {/* Errori */}
-              {errore && (
-                noCredits ? (
+              {errore &&
+                (noCredits ? (
                   <div className="card-text" style={{ color: "#ffdf9a" }}>
                     {isLoggedIn ? (
                       <>
-                        <p>Per continuare con questo contenuto premium ti servono altri crediti.</p>
+                        <p>{t("compatibility.noCredits.loggedTitle")}</p>
                         <p style={{ marginTop: 8 }}>
-                          <Link href="/crediti" className="link">Vai ai crediti</Link>
+                          <Link href="/crediti" className="link">
+                            {t("compatibility.noCredits.loggedCta")}
+                          </Link>
                         </p>
                         <p style={{ marginTop: 8, fontSize: "0.8rem", opacity: 0.8 }}>
-                          Dettagli: {errore}
+                          {t("compatibility.noCredits.loggedDetails")} {errore}
                         </p>
                       </>
                     ) : (
                       <>
-                        <p>Hai completato il tuo primo oroscopo.</p>
+                        <p>{t("compatibility.noCredits.guestTitle")}</p>
                         <p style={{ marginTop: 8, fontSize: "0.9rem", opacity: 0.9 }}>
-                          Usa Email+Link, oppure accedi/iscriviti per continuare.
+                          {t("compatibility.noCredits.guestSubtitle")}
                         </p>
                       </>
                     )}
                   </div>
                 ) : (
-                  <p className="card-text" style={{ color: "#ff9a9a" }}>{errore}</p>
-                )
-              )}
+                  <p className="card-text" style={{ color: "#ff9a9a" }}>
+                    {errore}
+                  </p>
+                ))}
             </div>
           </div>
         </section>
@@ -1083,18 +1185,26 @@ async function handleApprofondisciClick() {
                     gap: 16,
                   }}
                 >
-                  <h3 className="card-title">Carta della vostra sinastria</h3>
+                  <h3 className="card-title">{t("compatibility.free.chartTitle")}</h3>
 
                   <p className="card-text" style={{ fontSize: "0.85rem", opacity: 0.9 }}>
-                    Questo è il grafico che sovrappone i vostri pianeti: internamente quelli di <strong>{freeNomeA}</strong> ed esternamente quelli di{" "}
-                    <strong>{freeNomeB}</strong>.
+                    {t("compatibility.free.chartDescription")
+                      .replace("{nameA}", freeNomeA)
+                      .replace("{nameB}", freeNomeB)}
                   </p>
 
                   <div style={{ width: "100%", display: "flex", justifyContent: "center" }}>
-                    <div style={{ position: "relative", width: "100%", maxWidth: "560px", paddingTop: "100%" }}>
+                    <div
+                      style={{
+                        position: "relative",
+                        width: "100%",
+                        maxWidth: "560px",
+                        paddingTop: "100%",
+                      }}
+                    >
                       <img
                         src={`data:image/png;base64,${freeChartBase64}`}
-                        alt="Carta di sinastria"
+                        alt={t("compatibility.free.chartTitle")}
                         style={{
                           position: "absolute",
                           top: 0,
@@ -1125,7 +1235,10 @@ async function handleApprofondisciClick() {
                           {freeNomeA}
                         </h4>
 
-                        <ul className="card-text" style={{ marginTop: 6, paddingLeft: "1.2rem", fontSize: "0.8rem" }}>
+                        <ul
+                          className="card-text"
+                          style={{ marginTop: 6, paddingLeft: "1.2rem", fontSize: "0.8rem" }}
+                        >
                           {freeTemaVisA.pianeti.map((p, idx) => (
                             <li key={idx}>{formatPianetaPosizione(p)}</li>
                           ))}
@@ -1148,7 +1261,10 @@ async function handleApprofondisciClick() {
                           {freeNomeB}
                         </h4>
 
-                        <ul className="card-text" style={{ marginTop: 6, paddingLeft: "1.2rem", fontSize: "0.8rem" }}>
+                        <ul
+                          className="card-text"
+                          style={{ marginTop: 6, paddingLeft: "1.2rem", fontSize: "0.8rem" }}
+                        >
                           {freeTemaVisB.pianeti.map((p, idx) => (
                             <li key={idx}>{formatPianetaPosizione(p)}</li>
                           ))}
@@ -1168,12 +1284,19 @@ async function handleApprofondisciClick() {
                         }}
                       >
                         <h4 className="card-text" style={{ fontWeight: 600, marginBottom: 6 }}>
-                          Aspetti tra i vostri pianeti
+                          {t("compatibility.free.aspectsTitle")}
                         </h4>
 
-                        <ul className="card-text" style={{ marginTop: 6, paddingLeft: "1.2rem", fontSize: "0.8rem" }}>
+                        <ul
+                          className="card-text"
+                          style={{ marginTop: 6, paddingLeft: "1.2rem", fontSize: "0.8rem" }}
+                        >
                           {freeAspettiPrincipali.slice(0, 10).map((asp, idx) => {
-                            const label = asp.descrizione || asp.label || formatAspettoLabel(asp) || "";
+                            const label =
+                              asp.descrizione ||
+                              asp.label ||
+                              formatAspettoLabel(asp) ||
+                              "";
                             return <li key={idx}>{label}</li>;
                           })}
                         </ul>
@@ -1188,11 +1311,18 @@ async function handleApprofondisciClick() {
             {!hasPremium && freeSinastriaAI?.sintesi_generale && (
               <section className="section">
                 <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
-                  <h3 className="card-title">La tua sintesi</h3>
+                  <h3 className="card-title">{t("compatibility.free.summaryTitle")}</h3>
 
                   {freeOraIgnotaGlobal && (
-                    <p className="card-text" style={{ marginTop: "6px", fontSize: "0.85rem", color: "#ffdf9a" }}>
-                      Ascendente e case astrologiche non sono state calcolate e incluse nell&apos;analisi perché l&apos;ora di nascita non è stata indicata con precisione.
+                    <p
+                      className="card-text"
+                      style={{
+                        marginTop: "6px",
+                        fontSize: "0.85rem",
+                        color: "#ffdf9a",
+                      }}
+                    >
+                      {t("compatibility.free.unknownTimeWarning")}
                     </p>
                   )}
 
@@ -1201,28 +1331,50 @@ async function handleApprofondisciClick() {
                   </p>
 
                   {/* CAPITOLI (FREE): mostra almeno i titoli */}
-                  {Array.isArray(freeSinastriaAI?.capitoli) && freeSinastriaAI.capitoli.length > 0 && (
-                    <div style={{ marginTop: 16 }}>
-                      <h4 className="card-subtitle">Capitoli (anteprima)</h4>
-                      <ul className="card-text" style={{ paddingLeft: "1.2rem", marginTop: 6 }}>
-                        {freeSinastriaAI.capitoli.map((cap, idx) => (
-                          <li key={idx}>
-                            {cap?.titolo || `Capitolo ${idx + 1}`}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                  {Array.isArray(freeSinastriaAI?.capitoli) &&
+                    freeSinastriaAI.capitoli.length > 0 && (
+                      <div style={{ marginTop: 16 }}>
+                        <h4 className="card-subtitle">
+                          {t("compatibility.free.previewChapters")}
+                        </h4>
+                        <ul className="card-text" style={{ paddingLeft: "1.2rem", marginTop: 6 }}>
+                          {freeSinastriaAI.capitoli.map((cap, idx) => (
+                            <li key={idx}>
+                              {cap?.titolo ||
+                                t("compatibility.free.chapterFallback").replace(
+                                  "{n}",
+                                  idx + 1
+                                )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
                   {/* CTA testuale dal backend (FREE) */}
                   {freeSinastriaAI?.cta && (
-                    <p className="card-text" style={{ marginTop: 12, color: "#ffdf9a", whiteSpace: "pre-wrap" }}>
+                    <p
+                      className="card-text"
+                      style={{
+                        marginTop: 12,
+                        color: "#ffdf9a",
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
                       {freeSinastriaAI.cta}
                     </p>
                   )}
 
                   {/* CTA Approfondisci */}
-                  <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <div
+                    style={{
+                      marginTop: 18,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      flexWrap: "wrap",
+                    }}
+                  >
                     <button
                       id="dyana-approfondisci-compat"
                       type="button"
@@ -1231,19 +1383,25 @@ async function handleApprofondisciClick() {
                       disabled={loading || gateLoading || premiumCtaLoading}
                     >
                       {premiumCtaLoading
-                        ? "Attendi… sto preparando la compatibilità Premium"
-                        : "✨ Approfondisci con DYANA"}
+                        ? t("compatibility.free.upgradeLoading")
+                        : t("compatibility.free.upgradeButton")}
                     </button>
 
                     {premiumCtaLoading && (
-                      <p className="card-text" style={{ fontSize: "0.85rem", opacity: 0.85, marginTop: 10 }}>
-                        Non chiudere la pagina: la lettura comparirà qui sotto appena pronta.
+                      <p
+                        className="card-text"
+                        style={{ fontSize: "0.85rem", opacity: 0.85, marginTop: 10 }}
+                      >
+                        {t("compatibility.free.upgradeKeepPage")}
                       </p>
                     )}
 
                     {slowLoading && (
-                      <p className="card-text" style={{ fontSize: "0.85rem", opacity: 0.85, marginTop: 8 }}>
-                        Sta impiegando più del previsto. Rimani su questa pagina: appena pronta, si aggiorna automaticamente.
+                      <p
+                        className="card-text"
+                        style={{ fontSize: "0.85rem", opacity: 0.85, marginTop: 8 }}
+                      >
+                        {t("compatibility.free.upgradeSlow")}
                       </p>
                     )}
 
@@ -1259,13 +1417,13 @@ async function handleApprofondisciClick() {
                           whiteSpace: "nowrap",
                         }}
                       >
-                        Costo: {PREMIUM_COST} credit{PREMIUM_COST === 1 ? "o" : "i"}
+                        {t("compatibility.free.cost").replace("{n}", PREMIUM_COST)}
                       </span>
                     )}
                   </div>
 
                   {/* EMAIL GATE INLINE */}
-                  {emailGateOpen && !hasPremium && guestTrialLeft === 0 &&(
+                  {emailGateOpen && !hasPremium && guestTrialLeft === 0 && (
                     <div
                       className="card"
                       style={{
@@ -1275,10 +1433,14 @@ async function handleApprofondisciClick() {
                       }}
                     >
                       <h4 className="card-subtitle" style={{ marginBottom: 6 }}>
-                        {guestTrialLeft === 0 ? "Hai finito la tua prova gratuita." : "Continua con la tua email"}
+                        {guestTrialLeft === 0
+                          ? t("compatibility.gate.exhaustedTitle")
+                          : t("compatibility.gate.continueTitle")}
                       </h4>
 
-                      <p className="card-text" style={{ opacity: 0.9 }}>{gateMsg}</p>
+                      <p className="card-text" style={{ opacity: 0.9 }}>
+                        {gateMsg}
+                      </p>
 
                       <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
                         {guestTrialLeft === 0 && (
@@ -1288,7 +1450,7 @@ async function handleApprofondisciClick() {
                               className={gateMode === "magic" ? "btn btn-primary" : "btn"}
                               onClick={() => setGateMode("magic")}
                             >
-                              Email+Link
+                              {t("compatibility.gate.emailLink")}
                             </button>
 
                             <button
@@ -1296,7 +1458,7 @@ async function handleApprofondisciClick() {
                               className={gateMode === "register" ? "btn btn-primary" : "btn"}
                               onClick={() => setGateMode("register")}
                             >
-                              Iscriviti
+                              {t("compatibility.gate.register")}
                             </button>
 
                             <button
@@ -1304,7 +1466,7 @@ async function handleApprofondisciClick() {
                               className={gateMode === "login" ? "btn btn-primary" : "btn"}
                               onClick={() => setGateMode("login")}
                             >
-                              Accedi
+                              {t("compatibility.gate.login")}
                             </button>
                           </>
                         )}
@@ -1315,15 +1477,18 @@ async function handleApprofondisciClick() {
                           onClick={() => setEmailGateOpen(false)}
                           style={{ marginLeft: "auto" }}
                         >
-                          Chiudi
+                          {t("compatibility.gate.close")}
                         </button>
                       </div>
 
-                      <form onSubmit={submitInlineAuth} style={{ marginTop: 12, display: "grid", gap: 10 }}>
+                      <form
+                        onSubmit={submitInlineAuth}
+                        style={{ marginTop: 12, display: "grid", gap: 10 }}
+                      >
                         <input
                           className="form-input"
                           type="email"
-                          placeholder="La tua email"
+                          placeholder={t("compatibility.gate.emailPlaceholder")}
                           value={gateEmail}
                           onChange={(e) => setGateEmail(e.target.value)}
                           disabled={gateLoading || loading}
@@ -1331,7 +1496,14 @@ async function handleApprofondisciClick() {
 
                         {guestTrialLeft === 1 && (
                           <div style={{ marginTop: 2 }}>
-                            <label className="card-text" style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                            <label
+                              className="card-text"
+                              style={{
+                                display: "flex",
+                                gap: 10,
+                                alignItems: "flex-start",
+                              }}
+                            >
                               <input
                                 type="checkbox"
                                 checked={gateMarketing}
@@ -1340,18 +1512,35 @@ async function handleApprofondisciClick() {
                                 style={{ width: 14, height: 14, marginTop: 3 }}
                               />
                               <span style={{ fontSize: "0.85rem", opacity: 0.9 }}>
-                                Acconsento a ricevere comunicazioni e contenuti su DYANA.
+                                {t("compatibility.gate.marketingConsent")}
                               </span>
                             </label>
 
-                            <p className="card-text" style={{ fontSize: "0.8rem", opacity: 0.75, marginTop: 8 }}>
-                              Continuando accetti le{" "}
-                              <Link href="/condizioni" className="link" target="_blank" rel="noreferrer">
-                                Condizioni del servizio
+                            <p
+                              className="card-text"
+                              style={{
+                                fontSize: "0.8rem",
+                                opacity: 0.75,
+                                marginTop: 8,
+                              }}
+                            >
+                              {t("compatibility.gate.legalPrefix")}{" "}
+                              <Link
+                                href="/condizioni"
+                                className="link"
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                {t("compatibility.gate.legalTerms")}
                               </Link>{" "}
-                              e l’{" "}
-                              <Link href="/privacy" className="link" target="_blank" rel="noreferrer">
-                                Informativa Privacy
+                              {t("compatibility.gate.legalAndPrivacy")}{" "}
+                              <Link
+                                href="/privacy"
+                                className="link"
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                {t("compatibility.gate.legalPrivacy")}
                               </Link>
                               .
                             </p>
@@ -1363,7 +1552,7 @@ async function handleApprofondisciClick() {
                             <input
                               className="form-input"
                               type="password"
-                              placeholder="Password"
+                              placeholder={t("compatibility.gate.passwordPlaceholder")}
                               value={gatePass}
                               onChange={(e) => setGatePass(e.target.value)}
                               autoComplete="current-password"
@@ -1373,7 +1562,9 @@ async function handleApprofondisciClick() {
                               <input
                                 className="form-input"
                                 type="password"
-                                placeholder="Ripeti password"
+                                placeholder={t(
+                                  "compatibility.gate.passwordRepeatPlaceholder"
+                                )}
                                 value={gatePass2}
                                 onChange={(e) => setGatePass2(e.target.value)}
                                 autoComplete="new-password"
@@ -1383,21 +1574,32 @@ async function handleApprofondisciClick() {
                           </>
                         )}
 
-                        <button type="submit" className="btn btn-primary" disabled={gateLoading || loading}>
-                          {(gateLoading || loading)
-                            ? "Attendi…"
+                        <button
+                          type="submit"
+                          className="btn btn-primary"
+                          disabled={gateLoading || loading}
+                        >
+                          {gateLoading || loading
+                            ? t("compatibility.gate.submitWait")
                             : guestTrialLeft === 0
-                            ? (gateMode === "magic"
-                                ? "Apri l'e-mail e clicca il link per procedere al calcolo"
-                                : (gateMode === "login" ? "Accedi e continua" : "Iscriviti e continua"))
-                            : "Continua"}
+                            ? gateMode === "magic"
+                              ? t("compatibility.gate.submitMagic")
+                              : gateMode === "login"
+                              ? t("compatibility.gate.submitLogin")
+                              : t("compatibility.gate.submitRegister")
+                            : t("compatibility.gate.submitContinue")}
                         </button>
 
-                        {gateErr && <p className="card-text" style={{ color: "#ff9a9a" }}>{gateErr}</p>}
+                        {gateErr && (
+                          <p className="card-text" style={{ color: "#ff9a9a" }}>
+                            {gateErr}
+                          </p>
+                        )}
 
                         {guestTrialLeft != null && (
                           <p className="card-text" style={{ fontSize: "0.8rem", opacity: 0.75 }}>
-                            Prova residua sul dispositivo: <strong>{guestTrialLeft}</strong>
+                            {t("compatibility.gate.trialRemaining")}{" "}
+                            <strong>{guestTrialLeft}</strong>
                           </p>
                         )}
                       </form>
@@ -1427,17 +1629,26 @@ async function handleApprofondisciClick() {
                     gap: 16,
                   }}
                 >
-                  <h3 className="card-title">La tua lettura completa</h3>
+                  <h3 className="card-title">
+                    {t("compatibility.premium.fullReadingTitle")}
+                  </h3>
 
                   <p className="card-text" style={{ fontSize: "0.85rem", opacity: 0.9 }}>
-                    Versione Premium della sinastria (con approfondimenti e accesso a DYANA).
+                    {t("compatibility.premium.fullReadingSubtitle")}
                   </p>
 
                   <div style={{ width: "100%", display: "flex", justifyContent: "center" }}>
-                    <div style={{ position: "relative", width: "100%", maxWidth: "560px", paddingTop: "100%" }}>
+                    <div
+                      style={{
+                        position: "relative",
+                        width: "100%",
+                        maxWidth: "560px",
+                        paddingTop: "100%",
+                      }}
+                    >
                       <img
                         src={`data:image/png;base64,${premiumChartBase64}`}
-                        alt="Carta di sinastria (Premium)"
+                        alt={t("compatibility.premium.fullReadingTitle")}
                         style={{
                           position: "absolute",
                           top: 0,
@@ -1468,7 +1679,10 @@ async function handleApprofondisciClick() {
                           {premiumNomeA}
                         </h4>
 
-                        <ul className="card-text" style={{ marginTop: 6, paddingLeft: "1.2rem", fontSize: "0.8rem" }}>
+                        <ul
+                          className="card-text"
+                          style={{ marginTop: 6, paddingLeft: "1.2rem", fontSize: "0.8rem" }}
+                        >
                           {premiumTemaVisA.pianeti.map((p, idx) => (
                             <li key={idx}>{formatPianetaPosizione(p)}</li>
                           ))}
@@ -1491,7 +1705,10 @@ async function handleApprofondisciClick() {
                           {premiumNomeB}
                         </h4>
 
-                        <ul className="card-text" style={{ marginTop: 6, paddingLeft: "1.2rem", fontSize: "0.8rem" }}>
+                        <ul
+                          className="card-text"
+                          style={{ marginTop: 6, paddingLeft: "1.2rem", fontSize: "0.8rem" }}
+                        >
                           {premiumTemaVisB.pianeti.map((p, idx) => (
                             <li key={idx}>{formatPianetaPosizione(p)}</li>
                           ))}
@@ -1511,12 +1728,19 @@ async function handleApprofondisciClick() {
                         }}
                       >
                         <h4 className="card-text" style={{ fontWeight: 600, marginBottom: 6 }}>
-                          Aspetti tra i vostri pianeti
+                          {t("compatibility.free.aspectsTitle")}
                         </h4>
 
-                        <ul className="card-text" style={{ marginTop: 6, paddingLeft: "1.2rem", fontSize: "0.8rem" }}>
+                        <ul
+                          className="card-text"
+                          style={{ marginTop: 6, paddingLeft: "1.2rem", fontSize: "0.8rem" }}
+                        >
                           {premiumAspettiPrincipali.slice(0, 10).map((asp, idx) => {
-                            const label = asp.descrizione || asp.label || formatAspettoLabel(asp) || "";
+                            const label =
+                              asp.descrizione ||
+                              asp.label ||
+                              formatAspettoLabel(asp) ||
+                              "";
                             return <li key={idx}>{label}</li>;
                           })}
                         </ul>
@@ -1531,11 +1755,20 @@ async function handleApprofondisciClick() {
             {premiumSinastriaAI?.sintesi_generale && (
               <section className="section">
                 <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
-                  <h3 className="card-title">Sintesi della relazione</h3>
+                  <h3 className="card-title">
+                    {t("compatibility.premium.relationshipSummary")}
+                  </h3>
 
                   {premiumOraIgnotaGlobal && (
-                    <p className="card-text" style={{ marginTop: "6px", fontSize: "0.85rem", color: "#ffdf9a" }}>
-                      Ascendente e case astrologiche non sono state calcolate e incluse nell&apos;analisi perché l&apos;ora di nascita non è stata indicata con precisione.
+                    <p
+                      className="card-text"
+                      style={{
+                        marginTop: "6px",
+                        fontSize: "0.85rem",
+                        color: "#ffdf9a",
+                      }}
+                    >
+                      {t("compatibility.premium.unknownTimeWarning")}
                     </p>
                   )}
 
@@ -1547,28 +1780,48 @@ async function handleApprofondisciClick() {
             )}
 
             {/* CAPITOLI PREMIUM */}
-            {Array.isArray(premiumSinastriaAI?.capitoli) && premiumSinastriaAI.capitoli.length > 0 && (
-              <section className="section">
-                <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
-                  <h3 className="card-title">Capitoli di approfondimento</h3>
+            {Array.isArray(premiumSinastriaAI?.capitoli) &&
+              premiumSinastriaAI.capitoli.length > 0 && (
+                <section className="section">
+                  <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
+                    <h3 className="card-title">
+                      {t("compatibility.premium.deepDiveChapters")}
+                    </h3>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 8 }}>
-                    {premiumSinastriaAI.capitoli.map((cap, idx) => (
-                      <div key={idx}>
-                        <h4 className="card-text" style={{ fontWeight: 600, marginBottom: 4 }}>
-                          {cap.titolo || `Capitolo ${idx + 1}`}
-                        </h4>
-                        {cap.testo && (
-                          <p className="card-text" style={{ whiteSpace: "pre-wrap", marginBottom: 6 }}>
-                            {cap.testo}
-                          </p>
-                        )}
-                      </div>
-                    ))}
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 16,
+                        marginTop: 8,
+                      }}
+                    >
+                      {premiumSinastriaAI.capitoli.map((cap, idx) => (
+                        <div key={idx}>
+                          <h4
+                            className="card-text"
+                            style={{ fontWeight: 600, marginBottom: 4 }}
+                          >
+                            {cap.titolo ||
+                              t("compatibility.premium.chapterFallback").replace(
+                                "{n}",
+                                idx + 1
+                              )}
+                          </h4>
+                          {cap.testo && (
+                            <p
+                              className="card-text"
+                              style={{ whiteSpace: "pre-wrap", marginBottom: 6 }}
+                            >
+                              {cap.testo}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              </section>
-            )}
+                </section>
+              )}
 
             {/* AREE RELAZIONE (fallback se niente capitoli) */}
             {!(
@@ -1579,46 +1832,71 @@ async function handleApprofondisciClick() {
               premiumSinastriaAI.aree_relazione.length > 0 && (
                 <section className="section">
                   <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
-                    <h3 className="card-title">Aree della relazione</h3>
+                    <h3 className="card-title">
+                      {t("compatibility.premium.relationshipAreas")}
+                    </h3>
 
-                    <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 8 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 16,
+                        marginTop: 8,
+                      }}
+                    >
                       {premiumSinastriaAI.aree_relazione.map((area) => (
                         <div key={area.id}>
-                          <h4 className="card-text" style={{ fontWeight: 600, marginBottom: 4 }}>
+                          <h4
+                            className="card-text"
+                            style={{ fontWeight: 600, marginBottom: 4 }}
+                          >
                             {area.titolo || area.id}
                           </h4>
 
                           {area.sintesi && (
-                            <p className="card-text" style={{ whiteSpace: "pre-wrap", marginBottom: 6 }}>
+                            <p
+                              className="card-text"
+                              style={{ whiteSpace: "pre-wrap", marginBottom: 6 }}
+                            >
                               {area.sintesi}
                             </p>
                           )}
 
-                          {Array.isArray(area.aspetti_principali) && area.aspetti_principali.length > 0 && (
-                            <div style={{ marginBottom: 6 }}>
-                              <p className="card-text" style={{ fontWeight: 500, marginBottom: 2 }}>
-                                Aspetti principali:
-                              </p>
-                              <ul className="card-text" style={{ paddingLeft: "1.2rem" }}>
-                                {area.aspetti_principali.map((asp, idx) => (
-                                  <li key={idx}>{asp.descrizione || formatAspettoLabel(asp) || ""}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
+                          {Array.isArray(area.aspetti_principali) &&
+                            area.aspetti_principali.length > 0 && (
+                              <div style={{ marginBottom: 6 }}>
+                                <p
+                                  className="card-text"
+                                  style={{ fontWeight: 500, marginBottom: 2 }}
+                                >
+                                  {t("compatibility.premium.mainAspects")}
+                                </p>
+                                <ul className="card-text" style={{ paddingLeft: "1.2rem" }}>
+                                  {area.aspetti_principali.map((asp, idx) => (
+                                    <li key={idx}>
+                                      {asp.descrizione || formatAspettoLabel(asp) || ""}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
 
-                          {Array.isArray(area.consigli_pratici) && area.consigli_pratici.length > 0 && (
-                            <div>
-                              <p className="card-text" style={{ fontWeight: 500, marginBottom: 2 }}>
-                                Consigli pratici:
-                              </p>
-                              <ul className="card-text" style={{ paddingLeft: "1.2rem" }}>
-                                {area.consigli_pratici.map((c, idx) => (
-                                  <li key={idx}>{c}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
+                          {Array.isArray(area.consigli_pratici) &&
+                            area.consigli_pratici.length > 0 && (
+                              <div>
+                                <p
+                                  className="card-text"
+                                  style={{ fontWeight: 500, marginBottom: 2 }}
+                                >
+                                  {t("compatibility.premium.practicalTips")}
+                                </p>
+                                <ul className="card-text" style={{ paddingLeft: "1.2rem" }}>
+                                  {area.consigli_pratici.map((c, idx) => (
+                                    <li key={idx}>{c}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
                         </div>
                       ))}
                     </div>
@@ -1627,50 +1905,73 @@ async function handleApprofondisciClick() {
               )}
 
             {/* FOCUS */}
-            {(premiumSinastriaAI?.punti_forza || premiumSinastriaAI?.punti_criticita || premiumSinastriaAI?.consigli_finali) && (
+            {(premiumSinastriaAI?.punti_forza ||
+              premiumSinastriaAI?.punti_criticita ||
+              premiumSinastriaAI?.consigli_finali) && (
               <section className="section">
                 <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
-                  <h3 className="card-title">Focus principali della relazione</h3>
+                  <h3 className="card-title">
+                    {t("compatibility.premium.mainFocus")}
+                  </h3>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 8 }}>
-                    {Array.isArray(premiumSinastriaAI?.punti_forza) && premiumSinastriaAI.punti_forza.length > 0 && (
-                      <div>
-                        <h4 className="card-text" style={{ fontWeight: 600, marginBottom: 4 }}>
-                          Punti di forza
-                        </h4>
-                        <ul className="card-text" style={{ paddingLeft: "1.2rem" }}>
-                          {premiumSinastriaAI.punti_forza.map((p, idx) => (
-                            <li key={idx}>{p}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 16,
+                      marginTop: 8,
+                    }}
+                  >
+                    {Array.isArray(premiumSinastriaAI?.punti_forza) &&
+                      premiumSinastriaAI.punti_forza.length > 0 && (
+                        <div>
+                          <h4
+                            className="card-text"
+                            style={{ fontWeight: 600, marginBottom: 4 }}
+                          >
+                            {t("compatibility.premium.strengths")}
+                          </h4>
+                          <ul className="card-text" style={{ paddingLeft: "1.2rem" }}>
+                            {premiumSinastriaAI.punti_forza.map((p, idx) => (
+                              <li key={idx}>{p}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
 
-                    {Array.isArray(premiumSinastriaAI?.punti_criticita) && premiumSinastriaAI.punti_criticita.length > 0 && (
-                      <div>
-                        <h4 className="card-text" style={{ fontWeight: 600, marginBottom: 4 }}>
-                          Punti di attenzione
-                        </h4>
-                        <ul className="card-text" style={{ paddingLeft: "1.2rem" }}>
-                          {premiumSinastriaAI.punti_criticita.map((p, idx) => (
-                            <li key={idx}>{p}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                    {Array.isArray(premiumSinastriaAI?.punti_criticita) &&
+                      premiumSinastriaAI.punti_criticita.length > 0 && (
+                        <div>
+                          <h4
+                            className="card-text"
+                            style={{ fontWeight: 600, marginBottom: 4 }}
+                          >
+                            {t("compatibility.premium.attentionPoints")}
+                          </h4>
+                          <ul className="card-text" style={{ paddingLeft: "1.2rem" }}>
+                            {premiumSinastriaAI.punti_criticita.map((p, idx) => (
+                              <li key={idx}>{p}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
 
-                    {Array.isArray(premiumSinastriaAI?.consigli_finali) && premiumSinastriaAI.consigli_finali.length > 0 && (
-                      <div>
-                        <h4 className="card-text" style={{ fontWeight: 600, marginBottom: 4 }}>
-                          Consigli finali
-                        </h4>
-                        <ul className="card-text" style={{ paddingLeft: "1.2rem" }}>
-                          {premiumSinastriaAI.consigli_finali.map((c, idx) => (
-                            <li key={idx}>{c}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                    {Array.isArray(premiumSinastriaAI?.consigli_finali) &&
+                      premiumSinastriaAI.consigli_finali.length > 0 && (
+                        <div>
+                          <h4
+                            className="card-text"
+                            style={{ fontWeight: 600, marginBottom: 4 }}
+                          >
+                            {t("compatibility.premium.finalAdvice")}
+                          </h4>
+                          <ul className="card-text" style={{ paddingLeft: "1.2rem" }}>
+                            {premiumSinastriaAI.consigli_finali.map((c, idx) => (
+                              <li key={idx}>{c}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                   </div>
                 </div>
               </section>
@@ -1690,16 +1991,19 @@ async function handleApprofondisciClick() {
                       boxShadow: "0 18px 40px rgba(0,0,0,0.75)",
                     }}
                   >
-                    <p className="card-text" style={{ fontSize: "0.8rem", opacity: 0.8, marginBottom: 4 }}>
-                      DYANA • Q&amp;A sulla vostra compatibilità
+                    <p
+                      className="card-text"
+                      style={{ fontSize: "0.8rem", opacity: 0.8, marginBottom: 4 }}
+                    >
+                      {t("compatibility.dyana.badge")}
                     </p>
 
                     <h3 className="card-title" style={{ marginBottom: 6 }}>
-                      Hai domande su questa relazione?
+                      {t("compatibility.dyana.title")}
                     </h3>
 
                     <p className="card-text" style={{ marginBottom: 4, opacity: 0.9 }}>
-                      DYANA conosce già la sinastria che hai appena generato e può aiutarti a interpretarla meglio.
+                      {t("compatibility.dyana.subtitle")}
                     </p>
 
                     <button
@@ -1708,7 +2012,9 @@ async function handleApprofondisciClick() {
                       style={{ marginTop: 16 }}
                       onClick={() => setDiyanaOpen((prev) => !prev)}
                     >
-                      {diyanaOpen ? "Chiudi DYANA" : "Chiedi a DYANA"}
+                      {diyanaOpen
+                        ? t("compatibility.dyana.close")
+                        : t("compatibility.dyana.ask")}
                     </button>
 
                     {diyanaOpen && (
@@ -1731,8 +2037,16 @@ async function handleApprofondisciClick() {
                       </div>
                     )}
 
-                    <p className="card-text" style={{ marginTop: 8, fontSize: "0.75rem", opacity: 0.65, textAlign: "right" }}>
-                      DYANA risponde solo su questa compatibilità, non su argomenti generici.
+                    <p
+                      className="card-text"
+                      style={{
+                        marginTop: 8,
+                        fontSize: "0.75rem",
+                        opacity: 0.65,
+                        textAlign: "right",
+                      }}
+                    >
+                      {t("compatibility.dyana.note")}
                     </p>
                   </div>
                 </div>

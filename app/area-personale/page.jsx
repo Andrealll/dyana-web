@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import DyanaNavbar from "../../components/DyanaNavbar";
+import { useI18n } from "../../lib/i18n/useI18n";
 import {
   getToken,
   fetchCreditsState,
@@ -17,11 +18,14 @@ import {
 // =======================
 // Helpers formattazione
 // =======================
-function formatUsageDate(value) {
+function formatUsageDate(value, locale) {
   if (!value) return "";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return String(value);
-  return d.toLocaleString("it-IT", {
+
+  const dateLocale = locale === "en" ? "en-GB" : "it-IT";
+
+  return d.toLocaleString(dateLocale, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -30,30 +34,30 @@ function formatUsageDate(value) {
   });
 }
 
-function formatUsageFeature(feature, scope) {
-  if (feature === "tema_ai") return "Tema natale";
-  if (feature === "sinastria_ai") return "Sinastria";
+function formatUsageFeature(feature, scope, t) {
+  if (feature === "tema_ai") return t("areaPersonal.features.birthChart");
+  if (feature === "sinastria_ai") return t("areaPersonal.features.synastry");
 
   if (feature === "oroscopo_ai") {
     const labelByScope = {
-      daily: "Oroscopo giornaliero",
-      weekly: "Oroscopo settimanale",
-      monthly: "Oroscopo mensile",
-      yearly: "Oroscopo annuale",
+      daily: t("areaPersonal.features.horoscopeDaily"),
+      weekly: t("areaPersonal.features.horoscopeWeekly"),
+      monthly: t("areaPersonal.features.horoscopeMonthly"),
+      yearly: t("areaPersonal.features.horoscopeYearly"),
     };
-    return labelByScope[scope] || "Oroscopo personalizzato";
+    return labelByScope[scope] || t("areaPersonal.features.horoscopeGeneric");
   }
 
   // Alcuni record hanno feature tipo "oroscopo_ai_monthly"
   if (feature && feature.startsWith("oroscopo_ai_")) {
     const suffix = feature.replace("oroscopo_ai_", "");
     const labelBySuffix = {
-      daily: "Oroscopo giornaliero",
-      weekly: "Oroscopo settimanale",
-      monthly: "Oroscopo mensile",
-      yearly: "Oroscopo annuale",
+      daily: t("areaPersonal.features.horoscopeDaily"),
+      weekly: t("areaPersonal.features.horoscopeWeekly"),
+      monthly: t("areaPersonal.features.horoscopeMonthly"),
+      yearly: t("areaPersonal.features.horoscopeYearly"),
     };
-    return labelBySuffix[suffix] || "Oroscopo personalizzato";
+    return labelBySuffix[suffix] || t("areaPersonal.features.horoscopeGeneric");
   }
 
   return feature || "";
@@ -68,6 +72,7 @@ function formatPurchaseAmount(amount, currency) {
 
 export default function AreaPersonalePage() {
   const router = useRouter();
+  const { t, locale } = useI18n();
 
   const [loading, setLoading] = useState(true);
   const [errore, setErrore] = useState("");
@@ -116,7 +121,7 @@ export default function AreaPersonalePage() {
         setPurchases(usageData?.purchases || []);
       } catch (err) {
         console.error("[AREA PERSONALE] errore:", err);
-        setErrore("Errore nel caricamento dei dati utente.");
+        setErrore(t("areaPersonal.errors.loadData"));
       } finally {
         setLoading(false);
       }
@@ -124,7 +129,6 @@ export default function AreaPersonalePage() {
 
     loadData();
 
-    // listener per aggiornare l'area quando cambiano i crediti (acquisti / consumi)
     function handleCreditsRefresh() {
       console.log("[AREA PERSONALE] Evento dyana:refresh-credits → reload");
       loadData();
@@ -155,7 +159,7 @@ export default function AreaPersonalePage() {
         );
       }
     };
-  }, [router]);
+  }, [router, t]);
 
   function handleLogoutFromNavbar() {
     clearToken();
@@ -170,21 +174,19 @@ export default function AreaPersonalePage() {
     router.push("/");
   }
 
-function formatUsageMode(u) {
-  if (!u) return "";
-  if (u.billing_mode === "free") return "FREE";
-  if (u.billing_mode === "paid") return "PREMIUM";
-  // fallback se per qualche motivo billing_mode manca
-  if (u.tier === "free") return "FREE";
-  if (u.tier === "premium") return "PREMIUM";
-  return "";
-}
-
+  function formatUsageMode(u) {
+    if (!u) return "";
+    if (u.billing_mode === "free") return "FREE";
+    if (u.billing_mode === "paid") return "PREMIUM";
+    if (u.tier === "free") return "FREE";
+    if (u.tier === "premium") return "PREMIUM";
+    return "";
+  }
 
   async function handleToggleMarketing() {
     const token = getToken();
     if (!token) {
-      setErrore("Sessione scaduta. Effettua di nuovo il login.");
+      setErrore(t("areaPersonal.errors.sessionExpired"));
       return;
     }
 
@@ -195,22 +197,20 @@ function formatUsageMode(u) {
     try {
       await updateMarketingConsent(token, newValue);
       setMarketingConsent(newValue);
-      setSuccessMarketing("Consenso marketing aggiornato correttamente.");
+      setSuccessMarketing(t("areaPersonal.success.marketingUpdate"));
       setCreditsState((prev) =>
         prev ? { ...prev, marketing_consent: newValue } : prev
       );
     } catch (err) {
       console.error("[AREA-PERSONALE] errore marketing:", err);
-      setErroreMarketing(
-        "Non è stato possibile aggiornare il consenso marketing."
-      );
+      setErroreMarketing(t("areaPersonal.errors.marketingUpdate"));
     }
   }
 
   async function handleDeleteProfile() {
     const token = getToken();
     if (!token) {
-      setErrore("Sessione scaduta. Effettua di nuovo il login.");
+      setErrore(t("areaPersonal.errors.sessionExpired"));
       return;
     }
 
@@ -219,12 +219,11 @@ function formatUsageMode(u) {
 
     try {
       await deleteProfile(token);
-      // Pulisco token e rimando alla home
       localStorage.removeItem("dyana_jwt");
       window.location.href = "/";
     } catch (err) {
       console.error("[AREA-PERSONALE] errore cancellazione profilo:", err);
-      setErrore("Errore nella cancellazione del profilo. Riprova più tardi.");
+      setErrore(t("areaPersonal.errors.deleteProfile"));
       setDeleting(false);
     }
   }
@@ -241,15 +240,11 @@ function formatUsageMode(u) {
 
       <section className="landing-wrapper">
         <header className="section">
-          <h1 className="section-title">La tua area DYANA</h1>
-          <p className="section-subtitle">
-            Qui trovi i tuoi crediti, le letture recenti e le ricariche
-            effettuate.
-          </p>
+          <h1 className="section-title">{t("areaPersonal.title")}</h1>
+          <p className="section-subtitle">{t("areaPersonal.subtitle")}</p>
         </header>
 
         <section className="section" style={{ display: "grid", gap: 16 }}>
-          {/* Messaggi globali */}
           {errore && (
             <p className="card-text" style={{ color: "#ff9a9a" }}>
               {errore}
@@ -268,13 +263,13 @@ function formatUsageMode(u) {
 
           {/* PROFILO UTENTE */}
           <div className="card">
-            <h2 className="card-title">Profilo utente</h2>
+            <h2 className="card-title">{t("areaPersonal.profile.title")}</h2>
 
             <p
               className="card-text"
               style={{ marginTop: 12, marginBottom: 8 }}
             >
-              <strong>Email:</strong>{" "}
+              <strong>{t("areaPersonal.profile.email")}</strong>{" "}
               <span style={{ opacity: email === "—" ? 0.8 : 1 }}>{email}</span>
             </p>
 
@@ -301,24 +296,24 @@ function formatUsageMode(u) {
                   onChange={handleToggleMarketing}
                   style={{ margin: 0 }}
                 />
-                <span>Consenso al marketing diretto</span>
+                <span>{t("areaPersonal.profile.marketingConsent")}</span>
               </label>
               <Link
                 href="/privacy"
                 className="nav-link"
                 style={{ fontSize: "0.8rem" }}
               >
-                Informativa privacy
+                {t("areaPersonal.profile.privacyNotice")}
               </Link>
             </div>
           </div>
 
           {/* CREDITI DISPONIBILI */}
           <div className="card">
-            <h2 className="card-title">Crediti disponibili</h2>
+            <h2 className="card-title">{t("areaPersonal.credits.title")}</h2>
             {loading && !creditsState ? (
               <p className="card-text" style={{ marginTop: 8 }}>
-                Caricamento...
+                {t("areaPersonal.credits.loading")}
               </p>
             ) : creditsState ? (
               <div
@@ -331,17 +326,19 @@ function formatUsageMode(u) {
                 }}
               >
                 <p className="card-text">
-                  <strong>{creditsState.total_available}</strong> crediti totali
+                  <strong>{creditsState.total_available}</strong>{" "}
+                  {t("areaPersonal.credits.total")}
                 </p>
                 <p
                   className="card-text"
                   style={{ fontSize: "0.9rem", opacity: 0.8 }}
                 >
-                  Pagati: {creditsState.paid} • Free rimanenti oggi:{" "}
+                  {t("areaPersonal.credits.paid")} {creditsState.paid} •{" "}
+                  {t("areaPersonal.credits.freeLeftToday")}{" "}
                   {creditsState.free_left}
                 </p>
                 <Link href="/crediti" className="btn btn-primary">
-                  Ricarica crediti
+                  {t("areaPersonal.credits.recharge")}
                 </Link>
               </div>
             ) : (
@@ -349,86 +346,89 @@ function formatUsageMode(u) {
                 className="card-text"
                 style={{ opacity: 0.8, marginTop: 8 }}
               >
-                Nessuna informazione crediti disponibile.
+                {t("areaPersonal.credits.noInfo")}
               </p>
             )}
           </div>
 
-{/* ULTIME LETTURE PREMIUM */}
-<div className="card">
-  <h2 className="card-title">Ultime letture premium</h2>
-  {loading && !usage.length ? (
-    <p className="card-text" style={{ marginTop: 8 }}>
-      Caricamento...
-    </p>
-  ) : usage.length === 0 ? (
-    <p className="card-text" style={{ opacity: 0.8, marginTop: 8 }}>
-      Ancora nessuna lettura registrata.
-    </p>
-  ) : (
-    <ul
-      style={{
-        listStyle: "none",
-        padding: 0,
-        margin: "8px 0 0 0",
-      }}
-    >
-      {usage.map((u) => {
-        const tierLabel = u.tier === "premium" ? "Premium" : "Free";
-        const paid = u.cost_paid_credits ?? 0;
-        const free = u.cost_free_credits ?? 0;
-
-        return (
-          <li
-            key={u.id}
-            className="card-text"
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              padding: "6px 0",
-              borderBottom: "1px solid rgba(255,255,255,0.06)",
-              fontSize: "0.9rem",
-            }}
-          >
-            <span>
-              {formatUsageDate(u.when)} –{" "}
-              {formatUsageFeature(u.feature, u.scope)}{" "}
-              <span
+          {/* ULTIME LETTURE PREMIUM */}
+          <div className="card">
+            <h2 className="card-title">{t("areaPersonal.readings.title")}</h2>
+            {loading && !usage.length ? (
+              <p className="card-text" style={{ marginTop: 8 }}>
+                {t("areaPersonal.credits.loading")}
+              </p>
+            ) : usage.length === 0 ? (
+              <p className="card-text" style={{ opacity: 0.8, marginTop: 8 }}>
+                {t("areaPersonal.readings.empty")}
+              </p>
+            ) : (
+              <ul
                 style={{
-                  fontSize: "0.8rem",
-                  opacity: 0.8,
-                  marginLeft: 4,
+                  listStyle: "none",
+                  padding: 0,
+                  margin: "8px 0 0 0",
                 }}
               >
-                ({tierLabel})
-              </span>
-            </span>
+                {usage.map((u) => {
+                  const tierLabel =
+                    u.tier === "premium"
+                      ? t("areaPersonal.readings.tierPremium")
+                      : t("areaPersonal.readings.tierFree");
+                  const paid = u.cost_paid_credits ?? 0;
+                  const free = u.cost_free_credits ?? 0;
 
-            <span>
-              {paid || free
-                ? `${paid} cr pagati / ${free} cr free`
-                : "0 crediti"}
-            </span>
-          </li>
-        );
-      })}
-    </ul>
-  )}
-</div>
+                  return (
+                    <li
+                      key={u.id}
+                      className="card-text"
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        padding: "6px 0",
+                        borderBottom: "1px solid rgba(255,255,255,0.06)",
+                        fontSize: "0.9rem",
+                      }}
+                    >
+                      <span>
+                        {formatUsageDate(u.when, locale)} –{" "}
+                        {formatUsageFeature(u.feature, u.scope, t)}{" "}
+                        <span
+                          style={{
+                            fontSize: "0.8rem",
+                            opacity: 0.8,
+                            marginLeft: 4,
+                          }}
+                        >
+                          ({tierLabel})
+                        </span>
+                      </span>
+
+                      <span>
+                        {paid || free
+                          ? `${paid} ${t("areaPersonal.readings.paidCredits")} / ${free} ${t("areaPersonal.readings.freeCredits")}`
+                          : t("areaPersonal.readings.zeroCredits")}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
 
           {/* RICARICHE */}
           <div className="card">
-            <h2 className="card-title">Ricariche effettuate</h2>
+            <h2 className="card-title">{t("areaPersonal.purchases.title")}</h2>
             {loading && !purchases.length ? (
               <p className="card-text" style={{ marginTop: 8 }}>
-                Caricamento...
+                {t("areaPersonal.credits.loading")}
               </p>
             ) : purchases.length === 0 ? (
               <p
                 className="card-text"
                 style={{ opacity: 0.8, marginTop: 8 }}
               >
-                Nessuna ricarica ancora effettuata.
+                {t("areaPersonal.purchases.empty")}
               </p>
             ) : (
               <ul
@@ -451,12 +451,12 @@ function formatUsageMode(u) {
                     }}
                   >
                     <span>
-                      {formatUsageDate(p.when)} – {p.product}
+                      {formatUsageDate(p.when, locale)} – {p.product}
                     </span>
                     <span>
                       {formatPurchaseAmount(p.amount, p.currency)}
                       {p.credits_added
-                        ? ` • +${p.credits_added} crediti`
+                        ? ` • +${p.credits_added} ${t("areaPersonal.purchases.creditsAdded")}`
                         : ""}
                     </span>
                   </li>
@@ -467,14 +467,12 @@ function formatUsageMode(u) {
 
           {/* GESTIONE ACCOUNT */}
           <div className="card">
-            <h2 className="card-title">Gestione account</h2>
+            <h2 className="card-title">{t("areaPersonal.account.title")}</h2>
             <p
               className="card-text"
               style={{ fontSize: "0.9rem", opacity: 0.85, marginTop: 8 }}
             >
-              Cancellando il profilo, la tua email verrà eliminata dal sistema e
-              non potrai più utilizzare i crediti residui. Potrai sempre creare
-              un nuovo account in futuro.
+              {t("areaPersonal.account.deleteWarning")}
             </p>
 
             {showDeleteConfirm ? (
@@ -490,7 +488,7 @@ function formatUsageMode(u) {
                   className="card-text"
                   style={{ fontSize: "0.9rem", opacity: 0.9 }}
                 >
-                  Sei sicuro di voler cancellare il tuo profilo?
+                  {t("areaPersonal.account.deleteConfirm")}
                 </p>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button
@@ -499,15 +497,15 @@ function formatUsageMode(u) {
                     onClick={handleDeleteProfile}
                   >
                     {deleting
-                      ? "Cancellazione in corso..."
-                      : "Conferma cancellazione"}
+                      ? t("areaPersonal.account.deleting")
+                      : t("areaPersonal.account.confirmDelete")}
                   </button>
                   <button
                     className="btn btn-secondary"
                     type="button"
                     onClick={() => setShowDeleteConfirm(false)}
                   >
-                    Annulla
+                    {t("areaPersonal.account.cancel")}
                   </button>
                 </div>
               </div>
@@ -518,7 +516,7 @@ function formatUsageMode(u) {
                 type="button"
                 onClick={() => setShowDeleteConfirm(true)}
               >
-                Cancella profilo
+                {t("areaPersonal.account.delete")}
               </button>
             )}
           </div>

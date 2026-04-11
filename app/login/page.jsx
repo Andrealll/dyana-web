@@ -3,9 +3,12 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import DyanaNavbar from "../../components/DyanaNavbar";
+import { useI18n } from "../../lib/i18n/useI18n";
 import { sendAuthMagicLink, setResumeTarget } from "../../lib/authClient";
 
 export default function LoginPage() {
+  const { t } = useI18n();
+
   const [email, setEmail] = useState("");
   const [errore, setErrore] = useState("");
   const [success, setSuccess] = useState("");
@@ -27,7 +30,7 @@ export default function LoginPage() {
     try {
       const eNorm = (email || "").trim().toLowerCase();
       if (!eNorm || !eNorm.includes("@")) {
-        setErrore("Inserisci un’email valida.");
+        setErrore(t("login.errors.invalidEmail"));
         return;
       }
 
@@ -42,12 +45,10 @@ export default function LoginPage() {
 
       await sendAuthMagicLink(eNorm, redirectUrl);
 
-      setSuccess(
-        "Link inviato. Apri l’email e clicca sul link per entrare (controlla anche spam/promozioni)."
-      );
+      setSuccess(t("login.success.linkSent"));
     } catch (err) {
       console.error("[LoginPage] magic link error", err);
-      setErrore(err?.message || "Non riesco a inviare il link. Riprova tra poco.");
+      setErrore(err?.message || t("login.errors.sendFailed"));
     } finally {
       setLoading(false);
     }
@@ -61,10 +62,8 @@ export default function LoginPage() {
 
       <section className="landing-wrapper">
         <header className="section">
-          <h1 className="section-title">Accedi a DYANA</h1>
-          <p className="section-subtitle">
-            Inserisci la tua email: ti invieremo un link sicuro per entrare.
-          </p>
+          <h1 className="section-title">{t("login.title")}</h1>
+          <p className="section-subtitle">{t("login.subtitle")}</p>
         </header>
 
         <section className="section">
@@ -84,29 +83,29 @@ export default function LoginPage() {
               onSubmit={handleSendLink}
               style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 10 }}
             >
-              <label className="card-text">Email</label>
+              <label className="card-text">{t("login.form.emailLabel")}</label>
               <input
                 className="form-input"
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="nome@esempio.com"
+                placeholder={t("login.form.emailPlaceholder")}
                 disabled={loading}
               />
 
               <button type="submit" className="btn btn-primary" disabled={loading}>
-                {loading ? "Attendi, sto generando…" : "Invia link su email e aprilo per entrare"}
+                {loading ? t("login.form.loading") : t("login.form.submit")}
               </button>
 
               <p className="card-text" style={{ fontSize: "0.8rem", opacity: 0.75, marginTop: 6 }}>
-                Continuando accetti le{" "}
+                {t("login.legal.prefix")}{" "}
                 <Link href="/condizioni" className="link" target="_blank" rel="noreferrer">
-                  Condizioni del servizio
+                  {t("login.legal.terms")}
                 </Link>{" "}
-                e l’{" "}
+                {t("login.legal.andPrivacy")}{" "}
                 <Link href="/privacy" className="link" target="_blank" rel="noreferrer">
-                  Informativa Privacy
+                  {t("login.legal.privacy")}
                 </Link>
                 .
               </p>

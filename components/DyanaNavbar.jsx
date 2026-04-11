@@ -12,18 +12,20 @@ import {
   clearToken,
   clearGuestToken,
 } from "../lib/authClient";
+import { useI18n } from "../lib/i18n/useI18n";
+import LanguageSwitcher from "./LanguageSwitcher";
 
 export default function DyanaNavbar({
   userRole: userRoleProp,
   credits: creditsProp,
   onLogout,
 }) {
+  const { t } = useI18n();
   const [userRole, setUserRole] = useState(userRoleProp ?? "guest");
   const [credits, setCredits] = useState(creditsProp ?? 0);
   const [email, setEmail] = useState(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [logoutInProgress, setLogoutInProgress] = useState(false);
-
   const isGuest = userRole === "guest";
 
   // --- anti race
@@ -258,31 +260,35 @@ if (backendRole === "guest") {
     else window.location.href = "/area-personale";
   }
 
-  const topLineText = isGuest
-    ? "Navigazione come ospite"
-    : email || "Utente registrato";
+const topLineText = isGuest
+  ? t("navbar.guest")
+  : email || t("navbar.user");
 
-  const navItems = [
-    { href: "/", label: "Home" },
-    { href: "/tema", label: "Tema natale" },
-    { href: "/compatibilita", label: "Compatibilità" },
-    { href: "/oroscopo", label: "Oroscopo" },
-  ];
+const navItems = [
+  { href: "/", label: t("navbar.home") },
+  { href: "/tema", label: t("navbar.tema") },
+  { href: "/compatibilita", label: t("navbar.compatibility") },
+  { href: "/oroscopo", label: t("navbar.horoscope") },
+];
 
   return (
     <header className="dyana-navbar">
       <div className="dyana-navbar-inner">
         <div className="dyana-navbar-top">
-          <Link href="/" className="dyana-navbar-logo-link">
-            <Image
-              src="/dyana-logo-NAV.png"
-              alt="DYANA"
-              width={32}
-              height={32}
-              className="dyana-navbar-logo"
-            />
-            <span className="dyana-navbar-logo-text">DYANA</span>
-          </Link>
+          <div className="dyana-navbar-brand">
+  <Link href="/" className="dyana-navbar-logo-link">
+    <Image
+      src="/dyana-logo-NAV.png"
+      alt="DYANA"
+      width={32}
+      height={32}
+      className="dyana-navbar-logo"
+    />
+    <span className="dyana-navbar-logo-text">DYANA</span>
+  </Link>
+
+  <LanguageSwitcher />
+</div>
 
           <div className="dyana-navbar-menu-wrapper">
             <button
@@ -318,7 +324,7 @@ if (backendRole === "guest") {
                   setIsMenuOpen(false);
                 }}
               >
-                Area personale
+                {t("navbar.area")}
               </a>
 
               {!isGuest && (
@@ -331,7 +337,7 @@ if (backendRole === "guest") {
                   }}
                   disabled={logoutInProgress}
                 >
-                  {logoutInProgress ? "Logout..." : "Logout"}
+                  {logoutInProgress ? t("navbar.logout_loading") : t("navbar.logout")}
                 </button>
               )}
             </nav>
@@ -344,11 +350,14 @@ if (backendRole === "guest") {
             <span className="dyana-navbar-status-credits">
               {isGuest ? (
                 <>
-                  Prova: <strong>{credits > 0 ? "Disponibile" : "Esaurita"}</strong>
+                  {t("navbar.trial")}:{" "}
+<strong>
+  {credits > 0 ? t("navbar.available") : t("navbar.exhausted")}
+</strong>
                 </>
               ) : (
                 <>
-                  Crediti: <strong>{credits}</strong>
+{t("navbar.credits")}: <strong>{credits}</strong>
                 </>
               )}
             </span>

@@ -1,11 +1,15 @@
 // app/page.jsx
+
+"use client";
+
 import Image from "next/image";
 import DyanaNavbar from "../components/DyanaNavbar";
 import CookieBanner from "../components/CookieBanner";
-
+import { useI18n } from "../lib/i18n/useI18n";
 
 export default function Home() {
   const year = new Date().getFullYear();
+  const { t } = useI18n();
 
   return (
     <main className="page-root">
@@ -28,103 +32,93 @@ export default function Home() {
               />
 
               <p className="splash-subtitle">
-                La tua guida astrologica potenziata dall&apos;intelligenza artificiale.
-                DYANA interpreta la tua storia, ti accompagna nelle scelte
-                quotidiane e ti offre letture davvero personali.
+                {t("home.hero.subtitle1")}
               </p>
 
               <p className="splash-subtitle">
-                🐈‍⬛ Non un semplice oroscopo: DYANA &quot;parla&quot;, comprende
-                il tuo profilo e risponde alle tue domande.
-                Con le richieste premium puoi anche approfondire e ottenere
-                chiarimenti mirati.
+                {t("home.hero.subtitle2")}
               </p>
             </div>
 
             {/* BLOCCO AZIONI PRINCIPALI */}
             <div className="splash-column splash-column-actions">
               <h2 className="section-title" style={{ marginBottom: "1.5rem" }}>
-                Da dove vuoi iniziare?
+                {t("home.hero.startTitle")}
               </h2>
 
-{/* PRIMA RIGA: PRODOTTI PRINCIPALI */}
-<div className="hero-actions" style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-  <a href="/oroscopo" className="btn btn-primary">
-    Oroscopo personalizzato
-  </a>
-  <a href="/tema" className="btn btn-primary">
-    Tema natale completo
-  </a>
-  <a href="/compatibilita" className="btn btn-primary">
-    Compatibilità tra due persone
-  </a>
-</div>
+              {/* PRIMA RIGA: PRODOTTI PRINCIPALI */}
+              <div
+                className="hero-actions"
+                style={{ display: "flex", flexWrap: "wrap", gap: 12 }}
+              >
+                <a href="/oroscopo" className="btn btn-primary">
+                  {t("home.cta.horoscope")}
+                </a>
+                <a href="/tema" className="btn btn-primary">
+                  {t("home.cta.birthChartFull")}
+                </a>
+                <a href="/compatibilita" className="btn btn-primary">
+                  {t("home.cta.compatibility")}
+                </a>
+              </div>
 
-{/* SECONDA RIGA: LINK EXTRA */}
-<div className="hero-actions" style={{ marginTop: "1rem", display: "flex", flexWrap: "wrap", gap: 12 }}>
-  <a href="/oroscopo2026" className="btn btn-secondary">
-    Oroscopo 2026
-  </a>
-</div>
+              {/* SECONDA RIGA: LINK EXTRA */}
+              <div
+                className="hero-actions"
+                style={{ marginTop: "1rem", display: "flex", flexWrap: "wrap", gap: 12 }}
+              >
+                <a href="/oroscopo2026" className="btn btn-secondary">
+                  {t("home.cta.horoscope2026")}
+                </a>
+              </div>
 
               {/* SECONDA RIGA: INFO + ACCOUNT + CREDITI + PRIVACY */}
               <div className="hero-actions" style={{ marginTop: "1.5rem" }}>
                 <a href="/come-funziona" className="btn btn-secondary">
-                  Come funziona DYANA
+                  {t("home.cta.howItWorks")}
                 </a>
                 <a href="/login" className="btn btn-secondary">
-                  Accesso utenti iscritti
+                  {t("home.cta.login")}
                 </a>
                 <a href="/area-personale" className="btn btn-secondary">
-                  Area personale
+                  {t("home.cta.personalArea")}
                 </a>
                 <a href="/crediti" className="btn btn-secondary">
-                  Acquista letture premium
+                  {t("home.cta.buyPremium")}
                 </a>
                 <a href="/privacy" className="btn btn-secondary">
-                  Privacy policy
+                  {t("home.cta.privacy")}
                 </a>
               </div>
             </div>
           </div>
         </div>
       </section>
+
       {/* LANDING PRINCIPALE */}
       <section id="landing" className="landing-wrapper">
         {/* SEZIONE: PERCHÉ NON È L'OROSCOPO COPIA-INCOLLA */}
         <section className="section section-features">
-          <h2 className="section-title">Basta oroscopi tutti uguali</h2>
-          <p className="section-subtitle">
-            I Leoni sono tutti egocentrici! E le vergini? Delle gran Pignole! I gemelli doppia faccia, e i cancro?? uhh i cancro!
-			Non ti ci ritrovi? Allora sei nel posto giusto! DYANA è pensata esattamente per questo.
-            Ogni lettura parte da te, non da un testo preconfezionato.
-          </p>
+          <h2 className="section-title">{t("home.features.title")}</h2>
+          <p className="section-subtitle">{t("home.features.subtitle")}</p>
 
           <div className="cards-grid">
             <article className="card">
-              <h3 className="card-title">Non solo il tuo segno</h3>
-              <p className="card-text">
-                DYANA non si limita ai soliti cliché sui segni zodiacali.
-                Attraverso un potente motore di calcolo, considera il tuo profilo completo 
-				e costruisce la lettura su tutti gli aspetti astrologici che ti caratterizzano in modo unico,
-              </p>
+              <h3 className="card-title">{t("home.features.profile.title")}</h3>
+              <p className="card-text">{t("home.features.profile.text")}</p>
             </article>
 
             <article className="card">
-              <h3 className="card-title">La potenza dell'AI</h3>
-              <p className="card-text">
-                Spesso capita, anche su siti specializzati, di trovare un muro di aspetti
-				anche contraddittori tra loro senza alcun nesso logico. Dyana elabora tutti i tuoi aspetti 
-				e aggancia informazioni da molti approcci e scuole astrologiche diverse attraverso l'AI per darti un'interpretazione chiara.
-              </p>
+              <h3 className="card-title">{t("home.features.ai.title")}</h3>
+              <p className="card-text">{t("home.features.ai.text")}</p>
             </article>
 
             <article className="card">
-              <h3 className="card-title">Dyana, la tua astrologa personale sempre con te</h3>
+              <h3 className="card-title">
+                {t("home.features.personalAstrologer.title")}
+              </h3>
               <p className="card-text">
-                Con le letture premium non ricevi solo un testo strutturato e coerente:
-                puoi fare domande mirate, chiedere chiarimenti e andare a fondo
-                proprio sui punti che ti colpiscono di più.
+                {t("home.features.personalAstrologer.text")}
               </p>
             </article>
           </div>
@@ -132,47 +126,33 @@ export default function Home() {
 
         {/* SEZIONE: COSA PUOI CHIEDERE A DYANA */}
         <section className="section section-features">
-          <h2 className="section-title">Cosa puoi chiedere a DYANA</h2>
-          <p className="section-subtitle">
-            Oroscopo, tema natale, compatibilità: gli strumenti sono gli stessi
-            dell’astrologia tradizionale, ma il modo in cui DYANA li usa è
-            cucito su di te.
-          </p>
+          <h2 className="section-title">{t("home.tools.title")}</h2>
+          <p className="section-subtitle">{t("home.tools.subtitle")}</p>
 
           <div className="cards-grid">
             <article className="card">
-              <h3 className="card-title">Oroscopo personalizzato</h3>
-              <p className="card-text">
-                Non un messaggio valido per chiunque abbia il tuo segno,
-                ma una lettura che tiene conto del tuo momento e delle
-                aree della vita che ti stanno più a cuore.
-              </p>
+              <h3 className="card-title">{t("home.tools.horoscope.title")}</h3>
+              <p className="card-text">{t("home.tools.horoscope.text")}</p>
               <a href="/oroscopo" className="btn btn-primary">
-                Inizia l’oroscopo
+                {t("home.tools.horoscope.button")}
               </a>
             </article>
 
             <article className="card">
-              <h3 className="card-title">Tema natale</h3>
-              <p className="card-text">
-                Una base solida per capire chi sei: il tema natale diventa
-                una mappa pratica, che DYANA usa per interpretare meglio anche
-                le letture successive.
-              </p>
+              <h3 className="card-title">{t("home.tools.birthChart.title")}</h3>
+              <p className="card-text">{t("home.tools.birthChart.text")}</p>
               <a href="/tema" className="btn btn-primary">
-                Calcola il tuo tema
+                {t("home.tools.birthChart.button")}
               </a>
             </article>
 
             <article className="card">
-              <h3 className="card-title">Compatibilità</h3>
-              <p className="card-text">
-                Non ti dice se “siete destinati o no”, ma come funziona
-                davvero la dinamica tra voi: dove scorre, dove gratta e
-                su cosa ha senso lavorare insieme.
-              </p>
+              <h3 className="card-title">
+                {t("home.tools.compatibility.title")}
+              </h3>
+              <p className="card-text">{t("home.tools.compatibility.text")}</p>
               <a href="/compatibilita" className="btn btn-primary">
-                Verifica compatibilità
+                {t("home.tools.compatibility.button")}
               </a>
             </article>
           </div>
@@ -181,8 +161,8 @@ export default function Home() {
         {/* FOOTER */}
         <footer className="footer">
           <p className="footer-text">
-            <span className="footer-brand">DYANA</span> · tutti i diritti
-            riservati · {year}
+            <span className="footer-brand">DYANA</span> ·{" "}
+            {t("common.footer.rightsReserved")} · {year}
           </p>
         </footer>
       </section>

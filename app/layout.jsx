@@ -5,6 +5,7 @@ import DyanaFooter from "../components/DyanaFooter";
 import CapacitorFlag from "./CapacitorFlag";
 import DeepLinkHandler from "./DeepLinkHandler";
 import ConversionTracker from "../components/ConversionTracker";
+import I18nProvider from "../lib/i18n/I18nProvider";
 
 // ==========================
 // SEO METADATA (CANONICAL HOME)
@@ -64,7 +65,9 @@ export default function RootLayout({ children }) {
         {/* Tracker conversioni globale */}
         <ConversionTracker />
 
-        {children}
+<I18nProvider>
+  {children}
+</I18nProvider>
 
         <DyanaFooter />
         <CookieBanner />

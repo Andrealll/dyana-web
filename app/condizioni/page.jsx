@@ -1,16 +1,21 @@
+"use client";
+
+import { useI18n } from "../../lib/i18n/useI18n";
+import DyanaNavbar from "../../components/DyanaNavbar";
+
 export default function CondizioniPage() {
+  const { t } = useI18n();
+
   return (
     <main className="page-root">
+      <DyanaNavbar />
       <section className="landing-wrapper">
         <section className="section">
           <div className="card" style={{ maxWidth: "800px", margin: "0 auto" }}>
-            <h1 className="section-title">Condizioni del servizio DYANA</h1>
+            <h1 className="section-title">{t("terms.title")}</h1>
 
             <p className="card-text" style={{ fontSize: "0.9rem", opacity: 0.9 }}>
-              Le presenti Condizioni regolano l&apos;uso di DYANA, piattaforma
-              digitale che offre consulti astrologici personalizzati tramite
-              intelligenza artificiale. Accedendo e utilizzando il servizio,
-              l&apos;utente accetta integralmente i termini indicati di seguito.
+              {t("terms.intro")}
             </p>
 
             {/* 1. Oggetto */}
@@ -18,14 +23,10 @@ export default function CondizioniPage() {
               className="card-text"
               style={{ marginTop: 24, fontWeight: 600, fontSize: "0.95rem" }}
             >
-              1. Oggetto del servizio
+              {t("terms.sections.service.title")}
             </h2>
             <p className="card-text" style={{ fontSize: "0.9rem", opacity: 0.9 }}>
-              DYANA fornisce contenuti e interpretazioni astrologiche basate sui
-              dati inseriti dall&apos;utente (ad esempio data, ora e luogo di nascita,
-              domande o ambiti di interesse). Le letture hanno finalità di
-              intrattenimento, esplorazione personale e crescita interiore e non
-              hanno carattere predittivo o deterministico.
+              {t("terms.sections.service.text")}
             </p>
 
             {/* 2. Accesso */}
@@ -33,24 +34,20 @@ export default function CondizioniPage() {
               className="card-text"
               style={{ marginTop: 24, fontWeight: 600, fontSize: "0.95rem" }}
             >
-              2. Accesso e account utente
+              {t("terms.sections.access.title")}
             </h2>
             <p className="card-text" style={{ fontSize: "0.9rem", opacity: 0.9 }}>
-              Il servizio può essere utilizzato:
+              {t("terms.sections.access.intro")}
             </p>
-            <ul className="card-text" style={{ fontSize: "0.9rem", opacity: 0.9, paddingLeft: 20 }}>
-              <li>
-                come <strong>ospite (guest)</strong>, con funzionalità limitate
-                e accesso ad un numero ridotto di consulti gratuiti;
-              </li>
-              <li>
-                come <strong>utente registrato</strong>, mediante creazione di un
-                account che permette l&apos;accesso a funzioni aggiuntive.
-              </li>
+            <ul
+              className="card-text"
+              style={{ fontSize: "0.9rem", opacity: 0.9, paddingLeft: 20 }}
+            >
+              <li>{t("terms.sections.access.guest")}</li>
+              <li>{t("terms.sections.access.registered")}</li>
             </ul>
             <p className="card-text" style={{ fontSize: "0.9rem", opacity: 0.9 }}>
-              L&apos;utente è responsabile della correttezza dei dati forniti e della
-              riservatezza delle proprie credenziali di accesso.
+              {t("terms.sections.access.text")}
             </p>
 
             {/* 3. Crediti */}
@@ -58,20 +55,18 @@ export default function CondizioniPage() {
               className="card-text"
               style={{ marginTop: 24, fontWeight: 600, fontSize: "0.95rem" }}
             >
-              3. Sistema di crediti
+              {t("terms.sections.credits.title")}
             </h2>
             <p className="card-text" style={{ fontSize: "0.9rem", opacity: 0.9 }}>
-              Alcune funzionalità di DYANA sono accessibili tramite un sistema di
-              crediti digitali. I crediti possono essere assegnati gratuitamente
-              (es. tentativi iniziali, bonus) oppure acquistati. I crediti:
+              {t("terms.sections.credits.intro")}
             </p>
-            <ul className="card-text" style={{ fontSize: "0.9rem", opacity: 0.9, paddingLeft: 20 }}>
-              <li>non costituiscono moneta elettronica o strumento finanziario;</li>
-              <li>non sono rimborsabili una volta utilizzati o scaduti;</li>
-              <li>
-                possono essere soggetti a limiti, condizioni di utilizzo e scadenza
-                indicati di volta in volta sulla piattaforma.
-              </li>
+            <ul
+              className="card-text"
+              style={{ fontSize: "0.9rem", opacity: 0.9, paddingLeft: 20 }}
+            >
+              <li>{t("terms.sections.credits.item1")}</li>
+              <li>{t("terms.sections.credits.item2")}</li>
+              <li>{t("terms.sections.credits.item3")}</li>
             </ul>
 
             {/* 4. Dati inseriti */}
@@ -79,13 +74,10 @@ export default function CondizioniPage() {
               className="card-text"
               style={{ marginTop: 24, fontWeight: 600, fontSize: "0.95rem" }}
             >
-              4. Dati e contenuti inseriti dall&apos;utente
+              {t("terms.sections.userData.title")}
             </h2>
             <p className="card-text" style={{ fontSize: "0.9rem", opacity: 0.9 }}>
-              L&apos;utente può inserire dati astrologici e informazioni personali per
-              personalizzare la lettura. Rimane responsabile dei contenuti che
-              fornisce e garantisce di avere il diritto di comunicarli. DYANA tratta
-              tali dati secondo quanto previsto dall&apos;Informativa privacy.
+              {t("terms.sections.userData.text")}
             </p>
 
             {/* 5. Limitazioni */}
@@ -93,13 +85,10 @@ export default function CondizioniPage() {
               className="card-text"
               style={{ marginTop: 24, fontWeight: 600, fontSize: "0.95rem" }}
             >
-              5. Limitazioni e natura del servizio
+              {t("terms.sections.limitations.title")}
             </h2>
             <p className="card-text" style={{ fontSize: "0.9rem", opacity: 0.9 }}>
-              DYANA non sostituisce in alcun modo consulenze professionali di tipo
-              medico, psicologico, legale, finanziario o di altra natura specialistica.
-              Le interpretazioni astrologiche sono simboliche e non devono essere
-              considerate come indicazioni vincolanti o predizioni certe del futuro.
+              {t("terms.sections.limitations.text")}
             </p>
 
             {/* 6. Responsabilità */}
@@ -107,14 +96,10 @@ export default function CondizioniPage() {
               className="card-text"
               style={{ marginTop: 24, fontWeight: 600, fontSize: "0.95rem" }}
             >
-              6. Esclusione di responsabilità
+              {t("terms.sections.liability.title")}
             </h2>
             <p className="card-text" style={{ fontSize: "0.9rem", opacity: 0.9 }}>
-              Nei limiti consentiti dalla legge, DYANA non è responsabile per
-              decisioni, azioni o omissioni compiute dall&apos;utente sulla base dei
-              contenuti generati, né per eventuali danni indiretti, consequenziali
-              o imprevedibili. Il servizio è fornito “così com&apos;è”, senza garanzia
-              di risultati specifici.
+              {t("terms.sections.liability.text")}
             </p>
 
             {/* 7. Pagamenti */}
@@ -122,13 +107,10 @@ export default function CondizioniPage() {
               className="card-text"
               style={{ marginTop: 24, fontWeight: 600, fontSize: "0.95rem" }}
             >
-              7. Pagamenti e rimborsi
+              {t("terms.sections.payments.title")}
             </h2>
             <p className="card-text" style={{ fontSize: "0.9rem", opacity: 0.9 }}>
-              Gli eventuali pagamenti per l&apos;acquisto di crediti o funzionalità
-              premium sono gestiti tramite provider esterni (ad esempio sistemi di
-              pagamento online). Salvo diverse indicazioni di legge, non sono
-              previsti rimborsi per crediti utilizzati o scaduti.
+              {t("terms.sections.payments.text")}
             </p>
 
             {/* 8. Uso illecito */}
@@ -136,13 +118,10 @@ export default function CondizioniPage() {
               className="card-text"
               style={{ marginTop: 24, fontWeight: 600, fontSize: "0.95rem" }}
             >
-              8. Uso non consentito del servizio
+              {t("terms.sections.prohibitedUse.title")}
             </h2>
             <p className="card-text" style={{ fontSize: "0.9rem", opacity: 0.9 }}>
-              È vietato utilizzare DYANA per attività illegali o che violino diritti
-              di terzi, per generare contenuti offensivi, discriminatori o
-              diffamatori, o per tentare di compromettere la sicurezza o il
-              funzionamento della piattaforma.
+              {t("terms.sections.prohibitedUse.text")}
             </p>
 
             {/* 9. Modifiche */}
@@ -150,13 +129,10 @@ export default function CondizioniPage() {
               className="card-text"
               style={{ marginTop: 24, fontWeight: 600, fontSize: "0.95rem" }}
             >
-              9. Modifiche al servizio e alle condizioni
+              {t("terms.sections.changes.title")}
             </h2>
             <p className="card-text" style={{ fontSize: "0.9rem", opacity: 0.9 }}>
-              DYANA può aggiornare il contenuto del servizio, le funzionalità
-              disponibili, il sistema di crediti e le presenti Condizioni.
-              Eventuali modifiche rilevanti saranno comunicate tramite il sito o,
-              ove possibile, via email agli utenti registrati.
+              {t("terms.sections.changes.text")}
             </p>
 
             {/* 10. Durata e chiusura account */}
@@ -164,13 +140,10 @@ export default function CondizioniPage() {
               className="card-text"
               style={{ marginTop: 24, fontWeight: 600, fontSize: "0.95rem" }}
             >
-              10. Durata del rapporto e chiusura dell&apos;account
+              {t("terms.sections.duration.title")}
             </h2>
             <p className="card-text" style={{ fontSize: "0.9rem", opacity: 0.9 }}>
-              L&apos;utente può interrompere in qualsiasi momento l&apos;utilizzo di
-              DYANA e richiedere la chiusura del proprio account. In caso di
-              violazioni gravi delle presenti Condizioni, il titolare si riserva
-              la facoltà di sospendere o disattivare l&apos;account senza preavviso.
+              {t("terms.sections.duration.text")}
             </p>
 
             {/* 11. Legge applicabile */}
@@ -178,13 +151,13 @@ export default function CondizioniPage() {
               className="card-text"
               style={{ marginTop: 24, fontWeight: 600, fontSize: "0.95rem" }}
             >
-              11. Legge applicabile e foro competente
+              {t("terms.sections.law.title")}
             </h2>
-            <p className="card-text" style={{ fontSize: "0.9rem", opacity: 0.9, marginBottom: 8 }}>
-              Le presenti Condizioni sono regolate dalla legge italiana. Salvo
-              diversi diritti riconosciuti al consumatore dalla normativa vigente,
-              per ogni controversia sarà competente il foro del luogo di residenza
-              o domicilio del consumatore.
+            <p
+              className="card-text"
+              style={{ fontSize: "0.9rem", opacity: 0.9, marginBottom: 8 }}
+            >
+              {t("terms.sections.law.text")}
             </p>
           </div>
         </section>
