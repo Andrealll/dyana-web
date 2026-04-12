@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useI18n } from "../lib/i18n/useI18n";
 
 // Base URL del tuo bot DYANA su Typebot
 const URL_BOT_DYANA_BASE = "https://typebot.co/dyana-ai";
@@ -36,6 +37,7 @@ export function DyanaPopup(props: DyanaPopupProps) {
     questionsIncluded = 2,
   } = props;
 
+  const { locale } = useI18n();
   const [open, setOpen] = useState(false);
 
   // 🔥 Per ora: bottone sempre abilitato (gating lo rimettiamo dopo)
@@ -65,6 +67,8 @@ export function DyanaPopup(props: DyanaPopupProps) {
       // Numero di domande incluse: per ora sempre quelle che passiamo
       params.set("questions_left_initial", String(questionsIncluded));
 
+      if (locale) params.set("locale", locale);
+
       const qs = params.toString();
       if (!qs) return URL_BOT_DYANA_BASE;
       return `${URL_BOT_DYANA_BASE}?${qs}`;
@@ -82,6 +86,7 @@ export function DyanaPopup(props: DyanaPopupProps) {
     readingPayload,
     kbTags,
     questionsIncluded,
+    locale,
   ]);
 
   const handleToggle = () => {

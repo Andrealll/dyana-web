@@ -6,7 +6,7 @@ const BACKEND_BASE_URL =
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { citta, data, ora, nome, tier } = body || {};
+	const { citta, data, ora, nome, tier, lang } = body || {};
 
     // --- VALIDAZIONE ---
     if (!citta || !data || !ora || !tier) {
@@ -24,13 +24,14 @@ export async function POST(req: NextRequest) {
     const resp = await fetch(backendUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        citta,
-        data,
-        ora,
-        nome: nome || null,
-        tier,
-      }),
+body: JSON.stringify({
+  citta,
+  data,
+  ora,
+  nome: nome || null,
+  tier,
+  lang: lang || "it",
+}),
     });
 
     // --- PARSE JSON SICURO ---

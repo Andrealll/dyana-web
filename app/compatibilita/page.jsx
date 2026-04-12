@@ -19,7 +19,10 @@ import {
   sendAuthMagicLink,
   updateMarketingConsent,
 } from "../../lib/authClient";
-
+import {
+  getCountryOptions,
+  buildCityWithCountry,
+} from "../../lib/constantsCountry";
 // ==========================
 // COSTANTI GLOBALI
 // ==========================
@@ -200,20 +203,22 @@ function buildSinastriaReadingText(sinastriaAI) {
 // PAGINA
 // ==========================
 export default function CompatibilitaPage() {
-  const { t } = useI18n();
-
+  const { t, locale } = useI18n();
+  const countryOptions = useMemo(() => getCountryOptions(locale), [locale]);
   const [form, setForm] = useState({
     nomeA: "",
     dataA: "",
     oraA: "",
     oraAIgnota: false,
     cittaA: "",
+	countryA: "IT",
 
     nomeB: "",
     dataB: "",
     oraB: "",
     oraBIgnota: false,
     cittaB: "",
+	countryB: "IT",
   });
 
   const [loading, setLoading] = useState(false);
@@ -404,28 +409,32 @@ export default function CompatibilitaPage() {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   }
-
   // ======================================================
   // API call /sinastria_ai
   // ======================================================
   async function callSinastria({ tier }) {
-    const payload = {
-      A: {
-        citta: form.cittaA,
-        data: form.dataA,
-        ora: form.oraAIgnota ? "" : form.oraA,
-        nome: form.nomeA || null,
-        ora_ignota: form.oraAIgnota,
-      },
-      B: {
-        citta: form.cittaB,
-        data: form.dataB,
-        ora: form.oraBIgnota ? "" : form.oraB,
-        nome: form.nomeB || null,
-        ora_ignota: form.oraBIgnota,
-      },
-      tier, // free | premium
-    };
+const fullCityA = buildCityWithCountry(form.cittaA, form.countryA);
+const fullCityB= buildCityWithCountry(form.cittaB, form.countryB);
+	  
+	  
+const payload = {
+  A: {
+    citta: fullCityA,
+    data: form.dataA,
+    ora: form.oraAIgnota ? "" : form.oraA,
+    nome: form.nomeA || null,
+    ora_ignota: form.oraAIgnota,
+  },
+  B: {
+    citta: fullCityB,
+    data: form.dataB,
+    ora: form.oraBIgnota ? "" : form.oraB,
+    nome: form.nomeB || null,
+    ora_ignota: form.oraBIgnota,
+  },
+  tier, // free | premium
+  lang: locale === "en" ? "en" : "it",
+};
 
     let token = await getAnyAuthTokenAsync();
     if (!token && ASTROBOT_JWT_TEMA) token = ASTROBOT_JWT_TEMA;
@@ -849,37 +858,50 @@ export default function CompatibilitaPage() {
     [premiumSinastriaAI]
   );
 
-  const typebotUrl = useMemo(() => {
-    const baseUrl = `https://typebot.co/${TYPEBOT_DYANA_ID}`;
-    try {
-      const params = new URLSearchParams();
 
-      if (userIdForDyana) params.set("user_id", userIdForDyana);
-      if (sessionId) params.set("session_id", sessionId);
+const typebotUrl = useMemo(() => {
+  const baseUrl = `https://typebot.co/${TYPEBOT_DYANA_ID}`;
+  try {
+    const params = new URLSearchParams();
 
-      const meta =
-        (premiumResult && premiumResult.payload_ai && premiumResult.payload_ai.meta) ||
-        (premiumSinastriaAI && premiumSinastriaAI.meta) ||
-        {};
+    if (userIdForDyana) params.set("user_id", userIdForDyana);
+    if (sessionId) params.set("session_id", sessionId);
 
-      const readingId = meta.reading_id || meta.id || "sinastria_inline";
-      params.set("reading_id", readingId);
+    const meta =
+      (premiumResult && premiumResult.payload_ai && premiumResult.payload_ai.meta) ||
+      (premiumSinastriaAI && premiumSinastriaAI.meta) ||
+      {};
 
-      params.set("reading_type", "sinastria");
-      params.set(
-        "reading_label",
-        t("compatibility.labels.coupleCompatibility")
-      );
+    const readingId = meta.reading_id || meta.id || "sinastria_inline";
+    params.set("reading_id", readingId);
 
-      const safeReadingText = (premiumReadingTextForDyana || "").slice(0, 6000);
-      if (safeReadingText) params.set("reading_text", safeReadingText);
+    params.set("reading_type", "sinastria");
 
-      const qs = params.toString();
-      return qs ? `${baseUrl}?${qs}` : baseUrl;
-    } catch {
-      return baseUrl;
-    }
-  }, [userIdForDyana, sessionId, premiumResult, premiumSinastriaAI, premiumReadingTextForDyana, t]);
+    params.set(
+      "reading_label",
+      t("compatibility.labels.coupleCompatibility")
+    );
+
+    const safeReadingText = (premiumReadingTextForDyana || "").slice(0, 6000);
+    if (safeReadingText) params.set("reading_text", safeReadingText);
+
+    // 👇 AGGIUNTA LINGUA
+    params.set("lang", locale === "en" ? "en" : "it");
+
+    const qs = params.toString();
+    return qs ? `${baseUrl}?${qs}` : baseUrl;
+  } catch {
+    return baseUrl;
+  }
+}, [
+  userIdForDyana,
+  sessionId,
+  premiumResult,
+  premiumSinastriaAI,
+  premiumReadingTextForDyana,
+  t,
+  locale, // 👈 AGGIUNGI QUESTO
+]);
 
   // ======================================================
   // RENDER
@@ -966,17 +988,35 @@ export default function CompatibilitaPage() {
                       />
                     </div>
 
-                    <div>
-                      <label className="card-text">{t("compatibility.form.birthPlace")}</label>
-                      <input
-                        type="text"
-                        name="cittaA"
-                        value={form.cittaA}
-                        onChange={handleChange}
-                        className="form-input"
-                        placeholder={t("compatibility.form.birthPlacePlaceholderA")}
-                      />
-                    </div>
+
+<div>
+  <label className="card-text">{t("compatibility.form.birthPlace")}</label>
+  <input
+    type="text"
+    name="cittaA"
+    value={form.cittaA}
+    onChange={handleChange}
+    className="form-input"
+    placeholder={t("compatibility.form.birthPlacePlaceholderA")}
+    autoComplete="off"
+  />
+
+  <div style={{ marginTop: 12 }}>
+    <label className="card-text">{t("compatibility.form.country1")}</label>
+    <select
+      name="countryA"
+      value={form.countryA}
+      onChange={handleChange}
+      className="form-input"
+    >
+      {countryOptions.map((item) => (
+        <option key={item.code} value={item.code}>
+          {item.label}
+        </option>
+      ))}
+    </select>
+  </div>
+</div>
 
                     <div>
                       <label className="card-text">{t("compatibility.form.birthDate")}</label>
@@ -1032,7 +1072,7 @@ export default function CompatibilitaPage() {
                       </label>
                     </div>
                   </div>
-                </div>
+  </div>
 
                 {/* PERSONA B */}
                 <div style={{ flex: 1, minWidth: "260px" }}>
@@ -1051,18 +1091,34 @@ export default function CompatibilitaPage() {
                         className="form-input"
                       />
                     </div>
+<div>
+  <label className="card-text">{t("compatibility.form.birthPlace")}</label>
+  <input
+    type="text"
+    name="cittaB"
+    value={form.cittaB}
+    onChange={handleChange}
+    className="form-input"
+    placeholder={t("compatibility.form.birthPlacePlaceholderB")}
+	autoComplete="off"
+  />
 
-                    <div>
-                      <label className="card-text">{t("compatibility.form.birthPlace")}</label>
-                      <input
-                        type="text"
-                        name="cittaB"
-                        value={form.cittaB}
-                        onChange={handleChange}
-                        className="form-input"
-                        placeholder={t("compatibility.form.birthPlacePlaceholderB")}
-                      />
-                    </div>
+  <div style={{ marginTop: 12 }}>
+    <label className="card-text">{t("compatibility.form.country2")}</label>
+    <select
+      name="countryB"
+      value={form.countryB}
+      onChange={handleChange}
+      className="form-input"
+    >
+      {countryOptions.map((item) => (
+        <option key={item.code} value={item.code}>
+          {item.label}
+        </option>
+      ))}
+    </select>
+  </div>
+</div>
 
                     <div>
                       <label className="card-text">{t("compatibility.form.birthDate")}</label>

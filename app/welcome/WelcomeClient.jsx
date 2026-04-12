@@ -1,38 +1,39 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useI18n } from "../../lib/i18n/useI18n";
 import { fetchCreditsState, getAnyAuthTokenAsync } from "../../lib/authClient";
 
 export default function WelcomeClient() {
+  const { t } = useI18n();
+
   const router = useRouter();
   const sp = useSearchParams();
 
-  const mode = sp?.get("mode") || "back"; // new | back
-  const [status, setStatus] = useState("loading"); // loading | ok | error
+  const mode = sp?.get("mode") || "back";
+  const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
   const [credits, setCredits] = useState(null);
 
-function buildResumeUrl(fallback = "/") {
-  try {
-    let path = localStorage.getItem("dyana_resume_path") || "";
-    let qs = localStorage.getItem("dyana_resume_qs") || "";
+  function buildResumeUrl(fallback = "/") {
+    try {
+      let path = localStorage.getItem("dyana_resume_path") || "";
+      let qs = localStorage.getItem("dyana_resume_qs") || "";
 
-    path = (path || "").trim();
-    qs = (qs || "").trim();
+      path = (path || "").trim();
+      qs = (qs || "").trim();
 
-    if (!path) return fallback;
-    if (!path.startsWith("/")) path = `/${path}`;
+      if (!path) return fallback;
+      if (!path.startsWith("/")) path = `/${path}`;
 
-    if (!qs) return path;
+      if (!qs) return path;
 
-    // qs può essere "a=b&c=d" oppure "?a=b"
-    return qs.startsWith("?") ? `${path}${qs}` : `${path}?${qs}`;
-  } catch {
-    return fallback;
+      return qs.startsWith("?") ? `${path}${qs}` : `${path}?${qs}`;
+    } catch {
+      return fallback;
+    }
   }
-}
-;
 
   function clearResume() {
     try {
@@ -45,11 +46,10 @@ function buildResumeUrl(fallback = "/") {
   useEffect(() => {
     async function load() {
       try {
-        // Qui NON verifichiamo il link: lo fa /auth/callback.
         const token = await getAnyAuthTokenAsync?.();
         if (!token) {
           setStatus("error");
-          setError("Sessione non trovata. Richiedi un nuovo link di accesso.");
+          setError(t("auth.welcome.errorSessionMissing"));
           return;
         }
 
@@ -62,18 +62,22 @@ function buildResumeUrl(fallback = "/") {
         setStatus("ok");
       } catch (e) {
         setStatus("error");
-        setError(e?.message || "Impossibile completare l’accesso.");
+        setError(e?.message || t("auth.welcome.errorGeneric"));
       }
     }
 
     load();
-  }, []);
+  }, [t]);
 
   if (status === "loading") {
     return (
       <div className="card">
-        <h1 className="card-title">Sto completando l’accesso…</h1>
-        <p className="card-text" style={{ opacity: 0.85 }}>Un momento.</p>
+        <h1 className="card-title">
+          {t("auth.welcome.loadingTitle")}
+        </h1>
+        <p className="card-text" style={{ opacity: 0.85 }}>
+          {t("auth.welcome.loadingSubtitle")}
+        </p>
       </div>
     );
   }
@@ -81,17 +85,27 @@ function buildResumeUrl(fallback = "/") {
   if (status === "error") {
     return (
       <div className="card">
-        <h1 className="card-title">Non riesco a completare l’accesso</h1>
-        <p className="card-text" style={{ color: "#ff9a9a" }}>{error}</p>
-        <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => router.push("/login")}>
-          Vai al login
+        <h1 className="card-title">
+          {t("auth.welcome.errorTitle")}
+        </h1>
+        <p className="card-text" style={{ color: "#ff9a9a" }}>
+          {error}
+        </p>
+        <button
+          className="btn btn-primary"
+          style={{ marginTop: 16 }}
+          onClick={() => router.push("/login")}
+        >
+          {t("auth.welcome.ctaLogin")}
         </button>
       </div>
     );
   }
 
-  // ok
-  const title = mode === "new" ? "Benvenuto su DYANA" : "Bentornato su DYANA";
+  const title =
+    mode === "new"
+      ? t("auth.welcome.titleNew")
+      : t("auth.welcome.titleBack");
 
   return (
     <div className="card">
@@ -100,25 +114,26 @@ function buildResumeUrl(fallback = "/") {
       {mode === "new" ? (
         <>
           <p className="card-text" style={{ opacity: 0.9 }}>
-            Accesso completato.
+            {t("auth.welcome.newLine1")}
           </p>
           <p className="card-text" style={{ opacity: 0.9 }}>
-            Hai <strong>5 crediti gratuiti</strong> per iniziare. Inoltre, riceverai <strong>1 credito gratuito al giorno</strong> per calcolare i tuoi oroscopi!.
+            {t("auth.welcome.newLine2")}
           </p>
         </>
       ) : (
         <>
           <p className="card-text" style={{ opacity: 0.9 }}>
-            Accesso completato: ora sei loggato.
+            {t("auth.welcome.backLine1")}
           </p>
           <p className="card-text" style={{ opacity: 0.9 }}>
-            Puoi continuare da dove eri rimasto.
+            {t("auth.welcome.backLine2")}
           </p>
         </>
       )}
 
       <p className="card-text" style={{ marginTop: 10 }}>
-        Crediti disponibili: <strong>{credits ?? "—"}</strong>
+        {t("common.availableCredits")}{" "}
+        <strong>{credits ?? "—"}</strong>
       </p>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
@@ -126,12 +141,12 @@ function buildResumeUrl(fallback = "/") {
           <button
             className="btn btn-primary"
             onClick={() => {
-const target = buildResumeUrl("/");
-clearResume();
-router.replace(target);
+              const target = buildResumeUrl("/");
+              clearResume();
+              router.replace(target);
             }}
           >
-            Continua
+            {t("auth.welcome.ctaContinue")}
           </button>
         )}
 
@@ -142,7 +157,7 @@ router.replace(target);
             router.push("/");
           }}
         >
-          Torna alla home
+          {t("auth.welcome.ctaHome")}
         </button>
       </div>
     </div>

@@ -1,4 +1,10 @@
+"use client";
+
+import { useI18n } from "../../../lib/i18n/useI18n";
+
 export default function CreditiCancelPage() {
+  const { t } = useI18n();
+
   return (
     <main className="page-root">
       <section className="landing-wrapper">
@@ -13,15 +19,15 @@ export default function CreditiCancelPage() {
             }}
           >
             <h1 className="section-title" style={{ marginBottom: "12px" }}>
-              Pagamento annullato
+              {t("auth.cancel.title")}
             </h1>
 
             <p className="section-subtitle" style={{ marginBottom: "24px" }}>
-              Non è stato addebitato nulla.
+              {t("auth.cancel.subtitle")}
             </p>
 
             <p className="card-text" style={{ marginBottom: "24px" }}>
-              Puoi tornare ai crediti e riprovare quando vuoi.
+              {t("auth.cancel.description")}
             </p>
 
             <div
@@ -37,7 +43,7 @@ export default function CreditiCancelPage() {
                 className="btn btn-primary"
                 style={{ minWidth: "220px" }}
               >
-                Torna ai crediti
+                {t("auth.cancel.ctaCredits")}
               </a>
 
               <a
@@ -45,7 +51,7 @@ export default function CreditiCancelPage() {
                 className="btn btn-secondary"
                 style={{ minWidth: "220px" }}
               >
-                Torna a DYANA
+                {t("auth.cancel.ctaHome")}
               </a>
             </div>
           </div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
+import { useI18n } from "../../../lib/i18n/useI18n";
 
 import {
   verifyMagicLink,
@@ -23,7 +24,6 @@ const DEBUG =
 
 function dlog(...args) {
   if (!DEBUG) return;
-  // eslint-disable-next-line no-console
   console.log(...args);
 }
 
@@ -35,8 +35,6 @@ function getSupabase() {
   }
   return createClient(url, anon);
 }
-
-
 
 function notifyAuthDone() {
   try {
@@ -60,6 +58,7 @@ function resolveWelcomeMode(typeQ) {
   if (typeQ === "signup" || typeQ === "invite") return "new";
   return "back";
 }
+
 function resolvePostLoginDestination(typeQ) {
   const resume = getResumeTarget();
 
@@ -72,7 +71,10 @@ function resolvePostLoginDestination(typeQ) {
   const mode = resolveWelcomeMode(typeQ);
   return `${WELCOME_PATH}?mode=${mode}`;
 }
+
 export default function CallbackClient() {
+  const { t } = useI18n();
+
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -95,11 +97,11 @@ export default function CallbackClient() {
 
           notifyAuthDone();
 
-const typeQ0 = sp?.get("type") || "magiclink";
-const nextUrl = resolvePostLoginDestination(typeQ0);
+          const typeQ0 = sp?.get("type") || "magiclink";
+          const nextUrl = resolvePostLoginDestination(typeQ0);
 
-router.replace(nextUrl);
-return;
+          router.replace(nextUrl);
+          return;
         }
 
         // 1) FLOW token_hash (auth_pub)
@@ -110,11 +112,12 @@ return;
           await verifyMagicLink(tokenHash, typeQ);
           notifyAuthDone();
 
-const nextUrl = resolvePostLoginDestination(typeQ);
+          const nextUrl = resolvePostLoginDestination(typeQ);
 
-router.replace(nextUrl);
-return;
-		}
+          router.replace(nextUrl);
+          return;
+        }
+
         // 2) FALLBACK (hash access_token)
         const hash = typeof window !== "undefined" ? window.location.hash : "";
         const hp = new URLSearchParams((hash || "").replace("#", ""));
@@ -125,19 +128,19 @@ return;
           await exchangeSupabaseTokenForDyanaJwt(sbAccessToken);
           notifyAuthDone();
 
-const nextUrl = resolvePostLoginDestination(typeHash);
+          const nextUrl = resolvePostLoginDestination(typeHash);
 
-router.replace(nextUrl);
-return;
+          router.replace(nextUrl);
+          return;
         }
 
-        throw new Error("Token mancante nel link. Richiedi un nuovo magic link.");
+        throw new Error(t("auth.callback.errorMissingToken"));
       } catch (e) {
         try {
           clearToken();
         } catch {}
         setStatus("error");
-        setError(e?.message || "Impossibile completare l’accesso.");
+        setError(e?.message || t("auth.callback.errorGeneric"));
       }
     }
 
@@ -146,12 +149,12 @@ return;
     } catch {}
 
     run();
-  }, [router, sp]);
+  }, [router, sp, t]);
 
   if (status === "error") {
     return (
       <div className="card">
-        <h1 className="card-title">Errore accesso</h1>
+        <h1 className="card-title">{t("auth.callback.errorTitle")}</h1>
         <p className="card-text" style={{ color: "#ff9a9a" }}>
           {error}
         </p>
@@ -170,9 +173,11 @@ return;
 
   return (
     <div className="card">
-      <h1 className="card-title">Sto completando l’accesso…</h1>
+      <h1 className="card-title">
+        {t("auth.callback.loadingTitle")}
+      </h1>
       <p className="card-text" style={{ opacity: 0.85 }}>
-        Un momento.
+        {t("auth.callback.loadingSubtitle")}
       </p>
 
       {DEBUG ? (

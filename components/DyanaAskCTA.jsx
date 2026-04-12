@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { enqueueConversionEvent } from "./ConversionTracker";
+import { useI18n } from "../lib/i18n/useI18n";
 
 function getVariant() {
   if (typeof window === "undefined") return "A";
@@ -20,20 +21,21 @@ function getVariant() {
 }
 
 export default function DyanaAskCTA({ open = false, onClick, disabled = false }) {
+  const { t } = useI18n();
   const variant = useMemo(() => getVariant(), []);
 
   const copy = {
     A: {
-      closedTitle: "Fai una domanda su questa lettura",
-      closedSub: "Chiarisci un punto del tuo oroscopo",
-      openTitle: "Chiudi DYANA",
-      openSub: "Torna alla lettura completa",
+      closedTitle: t("cta.ask.A.closedTitle"),
+      closedSub: t("cta.ask.A.closedSub"),
+      openTitle: t("cta.ask.A.openTitle"),
+      openSub: t("cta.ask.A.openSub"),
     },
     B: {
-      closedTitle: "Chiedi cosa significa per te",
-      closedSub: "Approfondisci amore, lavoro o timing",
-      openTitle: "Chiudi DYANA",
-      openSub: "Torna alla lettura completa",
+      closedTitle: t("cta.ask.B.closedTitle"),
+      closedSub: t("cta.ask.B.closedSub"),
+      openTitle: t("cta.ask.B.openTitle"),
+      openSub: t("cta.ask.B.openSub"),
     },
   };
 

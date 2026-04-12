@@ -1,16 +1,24 @@
-// app/auth/callback/page.jsx
+"use client";
+
 import { Suspense } from "react";
+import { useI18n } from "../../../lib/i18n/useI18n";
 import CallbackClient from "./CallbackClient";
 import CallbackShell from "./CallbackShell";
 
 export default function AuthCallbackPage() {
+  const { t } = useI18n();
+
   return (
     <CallbackShell>
       <Suspense
         fallback={
           <div className="card">
-            <h1 className="card-title">Sto completando l’accesso…</h1>
-            <p className="card-text" style={{ opacity: 0.85 }}>Un momento.</p>
+            <h1 className="card-title">
+              {t("auth.callback.loadingTitle")}
+            </h1>
+            <p className="card-text" style={{ opacity: 0.85 }}>
+              {t("auth.callback.loadingSubtitle")}
+            </p>
           </div>
         }
       >

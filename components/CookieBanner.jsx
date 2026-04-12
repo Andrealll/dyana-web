@@ -1,11 +1,13 @@
-// components/CookieBanner.jsx
 "use client";
 
 import { useEffect, useState } from "react";
+import { useI18n } from "../lib/i18n/useI18n";
 
 const STORAGE_KEY = "dyana_cookie_accepted"; // "accepted" | "rejected"
 
 export default function CookieBanner() {
+  const { t } = useI18n();
+
   const [mounted, setMounted] = useState(false);
   const [status, setStatus] = useState("pending"); // "pending" | "accepted" | "rejected"
 
@@ -21,7 +23,6 @@ export default function CookieBanner() {
     }
   }, []);
 
-  // Evita problemi di hydration + nasconde se l'utente ha già scelto
   if (!mounted || status !== "pending") {
     return null;
   }
@@ -47,14 +48,10 @@ export default function CookieBanner() {
   return (
     <div className="cookie-overlay">
       <div className="cookie-modal">
-        <h2 className="cookie-title">DYANA e i cookie</h2>
+        <h2 className="cookie-title">{t("cookie.title")}</h2>
+
         <p className="cookie-text">
-          DYANA ti da il benvenuto! Ti regaleremo ogni giorno dei crediti gratuiti
-		  per scoprire di più del mondo dell'astrologia.
-          <br />
-          <br />
-          Ti ricordiamo che questo sito utilizza cookie tecnici e strumenti simili per funzionare
-          correttamente e per offrirti funzionalità aggiuntive.
+          {t("cookie.description")}
         </p>
 
         <div
@@ -71,7 +68,7 @@ export default function CookieBanner() {
             onClick={handleReject}
             className="cookie-reject-btn"
           >
-            Rifiuto
+            {t("cookie.reject")}
           </button>
 
           <button
@@ -79,7 +76,7 @@ export default function CookieBanner() {
             onClick={handleAccept}
             className="cookie-accept-btn"
           >
-            Accetto e continuo
+            {t("cookie.accept")}
           </button>
         </div>
       </div>

@@ -1,6 +1,10 @@
 "use client";
 
+import { useI18n } from "../../../lib/i18n/useI18n";
+
 export default function CreditiSuccessPage() {
+  const { t } = useI18n();
+
   return (
     <main className="page-root">
       <section className="landing-wrapper">
@@ -18,21 +22,21 @@ export default function CreditiSuccessPage() {
               className="section-title"
               style={{ marginBottom: "12px" }}
             >
-              Pagamento completato ✅
+              {t("auth.success.title")}
             </h1>
 
             <p
               className="section-subtitle"
               style={{ marginBottom: "24px" }}
             >
-              Il pagamento è stato registrato correttamente.
+              {t("auth.success.subtitle")}
             </p>
 
             <p
               className="card-text"
               style={{ marginBottom: "24px" }}
             >
-              I crediti potrebbero richiedere qualche secondo per comparire.
+              {t("auth.success.creditsDelay")}
             </p>
 
             <div
@@ -48,7 +52,7 @@ export default function CreditiSuccessPage() {
                 className="btn btn-primary"
                 style={{ minWidth: "220px" }}
               >
-                Vai ai crediti
+                {t("auth.success.ctaCredits")}
               </a>
 
               <a
@@ -56,7 +60,7 @@ export default function CreditiSuccessPage() {
                 className="btn btn-secondary"
                 style={{ minWidth: "220px" }}
               >
-                Torna a DYANA
+                {t("auth.success.ctaHome")}
               </a>
             </div>
 
@@ -68,7 +72,7 @@ export default function CreditiSuccessPage() {
                 opacity: 0.7,
               }}
             >
-              Se non vedi subito l’aggiornamento, attendi qualche secondo e ricarica.
+              {t("auth.success.note")}
             </p>
           </div>
         </section>

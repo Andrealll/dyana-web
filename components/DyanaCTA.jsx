@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { enqueueConversionEvent } from "./ConversionTracker";
+import { useI18n } from "../lib/i18n/useI18n";
 
 function getVariant() {
   if (typeof window === "undefined") return "A";
@@ -20,27 +21,28 @@ function getVariant() {
 }
 
 export default function DyanaCTA({ type = "premium", onClick, disabled = false }) {
+  const { t } = useI18n();
   const variant = useMemo(() => getVariant(), []);
 
   const config = {
     A: {
       premium: {
-        label: "Scopri cosa fare oggi",
-        sub: "Consigli pratici e momenti chiave",
+        label: t("dyanaCta.variants.A.premium.label"),
+        sub: t("dyanaCta.variants.A.premium.sub"),
       },
       ask: {
-        label: "Fai una domanda su questa giornata",
-        sub: "Chiedi un chiarimento sulla lettura",
+        label: t("dyanaCta.variants.A.ask.label"),
+        sub: t("dyanaCta.variants.A.ask.sub"),
       },
     },
     B: {
       premium: {
-        label: "Sblocca il momento migliore della giornata",
-        sub: "Quando agire e cosa evitare",
+        label: t("dyanaCta.variants.B.premium.label"),
+        sub: t("dyanaCta.variants.B.premium.sub"),
       },
       ask: {
-        label: "Chiedi cosa significa per te",
-        sub: "Approfondisci un punto della lettura",
+        label: t("dyanaCta.variants.B.ask.label"),
+        sub: t("dyanaCta.variants.B.ask.sub"),
       },
     },
   };

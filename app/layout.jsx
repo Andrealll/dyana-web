@@ -57,21 +57,18 @@ export default function RootLayout({ children }) {
           `}
         </Script>
       </head>
+<body>
+  <CapacitorFlag />
+  <DeepLinkHandler />
 
-      <body>
-        <CapacitorFlag />
-        <DeepLinkHandler />
+  <ConversionTracker />
 
-        {/* Tracker conversioni globale */}
-        <ConversionTracker />
-
-<I18nProvider>
-  {children}
-</I18nProvider>
-
-        <DyanaFooter />
-        <CookieBanner />
-      </body>
+  <I18nProvider>
+    {children}
+    <DyanaFooter />
+    <CookieBanner />
+  </I18nProvider>
+</body>
     </html>
   );
 }
