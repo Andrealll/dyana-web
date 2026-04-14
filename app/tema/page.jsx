@@ -15,6 +15,8 @@ import {
   ensureGuestToken,
   fetchCreditsState,
   setResumeTarget,
+  setResumeState,
+  getResumeState,
   sendAuthMagicLink,
   updateMarketingConsent,
 } from "../../lib/authClient";
@@ -139,8 +141,7 @@ export default function TemaPage() {
 
   // Email gate inline (allineato a Oroscopo)
   const [emailGateOpen, setEmailGateOpen] = useState(false);
-  const [gateMode, setGateMode] = useState("magic");
-
+const [gateMode, setGateMode] = useState("login");
   // magic | register | login
   const [gateEmail, setGateEmail] = useState("");
   const [gatePass, setGatePass] = useState("");
@@ -261,7 +262,23 @@ export default function TemaPage() {
       await refreshCreditsUI();
     })();
   }, [refreshUserFromToken, refreshCreditsUI]);
+useEffect(() => {
+  const resume = getResumeState();
+  if (!resume) return;
+  if (resume.type !== "tema") return;
+  if (resume.step !== "free_ready") return;
 
+  if (resume.form) setForm(resume.form);
+  setOraIgnota(!!resume.oraIgnota);
+  setInterpretazione(resume.interpretazione || "");
+  setContenuto(resume.contenuto || null);
+  setRisultato(resume.risultato || null);
+  setTemaVis(resume.temaVis || null);
+  setBilling(resume.billing || null);
+  setReadingId(resume.readingId || "");
+  setReadingPayload(resume.readingPayload || null);
+  setKbTags(Array.isArray(resume.kbTags) ? resume.kbTags : []);
+}, []);
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -522,7 +539,58 @@ export default function TemaPage() {
       }
 
       applyTemaResponse(data);
-      await refreshCreditsUI();
+
+const content =
+  data?.result?.content ??
+  data?.tema_ai?.content ??
+  data?.tema_ai ??
+  data?.content ??
+  null;
+
+const profiloGenerale = (content?.profilo_generale || "").trim();
+
+const chartBase64 =
+  data?.chart_png_base64 || data?.tema_vis?.chart_png_base64 || null;
+const graficoJson = data?.tema_vis?.grafico || null;
+const metaVis =
+  (data?.tema_vis && data.tema_vis.meta) || data?.tema_meta || null;
+const pianetiVis = data?.tema_vis?.pianeti || [];
+const aspettiVis = data?.tema_vis?.aspetti || [];
+
+const temaVisSnapshot =
+  chartBase64 || graficoJson || metaVis || pianetiVis.length > 0 || aspettiVis.length > 0
+    ? {
+        chart_png_base64: chartBase64,
+        grafico: graficoJson,
+        meta: metaVis,
+        pianeti: pianetiVis,
+        aspetti: aspettiVis,
+      }
+    : null;
+
+const billingSnapshot = data?.billing || null;
+const meta = data?.payload_ai?.meta ?? content?.meta ?? {};
+const readingIdFromBackend = meta.reading_id || meta.id || `tema_${Date.now()}`;
+const kbTagsSnapshot = meta.kb_tags || meta.kb || ["tema_natale"];
+
+setResumeTarget({ path: "/tema" });
+setResumeState({
+  type: "tema",
+  step: "free_ready",
+  form,
+  oraIgnota,
+  interpretazione:
+    profiloGenerale || t("tema.messages.interpretationUnavailable"),
+  contenuto: content,
+  risultato: data?.result || null,
+  temaVis: temaVisSnapshot,
+  billing: billingSnapshot,
+  readingId: readingIdFromBackend,
+  readingPayload: data,
+  kbTags: kbTagsSnapshot,
+});
+
+await refreshCreditsUI();
     } catch (e) {
       setErrore(t("tema.errors.serverUnavailable"));
     } finally {
@@ -593,7 +661,7 @@ export default function TemaPage() {
     if (guestTrialLeft !== 0) return;
     setGateErr("");
     setGateLoading(false);
-    setGateMode(guestTrialLeft === 0 ? "magic" : "register");
+    setGateMode("login");
     setEmailGateOpen(true);
 
     const trial = guestTrialLeft;
@@ -638,60 +706,48 @@ export default function TemaPage() {
   // ======================================================
   // Submit gate
   // ======================================================
-  async function submitInlineAuth(e) {
-    e.preventDefault();
+async function submitInlineAuth(e) {
+  e.preventDefault();
 
-    setGateErr("");
-    setGateLoading(true);
+  setGateErr("");
+  setGateLoading(true);
+
+  try {
+    const email = (gateEmail || "").trim().toLowerCase();
+    if (!email || !email.includes("@")) {
+      setGateErr(t("tema.errors.invalidEmail"));
+      return;
+    }
 
     try {
-      const email = (gateEmail || "").trim().toLowerCase();
-      if (!email || !email.includes("@")) {
-        setGateErr(t("tema.errors.invalidEmail"));
+      localStorage.setItem("dyana_pending_email", email);
+    } catch {}
+
+    setResumeTarget({ path: "/tema" });
+
+    if (guestTrialLeft === 0) {
+      if (gateMode === "magic") {
+        const redirectUrl =
+          typeof window !== "undefined" && window.location?.origin
+            ? `${window.location.origin.replace(/\/+$/, "")}/auth/callback`
+            : "https://dyana.app/auth/callback";
+
+        try {
+          localStorage.removeItem(POST_LOGIN_ACTION_KEY);
+        } catch {}
+
+        await sendAuthMagicLink(email, redirectUrl);
+        setGateMsg(t("tema.messages.linkSent"));
         return;
       }
 
-      try {
-        localStorage.setItem("dyana_pending_email", email);
-      } catch {}
-
-      setResumeTarget({ path: "/tema", readingId: "tema_inline" });
-
-      if (guestTrialLeft === 0) {
-        if (gateMode === "magic") {
-          const redirectUrl =
-            typeof window !== "undefined" && window.location?.origin
-              ? `${window.location.origin.replace(/\/+$/, "")}/auth/callback`
-              : "https://dyana.app/auth/callback";
-
-          try {
-            localStorage.removeItem(POST_LOGIN_ACTION_KEY);
-          } catch {}
-
-          await sendAuthMagicLink(email, redirectUrl);
-
-          setGateMsg(t("tema.messages.linkSent"));
-          setGateLoading(false);
+      if (gateMode === "login") {
+        if (!gatePass) {
+          setGateErr(t("tema.errors.passwordRequired"));
           return;
         }
 
-        if (gateMode === "login") {
-          if (!gatePass) {
-            setGateErr(t("tema.errors.passwordRequired"));
-            return;
-          }
-          await loginWithCredentials(email, gatePass);
-        } else {
-          if (!gatePass || gatePass.length < 6) {
-            setGateErr(t("tema.errors.passwordMinLength"));
-            return;
-          }
-          if (gatePass !== gatePass2) {
-            setGateErr(t("tema.errors.passwordsMismatch"));
-            return;
-          }
-          await registerWithEmail(email, gatePass);
-        }
+        await loginWithCredentials(email, gatePass);
 
         try {
           localStorage.removeItem(POST_LOGIN_ACTION_KEY);
@@ -701,58 +757,89 @@ export default function TemaPage() {
         await refreshCreditsUI();
 
         setEmailGateOpen(false);
-        setGateMsg(t("tema.messages.loginCompletedContinue"));
-        setGateLoading(false);
+        setGateErr("");
+        setGateMsg("");
         return;
       }
 
-      setGateMsg(t("tema.messages.generatingTema"));
-
-      const siteBase = (
-        process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
-      ).replace(/\/+$/, "");
-      const redirectUrl = `${siteBase}/auth/callback`;
-
-      try {
-        const userToken = getToken();
-        if (userToken) {
-          const payload = decodeJwtPayload(userToken);
-          const role = (payload?.role || "").toLowerCase();
-          const sub = payload?.sub || "";
-          const isUuid =
-            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-              sub
-            );
-
-          if (role !== "guest" && isUuid) {
-            await updateMarketingConsent(userToken, !!gateMarketing);
-          }
+      if (gateMode === "register") {
+        if (!gatePass || gatePass.length < 6) {
+          setGateErr(t("tema.errors.passwordMinLength"));
+          return;
         }
-      } catch (err) {
-        console.warn(
-          "[TEMA][INLINE-AUTH] updateMarketingConsent fallito (non blocco):",
-          err?.message || err
-        );
+
+        if (gatePass !== gatePass2) {
+          setGateErr(t("tema.errors.passwordsMismatch"));
+          return;
+        }
+
+        await registerWithEmail(email, gatePass);
+        await loginWithCredentials(email, gatePass);
+
+        try {
+          localStorage.removeItem(POST_LOGIN_ACTION_KEY);
+        } catch {}
+
+        refreshUserFromToken();
+        await refreshCreditsUI();
+
+        setEmailGateOpen(false);
+        setGateErr("");
+        setGateMsg("");
+        return;
       }
 
-      try {
-        await sendAuthMagicLink(email, redirectUrl);
-      } catch (err) {
-        console.warn(
-          "[TEMA][INLINE-AUTH] magic link non inviato (non blocco):",
-          err?.message || err
-        );
-      }
-
-      await generaPremium();
-      await refreshCreditsUI();
+      setGateErr(t("tema.errors.genericActionFailed"));
       return;
-    } catch (err) {
-      setGateErr(err?.message || t("tema.errors.genericActionFailed"));
-    } finally {
-      setGateLoading(false);
     }
+
+    setGateMsg(t("tema.messages.generatingTema"));
+
+    const siteBase = (
+      process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+    ).replace(/\/+$/, "");
+    const redirectUrl = `${siteBase}/auth/callback`;
+
+    try {
+      const userToken = getToken();
+      if (userToken) {
+        const payload = decodeJwtPayload(userToken);
+        const role = (payload?.role || "").toLowerCase();
+        const sub = payload?.sub || "";
+        const isUuid =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+            sub
+          );
+
+        if (role !== "guest" && isUuid) {
+          await updateMarketingConsent(userToken, !!gateMarketing);
+        }
+      }
+    } catch (err) {
+      console.warn(
+        "[TEMA][INLINE-AUTH] updateMarketingConsent fallito (non blocco):",
+        err?.message || err
+      );
+    }
+
+    try {
+      await sendAuthMagicLink(email, redirectUrl);
+    } catch (err) {
+      console.warn(
+        "[TEMA][INLINE-AUTH] magic link non inviato (non blocco):",
+        err?.message || err
+      );
+    }
+
+    await generaPremium();
+    await refreshCreditsUI();
+    return;
+  } catch (err) {
+    setGateErr(err?.message || t("tema.errors.genericActionFailed"));
+  } finally {
+    setGateLoading(false);
   }
+}
 
 // ==========================
 // URL Typebot
@@ -1258,29 +1345,29 @@ const typebotUrl = useMemo(() => {
                   <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
                     {guestTrialLeft === 0 && (
                       <>
-                        <button
-                          type="button"
-                          className={gateMode === "magic" ? "btn btn-primary" : "btn"}
-                          onClick={() => setGateMode("magic")}
-                        >
-                          {t("tema.cta.emailLink")}
-                        </button>
+<button
+  type="button"
+  className={gateMode === "login" ? "btn btn-primary" : "btn"}
+  onClick={() => setGateMode("login")}
+>
+  {t("tema.gate.login")}
+</button>
 
-                        <button
-                          type="button"
-                          className={gateMode === "register" ? "btn btn-primary" : "btn"}
-                          onClick={() => setGateMode("register")}
-                        >
-                          {t("tema.gate.register")}
-                        </button>
+<button
+  type="button"
+  className={gateMode === "register" ? "btn btn-primary" : "btn"}
+  onClick={() => setGateMode("register")}
+>
+  {t("tema.gate.register")}
+</button>
 
-                        <button
-                          type="button"
-                          className={gateMode === "login" ? "btn btn-primary" : "btn"}
-                          onClick={() => setGateMode("login")}
-                        >
-                          {t("tema.gate.login")}
-                        </button>
+<button
+  type="button"
+  className={gateMode === "magic" ? "btn btn-primary" : "btn"}
+  onClick={() => setGateMode("magic")}
+>
+  {t("tema.gate.magicLink")}
+</button>
                       </>
                     )}
 
@@ -1383,19 +1470,18 @@ const typebotUrl = useMemo(() => {
                       className="btn btn-primary"
                       disabled={gateLoading || loading}
                     >
-                      {gateLoading
-                        ? guestTrialLeft === 0 && gateMode === "magic"
-                          ? t("tema.cta.sendLink")
-                          : t("tema.cta.completing")
-                        : guestTrialLeft === 0
-                        ? gateMode === "magic"
-                          ? t("tema.cta.openEmailAndContinue")
-                          : gateMode === "login"
-                          ? t("tema.cta.loginAndContinue")
-                          : t("tema.cta.registerAndContinue")
-                        : t("tema.gate.continue")}
-                    </button>
-
+{gateLoading
+  ? gateMode === "magic"
+    ? t("tema.cta.sendLink")
+    : t("tema.cta.completing")
+  : guestTrialLeft === 0
+  ? gateMode === "login"
+    ? t("tema.cta.loginAndContinue")
+    : gateMode === "register"
+    ? t("tema.cta.registerAndContinue")
+    : t("tema.cta.sendLink")
+  : t("tema.gate.continue")}
+</button>
                     {gateErr && (
                       <p className="card-text" style={{ color: "#ff9a9a" }}>
                         {gateErr}

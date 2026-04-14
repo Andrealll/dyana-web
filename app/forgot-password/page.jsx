@@ -3,9 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import DyanaNavbar from "../../components/DyanaNavbar";
+import { useI18n } from "../../lib/i18n/useI18n";
 import { sendPasswordResetEmail } from "../../lib/authClient";
 
 export default function ForgotPasswordPage() {
+  const { t } = useI18n();
+
   const [email, setEmail] = useState("");
   const [errore, setErrore] = useState("");
   const [success, setSuccess] = useState("");
@@ -17,21 +20,18 @@ export default function ForgotPasswordPage() {
     setSuccess("");
 
     if (!email) {
-      setErrore("Inserisci la tua email.");
+      setErrore(t("forgotPassword.errors.emailRequired"));
       return;
     }
 
     setLoading(true);
     try {
       await sendPasswordResetEmail(email);
-      setSuccess(
-        "Se esiste un account associato a questa email, riceverai un link per reimpostare la password."
-      );
+      setSuccess(t("forgotPassword.success.emailSent"));
     } catch (err) {
       console.error("[FORGOT-PASS] errore:", err);
       setErrore(
-        err.message ||
-          "Errore durante l'invio dell'email di reset. Riprova più tardi."
+        err.message || t("forgotPassword.errors.sendFailed")
       );
     } finally {
       setLoading(false);
@@ -40,15 +40,13 @@ export default function ForgotPasswordPage() {
 
   return (
     <main className="page-root">
-      {/* Navbar: ora si auto-gestisce (email + crediti se loggato) */}
       <DyanaNavbar />
 
       <section className="landing-wrapper">
         <header className="section">
-          <h1 className="section-title">Hai dimenticato la password?</h1>
+          <h1 className="section-title">{t("forgotPassword.title")}</h1>
           <p className="section-subtitle">
-            Inserisci la tua email: se esiste un account DYANA, riceverai un link
-            per impostare una nuova password.
+            {t("forgotPassword.subtitle")}
           </p>
         </header>
 
@@ -87,14 +85,17 @@ export default function ForgotPasswordPage() {
                 marginTop: 8,
               }}
             >
-              <label className="card-text">Email</label>
+              <label className="card-text">
+                {t("forgotPassword.form.emailLabel")}
+              </label>
               <input
                 className="form-input"
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="nome@esempio.com"
+                placeholder={t("forgotPassword.form.emailPlaceholder")}
+                disabled={loading}
               />
 
               <button
@@ -103,7 +104,9 @@ export default function ForgotPasswordPage() {
                 disabled={loading}
                 style={{ marginTop: 4 }}
               >
-                {loading ? "Invio in corso..." : "Invia link di reset"}
+                {loading
+                  ? t("forgotPassword.form.loading")
+                  : t("forgotPassword.form.submit")}
               </button>
             </form>
 
@@ -115,9 +118,9 @@ export default function ForgotPasswordPage() {
                 marginTop: 12,
               }}
             >
-              Hai già reimpostato la password?{" "}
+              {t("forgotPassword.footer.prefix")}{" "}
               <Link href="/login" className="nav-link">
-                Torna al login
+                {t("forgotPassword.footer.backToLogin")}
               </Link>
               .
             </p>

@@ -140,11 +140,10 @@ export default function WelcomeClient() {
         {mode === "back" && (
           <button
             className="btn btn-primary"
-            onClick={() => {
-              const target = buildResumeUrl("/");
-              clearResume();
-              router.replace(target);
-            }}
+           onClick={() => {
+  const target = buildResumeUrl("/");
+  router.replace(target);
+}}
           >
             {t("auth.welcome.ctaContinue")}
           </button>

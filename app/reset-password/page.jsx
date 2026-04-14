@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import DyanaNavbar from "../../components/DyanaNavbar"; 
+import DyanaNavbar from "../../components/DyanaNavbar";
 import { createClient } from "@supabase/supabase-js";
+import { useI18n } from "../../lib/i18n/useI18n";
 
 // ==========================
 // SUPABASE CLIENT
@@ -17,6 +18,8 @@ const supabase =
     : null;
 
 export default function ResetPasswordPage() {
+  const { t } = useI18n();
+
   // UI state
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
@@ -34,12 +37,12 @@ export default function ResetPasswordPage() {
   const [linkOk, setLinkOk] = useState(true);
 
   // ==========================
-  // 🚀 On mount: estrai access_token dall’URL
+  // On mount: estrai access_token dall’URL
   // ==========================
   useEffect(() => {
     if (!supabase) {
       setErrore(
-        "Reset password non configurato (manca NEXT_PUBLIC_SUPABASE_URL o ANON_KEY)."
+        t("resetPassword.errors.notConfigured")
       );
       setLinkOk(false);
       return;
@@ -50,17 +53,17 @@ export default function ResetPasswordPage() {
 
     if (!token) {
       setErrore(
-        "Questo link di reset non è più valido o non contiene un token. Richiedi un nuovo link dalla pagina di login."
+        t("resetPassword.errors.invalidLink")
       );
       setLinkOk(false);
       return;
     }
 
     setAccessToken(token);
-  }, []);
+  }, [t]);
 
   // ==========================
-  // 🔐 Submit nuova password
+  // Submit nuova password
   // ==========================
   async function handleSubmit(e) {
     e.preventDefault();
@@ -69,58 +72,56 @@ export default function ResetPasswordPage() {
 
     if (!supabase) {
       setErrore(
-        "Reset password non configurato (manca NEXT_PUBLIC_SUPABASE_URL o ANON_KEY)."
+        t("resetPassword.errors.notConfigured")
       );
       return;
     }
 
     if (!accessToken) {
       setErrore(
-        "Token non valido. Richiedi un nuovo link dalla pagina di login."
+        t("resetPassword.errors.invalidToken")
       );
       return;
     }
 
     if (!password || !password2) {
-      setErrore("Inserisci e conferma la nuova password.");
+      setErrore(t("resetPassword.errors.passwordRequired"));
       return;
     }
 
     if (password !== password2) {
-      setErrore("Le password non coincidono.");
+      setErrore(t("resetPassword.errors.passwordMismatch"));
       return;
     }
 
     if (password.length < 8) {
-      setErrore("La password deve avere almeno 8 caratteri.");
+      setErrore(t("resetPassword.errors.passwordMin"));
       return;
     }
 
     setLoading(true);
     try {
-      // 🚀 RESET PASSWORD SUPABASE (token nel Bearer)
       const { error } = await supabase.auth.updateUser(
         { password },
         {
-          accessToken: accessToken, // <- token estratto dal link email
+          accessToken: accessToken,
         }
       );
 
       if (error) {
         console.error("[RESET] Errore updateUser:", error);
         setErrore(
-          error.message ||
-            "Errore durante l'aggiornamento della password. Richiedi un nuovo link."
+          error.message || t("resetPassword.errors.updateFailed")
         );
         return;
       }
 
       setSuccess(
-        "Password aggiornata con successo! Ora puoi tornare al login DYANA ed accedere."
+        t("resetPassword.success.updated")
       );
     } catch (err) {
       console.error("[RESET] Errore inatteso:", err);
-      setErrore("Errore inatteso durante il reset. Riprova più tardi.");
+      setErrore(t("resetPassword.errors.unexpected"));
     } finally {
       setLoading(false);
     }
@@ -135,9 +136,9 @@ export default function ResetPasswordPage() {
 
       <section className="landing-wrapper">
         <header className="section">
-          <h1 className="section-title">Imposta una nuova password</h1>
+          <h1 className="section-title">{t("resetPassword.title")}</h1>
           <p className="section-subtitle">
-            Stai completando il reset della password per il tuo account DYANA.
+            {t("resetPassword.subtitle")}
           </p>
         </header>
 
@@ -152,11 +153,10 @@ export default function ResetPasswordPage() {
             {!linkOk ? (
               <>
                 <p className="card-text" style={{ marginBottom: 12 }}>
-                  {errore ||
-                    "Questo link non è valido. Richiedi un nuovo link dalla pagina di login."}
+                  {errore || t("resetPassword.errors.invalidLinkFallback")}
                 </p>
                 <Link href="/login" className="btn btn-primary">
-                  Torna al login
+                  {t("resetPassword.cta.backToLogin")}
                 </Link>
               </>
             ) : (
@@ -165,8 +165,7 @@ export default function ResetPasswordPage() {
                   className="card-text"
                   style={{ fontSize: "0.9rem", opacity: 0.8 }}
                 >
-                  Scegli una nuova password per il tuo account. Dopo averla
-                  aggiornata, torna alla pagina di login DYANA e accedi normalmente.
+                  {t("resetPassword.description")}
                 </p>
 
                 <form
@@ -179,25 +178,29 @@ export default function ResetPasswordPage() {
                   }}
                 >
                   <div>
-                    <label className="card-text">Nuova password</label>
+                    <label className="card-text">
+                      {t("resetPassword.form.passwordLabel")}
+                    </label>
                     <input
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="form-input"
-                      placeholder="Nuova password"
+                      placeholder={t("resetPassword.form.passwordPlaceholder")}
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="card-text">Conferma nuova password</label>
+                    <label className="card-text">
+                      {t("resetPassword.form.repeatPasswordLabel")}
+                    </label>
                     <input
                       type="password"
                       value={password2}
                       onChange={(e) => setPassword2(e.target.value)}
                       className="form-input"
-                      placeholder="Ripeti la password"
+                      placeholder={t("resetPassword.form.repeatPasswordPlaceholder")}
                       required
                     />
                   </div>
@@ -208,7 +211,9 @@ export default function ResetPasswordPage() {
                     disabled={loading}
                     style={{ marginTop: 8 }}
                   >
-                    {loading ? "Aggiornamento..." : "Aggiorna password"}
+                    {loading
+                      ? t("resetPassword.form.loading")
+                      : t("resetPassword.form.submit")}
                   </button>
                 </form>
 
@@ -244,9 +249,9 @@ export default function ResetPasswordPage() {
                     marginTop: 12,
                   }}
                 >
-                  Quando hai finito, puoi tornare al{" "}
+                  {t("resetPassword.footer.prefix")}{" "}
                   <Link href="/login" className="nav-link">
-                    login DYANA
+                    {t("resetPassword.footer.loginLink")}
                   </Link>
                   .
                 </p>

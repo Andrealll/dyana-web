@@ -1005,7 +1005,7 @@ export default function OroscopoPage() {
 
   // Email gate inline
   const [emailGateOpen, setEmailGateOpen] = useState(false);
-  const [gateMode, setGateMode] = useState("magic"); // magic | register | login
+  const [gateMode, setGateMode] = useState("login"); // magic | register | login
   const [gateEmail, setGateEmail] = useState("");
   const [gatePass, setGatePass] = useState("");
   const [gatePass2, setGatePass2] = useState("");
@@ -1372,7 +1372,7 @@ const payload = {
   function openEmailGate() {
     setGateErr("");
     setGateLoading(false);
-    setGateMode("magic");
+    setGateMode("login");
     setEmailGateOpen(true);
 
     const trial = guestTrialLeft;
@@ -1421,64 +1421,97 @@ const payload = {
         localStorage.setItem("dyana_pending_email", email);
       } catch {}
 
-      setResumeTarget({ path: "/oroscopo", readingId: "oroscopo_inline" });
+setResumeTarget({ path: "/oroscopo" });
 
       const redirectUrl =
         typeof window !== "undefined" && window.location?.origin
           ? `${window.location.origin.replace(/\/+$/, "")}/auth/callback`
           : "https://dyana.app/auth/callback";
 
-      if (guestTrialLeft === 0) {
-        if (gateMode === "magic") {
-          setGateMsg(t("horoscope.gate.magicSent"));
-          try {
-            localStorage.setItem(POST_LOGIN_ACTION_KEY, "oroscopo_premium");
-          } catch {}
-          await sendAuthMagicLink(email, redirectUrl);
+if (guestTrialLeft === 0) {
+  if (gateMode === "magic") {
+    setGateMsg(t("horoscope.gate.magicSent"));
 
-          setAuthBanner({
-            variant: "info",
-            title: t("horoscope.banner.checkEmailTitle"),
-            text: t("horoscope.banner.checkEmailText"),
-            actionLabel: null,
-            action: null,
-          });
+    try {
+      localStorage.setItem(POST_LOGIN_ACTION_KEY, "oroscopo_premium");
+    } catch {}
 
-          return;
-        }
+    await sendAuthMagicLink(email, redirectUrl);
 
-        if (gateMode === "login") {
-          if (!gatePass) {
-            setGateErr(t("horoscope.errors.passwordRequired"));
-            return;
-          }
-          await loginWithCredentials(email, gatePass);
-        } else {
-          if (!gatePass || gatePass.length < 6) {
-            setGateErr(t("horoscope.errors.passwordMin"));
-            return;
-          }
-          if (gatePass !== gatePass2) {
-            setGateErr(t("horoscope.errors.passwordMismatch"));
-            return;
-          }
-          await registerWithEmail(email, gatePass);
-        }
+    setAuthBanner({
+      variant: "info",
+      title: t("horoscope.banner.checkEmailTitle"),
+      text: t("horoscope.banner.checkEmailText"),
+      actionLabel: null,
+      action: null,
+    });
 
-        refreshUserFromToken();
-        await refreshCreditsUI();
+    return;
+  }
 
-        setAuthBanner({
-          variant: "success",
-          title: t("horoscope.banner.authCompletedTitle"),
-          text: t("horoscope.banner.generatingPremiumText"),
-          actionLabel: null,
-          action: null,
-        });
+  if (gateMode === "login") {
+    if (!gatePass) {
+      setGateErr(t("horoscope.errors.passwordRequired"));
+      return;
+    }
 
-        await generaPremium();
-        return;
-      }
+    await loginWithCredentials(email, gatePass);
+
+    refreshUserFromToken();
+    await refreshCreditsUI();
+
+    setEmailGateOpen(false);
+    setGateErr("");
+    setGateMsg("");
+
+    setAuthBanner({
+      variant: "success",
+      title: t("horoscope.banner.authCompletedTitle"),
+      text: t("horoscope.banner.generatingPremiumText"),
+      actionLabel: null,
+      action: null,
+    });
+
+    await generaPremium();
+    return;
+  }
+
+  if (gateMode === "register") {
+    if (!gatePass || gatePass.length < 6) {
+      setGateErr(t("horoscope.errors.passwordMin"));
+      return;
+    }
+
+    if (gatePass !== gatePass2) {
+      setGateErr(t("horoscope.errors.passwordMismatch"));
+      return;
+    }
+
+    await registerWithEmail(email, gatePass);
+    await loginWithCredentials(email, gatePass);
+
+    refreshUserFromToken();
+    await refreshCreditsUI();
+
+    setEmailGateOpen(false);
+    setGateErr("");
+    setGateMsg("");
+
+    setAuthBanner({
+      variant: "success",
+      title: t("horoscope.banner.authCompletedTitle"),
+      text: t("horoscope.banner.generatingPremiumText"),
+      actionLabel: null,
+      action: null,
+    });
+
+    await generaPremium();
+    return;
+  }
+
+  setGateErr(t("horoscope.errors.genericActionFailed"));
+  return;
+}
 
       setGateMsg(t("horoscope.gate.generating"));
 
@@ -2006,34 +2039,34 @@ const typebotUrl = useMemo(() => {
 
                   <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
                     {guestTrialLeft === 0 && (
-                      <>
-                        <button
-                          type="button"
-                          className={gateMode === "magic" ? "btn btn-primary" : "btn"}
-                          onClick={() => setGateMode("magic")}
-                          disabled={primaryBusy}
-                        >
-                          {t("horoscope.gate.emailLink")}
-                        </button>
+<>
+  <button
+    type="button"
+    className={gateMode === "login" ? "btn btn-primary" : "btn"}
+    onClick={() => setGateMode("login")}
+    disabled={primaryBusy}
+  >
+    {t("horoscope.gate.login")}
+  </button>
 
-                        <button
-                          type="button"
-                          className={gateMode === "register" ? "btn btn-primary" : "btn"}
-                          onClick={() => setGateMode("register")}
-                          disabled={primaryBusy}
-                        >
-                          {t("horoscope.gate.register")}
-                        </button>
+  <button
+    type="button"
+    className={gateMode === "register" ? "btn btn-primary" : "btn"}
+    onClick={() => setGateMode("register")}
+    disabled={primaryBusy}
+  >
+    {t("horoscope.gate.register")}
+  </button>
 
-                        <button
-                          type="button"
-                          className={gateMode === "login" ? "btn btn-primary" : "btn"}
-                          onClick={() => setGateMode("login")}
-                          disabled={primaryBusy}
-                        >
-                          {t("horoscope.gate.login")}
-                        </button>
-                      </>
+  <button
+    type="button"
+    className={gateMode === "magic" ? "btn btn-primary" : "btn"}
+    onClick={() => setGateMode("magic")}
+    disabled={primaryBusy}
+  >
+    {t("horoscope.gate.emailLink")}
+  </button>
+</>
                     )}
 
                     <button

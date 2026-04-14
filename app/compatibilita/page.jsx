@@ -242,7 +242,7 @@ export default function CompatibilitaPage() {
 
   // Email gate inline
   const [emailGateOpen, setEmailGateOpen] = useState(false);
-  const [gateMode, setGateMode] = useState("magic"); // magic | register | login
+  const [gateMode, setGateMode] = useState("login"); // magic | register | login
   const [gateEmail, setGateEmail] = useState("");
   const [gatePass, setGatePass] = useState("");
   const [gatePass2, setGatePass2] = useState("");
@@ -601,7 +601,7 @@ const payload = {
     setGateLoading(false);
 
     // default: magic link preselezionato
-    setGateMode("magic");
+    setGateMode("login");
     setEmailGateOpen(true);
 
     setGateMsg(t("compatibility.gate.continueMessage"));
@@ -676,61 +676,60 @@ const payload = {
       // TRIAL ESAURITO → MAGIC LINK / LOGIN / REGISTER
       // --------------------------------------------------
       if (guestTrialLeft === 0) {
-        // MAGIC LINK
-        if (gateMode === "magic") {
-          try {
-            await sendAuthMagicLink(email, redirectUrl);
-            setGateMsg(t("compatibility.gate.magicLinkSent"));
-          } catch (err) {
-            console.warn(
-              "[COMPAT][INLINE-AUTH] magic link FAIL:",
-              err?.message || err
-            );
-            setGateErr(t("compatibility.errors.magicLinkFailed"));
-          } finally {
-            setGateLoading(false);
-          }
-          return; // non generare premium
-        }
+  // MAGIC LINK
+  if (gateMode === "magic") {
+    try {
+      await sendAuthMagicLink(email, redirectUrl);
+      setGateMsg(t("compatibility.gate.magicLinkSent"));
+    } catch (err) {
+      console.warn(
+        "[COMPAT][INLINE-AUTH] magic link FAIL:",
+        err?.message || err
+      );
+      setGateErr(t("compatibility.errors.magicLinkFailed"));
+    } finally {
+      setGateLoading(false);
+    }
+    return; // non generare premium
+  }
 
-        // LOGIN / REGISTER con password
-        if (gateMode === "login") {
-          if (!gatePass) {
-            setGateErr(t("compatibility.errors.passwordRequired"));
-            return;
-          }
-          await loginWithCredentials(email, gatePass);
-        } else {
-          if (!gatePass || gatePass.length < 6) {
-            setGateErr(t("compatibility.errors.passwordMin"));
-            return;
-          }
-          if (gatePass !== gatePass2) {
-            setGateErr(t("compatibility.errors.passwordMismatch"));
-            return;
-          }
-          await registerWithEmail(email, gatePass);
-        }
+  // LOGIN / REGISTER con password
+  if (gateMode === "login") {
+    if (!gatePass) {
+      setGateErr(t("compatibility.errors.passwordRequired"));
+      return;
+    }
+    await loginWithCredentials(email, gatePass);
+  } else {
+    if (!gatePass || gatePass.length < 6) {
+      setGateErr(t("compatibility.errors.passwordMin"));
+      return;
+    }
+    if (gatePass !== gatePass2) {
+      setGateErr(t("compatibility.errors.passwordMismatch"));
+      return;
+    }
+    await registerWithEmail(email, gatePass);
+  }
 
-        refreshUserFromToken();
-        await refreshCreditsUI();
+  refreshUserFromToken();
+  await refreshCreditsUI();
 
-        // UX: avvia premium con feedback chiaro
-        setPremiumCtaLoading(true);
-        setSlowLoading(false);
-        const slowTimer = setTimeout(() => setSlowLoading(true), 12000);
+  // UX: avvia premium con feedback chiaro
+  setPremiumCtaLoading(true);
+  setSlowLoading(false);
+  const slowTimer = setTimeout(() => setSlowLoading(true), 12000);
 
-        try {
-          await generaPremium();
-        } finally {
-          clearTimeout(slowTimer);
-          setPremiumCtaLoading(false);
-          setSlowLoading(false);
-        }
+  try {
+    await generaPremium();
+  } finally {
+    clearTimeout(slowTimer);
+    setPremiumCtaLoading(false);
+    setSlowLoading(false);
+  }
 
-        return;
-      }
-
+  return;
+}
       // --------------------------------------------------
       // TRIAL DISPONIBILE → premium subito + invio link best-effort
       // --------------------------------------------------
@@ -1498,34 +1497,34 @@ const typebotUrl = useMemo(() => {
                         {gateMsg}
                       </p>
 
-                      <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                        {guestTrialLeft === 0 && (
-                          <>
-                            <button
-                              type="button"
-                              className={gateMode === "magic" ? "btn btn-primary" : "btn"}
-                              onClick={() => setGateMode("magic")}
-                            >
-                              {t("compatibility.gate.emailLink")}
-                            </button>
+<div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
+  {guestTrialLeft === 0 && (
+    <>
+      <button
+        type="button"
+        className={gateMode === "login" ? "btn btn-primary" : "btn"}
+        onClick={() => setGateMode("login")}
+      >
+        {t("compatibility.gate.login")}
+      </button>
 
-                            <button
-                              type="button"
-                              className={gateMode === "register" ? "btn btn-primary" : "btn"}
-                              onClick={() => setGateMode("register")}
-                            >
-                              {t("compatibility.gate.register")}
-                            </button>
+      <button
+        type="button"
+        className={gateMode === "register" ? "btn btn-primary" : "btn"}
+        onClick={() => setGateMode("register")}
+      >
+        {t("compatibility.gate.register")}
+      </button>
 
-                            <button
-                              type="button"
-                              className={gateMode === "login" ? "btn btn-primary" : "btn"}
-                              onClick={() => setGateMode("login")}
-                            >
-                              {t("compatibility.gate.login")}
-                            </button>
-                          </>
-                        )}
+      <button
+        type="button"
+        className={gateMode === "magic" ? "btn btn-primary" : "btn"}
+        onClick={() => setGateMode("magic")}
+      >
+        {t("compatibility.gate.emailLink")}
+      </button>
+    </>
+  )}
 
                         <button
                           type="button"
