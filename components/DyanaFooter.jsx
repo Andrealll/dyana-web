@@ -27,7 +27,7 @@ export default function DyanaFooter() {
           </a>
         </div>
 
-        <a href="/oroscopo2026" className="footer-link">
+        <a href="/en" className="footer-link">
           {t("footer.oroscope2026")}
         </a>
       </div>
