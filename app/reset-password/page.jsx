@@ -20,7 +20,6 @@ const supabase =
 export default function ResetPasswordPage() {
   const { t } = useI18n();
 
-  // UI state
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
 
@@ -28,38 +27,38 @@ export default function ResetPasswordPage() {
   const [errore, setErrore] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Navbar (guest)
   const [userRole] = useState("guest");
   const [userCredits] = useState(0);
 
-  // Access token dal link email
   const [accessToken, setAccessToken] = useState(null);
+  const [refreshToken, setRefreshToken] = useState(null);
   const [linkOk, setLinkOk] = useState(true);
 
   // ==========================
-  // On mount: estrai access_token dall’URL
+  // On mount: estrai token dall’URL
   // ==========================
   useEffect(() => {
     if (!supabase) {
-      setErrore(
-        t("resetPassword.errors.notConfigured")
-      );
+      setErrore(t("resetPassword.errors.notConfigured"));
       setLinkOk(false);
       return;
     }
 
-    const hash = window.location.hash;
-    const token = new URLSearchParams(hash.replace("#", "")).get("access_token");
+    const hash = window.location.hash || "";
+    const params = new URLSearchParams(hash.replace("#", ""));
 
-    if (!token) {
-      setErrore(
-        t("resetPassword.errors.invalidLink")
-      );
+    const access = params.get("access_token");
+    const refresh = params.get("refresh_token");
+    const type = params.get("type");
+
+    if (!access || !refresh || type !== "recovery") {
+      setErrore(t("resetPassword.errors.invalidLink"));
       setLinkOk(false);
       return;
     }
 
-    setAccessToken(token);
+    setAccessToken(access);
+    setRefreshToken(refresh);
   }, [t]);
 
   // ==========================
@@ -71,16 +70,12 @@ export default function ResetPasswordPage() {
     setSuccess("");
 
     if (!supabase) {
-      setErrore(
-        t("resetPassword.errors.notConfigured")
-      );
+      setErrore(t("resetPassword.errors.notConfigured"));
       return;
     }
 
-    if (!accessToken) {
-      setErrore(
-        t("resetPassword.errors.invalidToken")
-      );
+    if (!accessToken || !refreshToken) {
+      setErrore(t("resetPassword.errors.invalidToken"));
       return;
     }
 
@@ -100,25 +95,39 @@ export default function ResetPasswordPage() {
     }
 
     setLoading(true);
-    try {
-      const { error } = await supabase.auth.updateUser(
-        { password },
-        {
-          accessToken: accessToken,
-        }
-      );
 
-      if (error) {
-        console.error("[RESET] Errore updateUser:", error);
+    try {
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+
+      if (sessionError) {
+        console.error("[RESET] Errore setSession:", sessionError);
         setErrore(
-          error.message || t("resetPassword.errors.updateFailed")
+          sessionError.message || t("resetPassword.errors.invalidToken")
         );
         return;
       }
 
-      setSuccess(
-        t("resetPassword.success.updated")
-      );
+      const { error: updateError } = await supabase.auth.updateUser({
+        password,
+      });
+
+      if (updateError) {
+        console.error("[RESET] Errore updateUser:", updateError);
+        setErrore(
+          updateError.message || t("resetPassword.errors.updateFailed")
+        );
+        return;
+      }
+
+      setSuccess(t("resetPassword.success.updated"));
+
+      // pulizia URL
+      if (typeof window !== "undefined") {
+        window.history.replaceState({}, document.title, "/reset-password");
+      }
     } catch (err) {
       console.error("[RESET] Errore inatteso:", err);
       setErrore(t("resetPassword.errors.unexpected"));
