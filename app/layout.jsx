@@ -45,6 +45,14 @@ export default function RootLayout({ children }) {
             window.gtag = gtag;
             gtag('js', new Date());
 
+            // Consent Mode default: tutto negato finché l'utente non sceglie
+            gtag('consent', 'default', {
+              ad_storage: 'denied',
+              analytics_storage: 'denied',
+              ad_user_data: 'denied',
+              ad_personalization: 'denied'
+            });
+
             // GA4
             gtag('config', '${GA4_ID}', {
               send_page_view: true
@@ -57,18 +65,18 @@ export default function RootLayout({ children }) {
           `}
         </Script>
       </head>
-<body>
-  <CapacitorFlag />
-  <DeepLinkHandler />
+      <body>
+        <CapacitorFlag />
+        <DeepLinkHandler />
 
-  <ConversionTracker />
+        <ConversionTracker />
 
-  <I18nProvider>
-    {children}
-    <DyanaFooter />
-    <CookieBanner />
-  </I18nProvider>
-</body>
+        <I18nProvider>
+          {children}
+          <DyanaFooter />
+          <CookieBanner />
+        </I18nProvider>
+      </body>
     </html>
   );
 }

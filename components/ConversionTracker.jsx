@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 const STORAGE_KEY = "dyana_pending_events";
+const COOKIE_CONSENT_KEY = "dyana_cookie_accepted";
 
 // Whitelist: evita eventi arbitrari
 const ALLOWED_EVENTS = new Set([
@@ -44,6 +45,14 @@ function isGtagReady() {
   return typeof window !== "undefined" && typeof window.gtag === "function";
 }
 
+function hasAcceptedConsent() {
+  try {
+    return localStorage.getItem(COOKIE_CONSENT_KEY) === "accepted";
+  } catch {
+    return false;
+  }
+}
+
 function flushQueue() {
   const queue = readQueue();
   if (!queue.length) return;
@@ -58,16 +67,19 @@ function flushQueue() {
     oroscopo_completed: { label: "m68QCOzChfgbELboiKZC", value: 5.0 },
   };
 
+  const consentAccepted = hasAcceptedConsent();
+
   for (const item of queue) {
     const name = item?.name;
     if (!name || !ALLOWED_EVENTS.has(name)) continue;
 
     // 1) GA4 custom event
+    // Lo lasciamo attivo; il Consent Mode gestisce comunque l'utilizzo dei dati lato Google
     window.gtag("event", name, item.params || {});
 
-    // 2) Google Ads conversion
+    // 2) Google Ads conversion SOLO se consenso accettato
     const cfg = ADS_CONFIG[name];
-    if (cfg) {
+    if (cfg && consentAccepted) {
       window.gtag("event", "conversion", {
         send_to: `${ADS_ID}/${cfg.label}`,
         value: cfg.value,

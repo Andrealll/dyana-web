@@ -5,6 +5,30 @@ import { useI18n } from "../lib/i18n/useI18n";
 
 const STORAGE_KEY = "dyana_cookie_accepted"; // "accepted" | "rejected"
 
+// ==========================
+// CONSENT HELPER
+// ==========================
+function updateConsent(consent) {
+  try {
+    if (typeof window === "undefined" || typeof window.gtag !== "function") {
+      console.warn("[CookieBanner] gtag non disponibile");
+      return;
+    }
+
+    window.gtag("consent", "update", {
+      ad_storage: consent,
+      analytics_storage: consent,
+      ad_user_data: consent,
+      ad_personalization: consent,
+    });
+  } catch (e) {
+    console.warn("[CookieBanner] errore update consent", e);
+  }
+}
+
+// ==========================
+// COMPONENT
+// ==========================
 export default function CookieBanner() {
   const { t } = useI18n();
 
@@ -13,10 +37,16 @@ export default function CookieBanner() {
 
   useEffect(() => {
     setMounted(true);
+
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored === "accepted" || stored === "rejected") {
-        setStatus(stored);
+
+      if (stored === "accepted") {
+        setStatus("accepted");
+        updateConsent("granted"); // restore consenso
+      } else if (stored === "rejected") {
+        setStatus("rejected");
+        updateConsent("denied"); // restore consenso
       }
     } catch (e) {
       console.warn("[CookieBanner] localStorage non disponibile", e);
@@ -33,6 +63,8 @@ export default function CookieBanner() {
     } catch (e) {
       console.warn("[CookieBanner] errore salvataggio localStorage (accept)", e);
     }
+
+    updateConsent("granted");
     setStatus("accepted");
   };
 
@@ -42,6 +74,8 @@ export default function CookieBanner() {
     } catch (e) {
       console.warn("[CookieBanner] errore salvataggio localStorage (reject)", e);
     }
+
+    updateConsent("denied");
     setStatus("rejected");
   };
 
