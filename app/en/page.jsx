@@ -1,10 +1,14 @@
 import Image from "next/image";
 import DyanaNavbar from "../../components/DyanaNavbar";
+import ForceEnglishLocale from "../../components/ForceEnglishLocale";
 
 export const metadata = {
   title: "Personalized Astrology Reading | DYANA",
   description:
-    "Stop generic horoscopes. Get a real personalized astrology reading based on your data.",
+    "Stop generic horoscopes. Get a personalized astrology reading based on your real birth data with DYANA.",
+  alternates: {
+    canonical: "/en",
+  },
 };
 
 export default function PageEN() {
@@ -13,13 +17,12 @@ export default function PageEN() {
   return (
     <main className="page-root">
       <DyanaNavbar />
+      <ForceEnglishLocale />
 
-      {/* HERO */}
       <section className="splash-wrapper">
         <div className="splash-inner">
           <div className="splash-content">
             <div className="splash-column splash-column-main">
-
               <Image
                 src="/dyana-logo.png"
                 alt="DYANA"
@@ -30,152 +33,169 @@ export default function PageEN() {
               />
 
               <h1 className="section-title" style={{ marginTop: "1rem" }}>
-                This is not a generic horoscope
+                Astrology that actually feels personal
               </h1>
 
               <p className="splash-subtitle">
-                Most astrology content sounds meaningful, but if you look closely,
-                it’s written in a way that works for everyone.
+                Most horoscopes are written to sound meaningful for everyone.
+                That is exactly why they help no one.
               </p>
 
               <p className="splash-subtitle">
-                That’s why it feels right for a moment, but doesn’t actually help you
-                understand what is really happening in your life.
+                DYANA does not give you recycled zodiac clichés. It builds your
+                reading from your real birth data and turns astrology into
+                something clear, readable and useful.
               </p>
 
               <p className="splash-subtitle">
-                DYANA does something different. It builds your reading from your real
-                birth data and translates it into something clear, direct and personal.
+                If you are tired of vague predictions, generic advice and the
+                same copy-paste promises repeated everywhere, this is where the
+                experience changes.
               </p>
 
               <div className="hero-actions" style={{ marginTop: "1.5rem" }}>
                 <a href="/tema" className="btn btn-primary">
-                  Start My Personalized Reading
+                  Start My Reading
                 </a>
               </div>
 
-              <p className="card-text" style={{ marginTop: "1rem", opacity: 0.8 }}>
-                Takes less than 1 minute • Instant result • No generic content
+              <p
+                className="card-text"
+                style={{ marginTop: "1rem", opacity: 0.85 }}
+              >
+                Instant result • Based on your data • Not generic content
               </p>
-
             </div>
           </div>
         </div>
       </section>
 
-      {/* PROBLEM */}
       <section className="section section-features">
-        <h2 className="section-title">Why most astrology feels empty</h2>
+        <h2 className="section-title">Why generic astrology fails</h2>
 
         <p className="section-subtitle">
-          You’ve probably seen phrases like “big changes are coming” or
-          “this is an important year for you”. They sound specific, but they are not.
+          “Big changes are coming.” “Trust your intuition.” “This is your
+          moment.” You have read these lines a hundred times because they are
+          made to fit almost anyone.
         </p>
 
         <p className="section-subtitle">
-          They are designed to fit millions of people at the same time,
-          which means they don’t really tell you anything about your situation.
+          They create the illusion of meaning, but they do not tell you what is
+          actually moving in your life, why certain patterns keep repeating, or
+          where your real opportunities and tensions are.
         </p>
 
         <p className="section-subtitle">
-          The result is simple: you read it, it resonates for a second,
-          and then it disappears without giving you any real direction.
+          The problem is not astrology itself. The problem is lazy astrology.
+          Content written to be universal ends up feeling empty. It may sound
+          poetic, but it does not give direction.
         </p>
       </section>
 
-      {/* SOLUTION */}
       <section className="section section-features">
-        <h2 className="section-title">What DYANA actually does</h2>
+        <h2 className="section-title">What DYANA does differently</h2>
 
         <p className="section-subtitle">
-          Instead of starting from your zodiac sign, DYANA works with your full chart.
-          It looks at how the current movements interact with your personal structure.
+          DYANA starts from your actual chart, not just your zodiac sign. It
+          reads the structure behind your personality, your emotional patterns,
+          your timing and your relationships.
         </p>
 
         <p className="section-subtitle">
-          The output is not abstract language, but a reading that helps you understand
-          patterns, tensions and opportunities in a way that is actually usable.
+          Then it translates that complexity into language you can actually
+          understand. No unnecessary jargon. No fake mystery. No generic “advice
+          for everyone”. Just a reading built around you.
         </p>
 
         <p className="section-subtitle">
-          You are not reading something written for everyone.
-          You are reading something built around you.
+          This is the difference between consuming astrology content and seeing
+          yourself more clearly through it.
         </p>
       </section>
 
-      {/* PRODUCTS INLINE (testuali, non card) */}
       <section className="section section-features">
-        <h2 className="section-title">What you can explore</h2>
+        <h2 className="section-title">Choose what you want to explore</h2>
 
         <p className="section-subtitle">
-          If you want to understand what is happening right now, the personalized horoscope
-          gives you a clear picture of your current phase and how to move within it.
-          <br /><br />
+          If what you want is immediate clarity about your current phase, start
+          with your personalized horoscope. It helps you understand what is
+          moving now, where the pressure is, and where the momentum really is.
+        </p>
+
+        <div className="hero-actions" style={{ marginTop: "1rem" }}>
           <a href="/oroscopo" className="btn btn-primary">
             See My Horoscope
           </a>
+        </div>
+
+        <p className="section-subtitle" style={{ marginTop: "2.2rem" }}>
+          If you want a deeper reading, go to your birth chart. This is where
+          you explore personality, emotional dynamics, recurring patterns,
+          strengths, blind spots and the deeper logic behind how you move
+          through life.
         </p>
 
-        <p className="section-subtitle" style={{ marginTop: "2rem" }}>
-          If you want something deeper, the birth chart reading helps you understand
-          your personality, your emotional patterns and the way you tend to move through life.
-          <br /><br />
+        <div className="hero-actions" style={{ marginTop: "1rem" }}>
           <a href="/tema" className="btn btn-primary">
-            Explore My Chart
+            Explore My Birth Chart
           </a>
+        </div>
+
+        <p className="section-subtitle" style={{ marginTop: "2.2rem" }}>
+          If your focus is on love, tension, attraction or misunderstanding,
+          start with compatibility. It helps you see how two people interact,
+          what flows naturally, where friction appears and what the relationship
+          is really asking from both sides.
         </p>
 
-        <p className="section-subtitle" style={{ marginTop: "2rem" }}>
-          If your focus is on relationships, the compatibility analysis shows
-          how two people interact, where things flow naturally and where friction appears.
-          <br /><br />
+        <div className="hero-actions" style={{ marginTop: "1rem" }}>
           <a href="/compatibilita" className="btn btn-primary">
             Check Compatibility
           </a>
+        </div>
+      </section>
+
+      <section className="section section-features">
+        <h2 className="section-title">What you get when the reading is real</h2>
+
+        <p className="section-subtitle">
+          A personalized reading changes the experience completely. Instead of
+          consuming something that could have been written for millions of
+          strangers, you start reading something that reflects your structure,
+          your timing and your inner logic.
+        </p>
+
+        <p className="section-subtitle">
+          That means more clarity, less noise. More recognition, less
+          projection. More direction, less comforting nonsense.
+        </p>
+
+        <p className="section-subtitle">
+          DYANA is designed for people who want astrology to feel accurate,
+          intelligent and personal — not decorative.
         </p>
       </section>
 
-      {/* VALUE */}
       <section className="section section-features">
-        <h2 className="section-title">What changes when it’s personal</h2>
+        <h2 className="section-title">Start now</h2>
 
         <p className="section-subtitle">
-          When a reading is built on your real data, it stops being entertainment
-          and becomes something you can actually use.
-        </p>
-
-        <p className="section-subtitle">
-          You start seeing recurring patterns more clearly, you understand why certain
-          situations repeat, and you get a sense of direction instead of vague reassurance.
-        </p>
-
-        <p className="section-subtitle">
-          The goal is not to impress you with complex language,
-          but to give you clarity where before there was confusion.
-        </p>
-      </section>
-
-      {/* FINAL CTA */}
-      <section className="section section-features">
-        <h2 className="section-title">
-          Start your reading now
-        </h2>
-
-        <p className="section-subtitle">
-          It takes less than a minute to generate your first reading,
-          and you can immediately go deeper if you want to explore further.
+          It takes less than a minute to begin. Choose the reading that fits
+          what you need most right now and see what changes when astrology stops
+          talking to everyone and starts talking to you.
         </p>
 
         <div className="hero-actions" style={{ marginTop: "1.5rem" }}>
           <a href="/tema" className="btn btn-primary">
-            Start Now
+            Start My Personalized Reading
           </a>
         </div>
       </section>
 
       <footer className="footer">
         <p className="footer-text">
-          <span className="footer-brand">DYANA</span> · all rights reserved · {year}
+          <span className="footer-brand">DYANA</span> · all rights reserved ·{" "}
+          {year}
         </p>
       </footer>
     </main>

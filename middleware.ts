@@ -1,18 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export function middleware(req: NextRequest) {
+  const pathname = req.nextUrl.pathname || "/";
+  const isApi = pathname.startsWith("/api/");
   const rsc = req.headers.get("rsc");
   const action = req.headers.get("next-action");
 
-  // Se vuoi bloccare chiamate "RSC" sospette, fallo SOLO sulle API
-  if (rsc === "1" && !action) {
+  // Blocca chiamate RSC sospette SOLO sulle API
+  if (isApi && rsc === "1" && !action) {
     return new NextResponse("Forbidden", { status: 403 });
   }
 
-  return NextResponse.next();
+  const response = NextResponse.next();
+
+  // Header lingua per layout SSR
+  const lang =
+    pathname === "/en" || pathname.startsWith("/en/")
+      ? "en"
+      : "it";
+
+  response.headers.set("x-dyana-lang", lang);
+
+  return response;
 }
 
-// IMPORTANTISSIMO: limita il middleware alle sole API
+// Applica il middleware a tutto, ma escludi statici interni
 export const config = {
-  matcher: ["/api/:path*"],
+  matcher: ["/((?!_next|favicon.ico|robots.txt|sitemap.xml).*)"],
 };

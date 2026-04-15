@@ -1,5 +1,6 @@
 import "./globals.css";
 import Script from "next/script";
+import { headers } from "next/headers";
 import CookieBanner from "../components/CookieBanner";
 import DyanaFooter from "../components/DyanaFooter";
 import CapacitorFlag from "./CapacitorFlag";
@@ -28,11 +29,13 @@ const ADS_ID = "AW-17796576310";
 // ==========================
 // ROOT LAYOUT
 // ==========================
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  const headersList = await headers();
+  const lang = headersList.get("x-dyana-lang") || "it";
+
   return (
-    <html lang="it">
+    <html lang={lang}>
       <head>
-        {/* Google tag globale */}
         <Script
           src={`https://www.googletagmanager.com/gtag/js?id=${GA4_ID}`}
           strategy="beforeInteractive"
@@ -45,7 +48,6 @@ export default function RootLayout({ children }) {
             window.gtag = gtag;
             gtag('js', new Date());
 
-            // Consent Mode default: tutto negato finché l'utente non sceglie
             gtag('consent', 'default', {
               ad_storage: 'denied',
               analytics_storage: 'denied',
@@ -53,12 +55,10 @@ export default function RootLayout({ children }) {
               ad_personalization: 'denied'
             });
 
-            // GA4
             gtag('config', '${GA4_ID}', {
               send_page_view: true
             });
 
-            // Google Ads
             gtag('config', '${ADS_ID}', {
               send_page_view: false
             });
@@ -68,7 +68,6 @@ export default function RootLayout({ children }) {
       <body>
         <CapacitorFlag />
         <DeepLinkHandler />
-
         <ConversionTracker />
 
         <I18nProvider>
