@@ -4,7 +4,8 @@
     "target": {
       "namespace": "android_app",
       "package_name": "com.dyana.app",
-        "sha256_cert_fingerprints": [
+      "sha256_cert_fingerprints": [
+        "8E:10:6E:00:35:9D:A3:22:A0:8D:17:7B:9A:9D:10:FF:2C:D0:B1:42:C0:32:63:C9:8F:B0:6B:03:C1:09:C9:F6",
         "04:A8:A0:D4:10:A9:1B:57:5F:F3:9A:62:6A:13:29:EC:83:05:55:CD:49:07:66:BA:46:61:8B:30:C4:E9:AA:AD",
         "75:64:E7:6B:FD:C3:E0:D2:8A:A9:06:8A:AF:C5:59:89:A1:E9:E4:87:80:B3:7F:E9:03:99:9D:75:1B:EF:5E:BF"
       ]
