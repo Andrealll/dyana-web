@@ -140,16 +140,22 @@ body {
   border: 1px solid transparent;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-
 .btn-primary {
-  background: linear-gradient(135deg, var(--dyana-blue), #3f5a70);
-  color: #f5f5ff;
-  box-shadow: 0 10px 30px rgba(44, 64, 80, 0.55);
+  background: linear-gradient(
+    135deg,
+    #e6c27a 0%,
+    var(--dyana-gold) 50%,
+    #a88442 100%
+  );
+  color: var(--dyana-blue);
+  border: 1px solid rgba(187, 154, 99, 0.5);
+  box-shadow: 0 10px 30px rgba(187, 154, 99, 0.35);
+  font-weight: 600;
 }
-
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 14px 36px rgba(44, 64, 80, 0.8);
+  box-shadow: 0 14px 36px rgba(187, 154, 99, 0.5);
+  filter: brightness(1.05);
 }
 
 .btn-secondary {

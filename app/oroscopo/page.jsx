@@ -1723,7 +1723,7 @@ const typebotUrl = useMemo(() => {
           <p className="section-subtitle">{t("horoscope.subtitle")}</p>
           <p
             className="card-text"
-            style={{ maxWidth: 850, margin: "10px auto 0", opacity: 0.9 }}
+            style={{ maxWidth: 680, margin: "18px  auto 0", opacity: 0.9,  textAlign: "center",lineHeight: 1.6, }}
           >
             {t("horoscope.introHint")}
           </p>

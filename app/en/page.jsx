@@ -31,40 +31,36 @@ export default function PageEN() {
                 height={900}
                 priority
               />
+<h1 className="section-title" style={{ marginTop: "1rem" }}>
+  See what this month means for you — and what the Aries New Moon is opening next
+</h1>
 
-              <h1 className="section-title" style={{ marginTop: "1rem" }}>
-                Astrology that actually feels personal
-              </h1>
+<p className="splash-subtitle">
+  Start with your personalized horoscope to understand what is shifting
+  right now and where your energy is actually moving.
+</p>
 
-              <p className="splash-subtitle">
-                Most horoscopes are written to sound meaningful for everyone.
-                That is exactly why they help no one.
-              </p>
+<p className="splash-subtitle">
+  With the Aries New Moon building, this is a key moment to see what is
+  starting, what needs action, and where real momentum is emerging in your life.
+</p>
 
-              <p className="splash-subtitle">
-                DYANA does not give you recycled zodiac clichés. It builds your
-                reading from your real birth data and turns astrology into
-                something clear, readable and useful.
-              </p>
+<p className="splash-subtitle">
+  If you want clarity that is not generic, this is where to begin.
+</p>
 
-              <p className="splash-subtitle">
-                If you are tired of vague predictions, generic advice and the
-                same copy-paste promises repeated everywhere, this is where the
-                experience changes.
-              </p>
+<div className="hero-actions" style={{ marginTop: "1.5rem" }}>
+  <a href="/oroscopo" className="btn btn-primary">
+    See My Monthly Horoscope
+  </a>
+</div>
 
-              <div className="hero-actions" style={{ marginTop: "1.5rem" }}>
-                <a href="/tema" className="btn btn-primary">
-                  Start My Reading
-                </a>
-              </div>
-
-              <p
-                className="card-text"
-                style={{ marginTop: "1rem", opacity: 0.85 }}
-              >
-                Instant result • Based on your data • Not generic content
-              </p>
+<p
+  className="card-text"
+  style={{ marginTop: "1rem", opacity: 0.85 }}
+>
+  Instant result • Personalized • Focused on this month and the days ahead
+</p>
             </div>
           </div>
         </div>
