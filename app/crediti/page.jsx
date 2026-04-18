@@ -8,6 +8,7 @@ import { Capacitor } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
 
 const API_BASE = process.env.NEXT_PUBLIC_AUTH_BASE;
+const VISIBLE_CREDIT_PACK_IDS = ["small", "medium", "large"];
 
 function decodeJwtPayload(token) {
   try {
@@ -56,9 +57,12 @@ export default function CreditiPage() {
         if (!res.ok) {
           throw new Error(t("creditsPage.errors.loadPacks"));
         }
-
-        const data = await res.json();
-        setPacks(data.packs || []);
+const data = await res.json();
+const allPacks = data.packs || [];
+const visiblePacks = allPacks.filter((pack) =>
+  VISIBLE_CREDIT_PACK_IDS.includes(pack.id)
+);
+setPacks(visiblePacks);
       } catch (err) {
         console.error("[CREDITI] Errore load packs:", err);
         setErrore(err.message || t("creditsPage.errors.loadPacksGeneric"));

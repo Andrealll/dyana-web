@@ -203,7 +203,7 @@ export default function AreaPersonalePage() {
       );
     } catch (err) {
       console.error("[AREA-PERSONALE] errore marketing:", err);
-      setErroreMarketing(t("areaPersonal.errors.marketingUpdate"));
+      setErroreMarketing(err?.message || t("areaPersonal.errors.marketingUpdate"));
     }
   }
 
@@ -223,7 +223,7 @@ export default function AreaPersonalePage() {
       window.location.href = "/";
     } catch (err) {
       console.error("[AREA-PERSONALE] errore cancellazione profilo:", err);
-      setErrore(t("areaPersonal.errors.deleteProfile"));
+      setErrore(err?.message || t("areaPersonal.errors.deleteProfile"));
       setDeleting(false);
     }
   }

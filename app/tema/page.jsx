@@ -1500,7 +1500,33 @@ const typebotUrl = useMemo(() => {
             </div>
           </section>
         )}
+{!premiumLoaded && noCredits && (
+  <div
+    style={{
+      marginTop: 16,
+      padding: "16px",
+      borderRadius: "12px",
+      border: "1px solid rgba(255,255,255,0.12)",
+      background: "rgba(0,0,0,0.3)",
+    }}
+  >
+    <h4 style={{ marginBottom: 6 }}>
+      Sei arrivato alla parte più importante della lettura
+    </h4>
 
+    <p className="card-text" style={{ opacity: 0.9 }}>
+      Per continuare e vedere l’analisi completa, sblocca la versione Premium.
+    </p>
+
+    <button
+      className="btn btn-primary"
+      style={{ marginTop: 12 }}
+      onClick={() => window.location.href = "/crediti"}
+    >
+      Sblocca la lettura completa
+    </button>
+  </div>
+)}
         {premiumLoaded && contenuto && (
           <section className="section">
             <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
