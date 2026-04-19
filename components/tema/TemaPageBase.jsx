@@ -2144,7 +2144,7 @@ function handleLogout() {
                     className="btn btn-primary"
                     onClick={handleBuyTemaSingle}
                   >
-                    Sblocca il tuo Tema – 2.99€
+                    Unlock complete report at only 2.99€
                   </button>
 
                   <button
