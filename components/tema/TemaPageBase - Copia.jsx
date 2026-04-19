@@ -1,8 +1,7 @@
 "use client";
-
 import { Capacitor } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import DyanaNavbar from "../../components/DyanaNavbar";
 import { enqueueConversionEvent } from "../../components/ConversionTracker";
@@ -31,26 +30,16 @@ const API_BASE =
     window.location.hostname === "127.0.0.1")
     ? "http://127.0.0.1:8001"
     : "https://chatbot-test-0h4o.onrender.com");
-
+	
 const AUTH_BASE = process.env.NEXT_PUBLIC_AUTH_BASE;
 const TEMA_SINGLE_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_PRICE_TEMA_SINGLE;
+
 const ASTROBOT_JWT_TEMA = process.env.NEXT_PUBLIC_ASTROBOT_JWT_TEMA || "";
 
 const AUTH_DONE_KEY = "dyana_auth_done";
+const POST_LOGIN_ACTION_KEY = "dyana_post_login_action";
 const TEMA_SYNC_KEY = "dyana_tema_sync";
 const TEMA_SYNC_CHANNEL = "dyana_tema_sync_channel";
-
-const UI = {
-  IDLE: "IDLE",
-  BASE_LOADING: "BASE_LOADING",
-  FREE_READY: "FREE_READY",
-  GATE_OPEN: "GATE_OPEN",
-  CHOOSER_OPEN: "CHOOSER_OPEN",
-  PAYWALL_OPEN: "PAYWALL_OPEN",
-  PREMIUM_LOADING: "PREMIUM_LOADING",
-  PREMIUM_READY: "PREMIUM_READY",
-};
-
 function decodeJwtPayload(token) {
   try {
     if (!token) return null;
@@ -84,6 +73,17 @@ function normalizeCapitoli(capitoliRaw) {
   return [];
 }
 
+function truncateText(text, maxChars = 1100) {
+  if (!text) return "";
+  if (text.length <= maxChars) return text;
+  return text.slice(0, maxChars).trim() + "…";
+}
+
+function getPreviewChapters(capitoli) {
+  if (!Array.isArray(capitoli)) return [];
+  return capitoli.slice(0, 2);
+}
+
 function normalizeOraValue(value) {
   if (typeof value !== "string") return "";
   const v = value.trim();
@@ -103,8 +103,10 @@ export default function TemaPageBase({ copy, pagePath }) {
   });
 
   const [oraIgnota, setOraIgnota] = useState(false);
-  const [uiState, setUiState] = useState(UI.IDLE);
+  const [loading, setLoading] = useState(false);
+  const premiumAutostartRef = useRef(false);
   const [errore, setErrore] = useState("");
+  const [noCredits, setNoCredits] = useState(false);
 
   const [interpretazione, setInterpretazione] = useState("");
   const [contenuto, setContenuto] = useState(null);
@@ -116,10 +118,10 @@ export default function TemaPageBase({ copy, pagePath }) {
   const [readingPayload, setReadingPayload] = useState(null);
   const [kbTags, setKbTags] = useState([]);
 
-  const [selectedReport, setSelectedReport] = useState("");
-
   const [sessionId] = useState(() => `tema_session_${Date.now()}`);
   const [diyanaOpen, setDiyanaOpen] = useState(false);
+
+  const [premiumLoaded, setPremiumLoaded] = useState(false);
 
   const [userRole, setUserRole] = useState("guest");
   const [userCredits, setUserCredits] = useState(0);
@@ -127,7 +129,7 @@ export default function TemaPageBase({ copy, pagePath }) {
   const [guestTrialLeft, setGuestTrialLeft] = useState(null);
 
   const [emailGateOpen, setEmailGateOpen] = useState(false);
-  const [gateMode, setGateMode] = useState("magic");
+  const [gateMode, setGateMode] = useState("login");
   const [gateEmail, setGateEmail] = useState("");
   const [gatePass, setGatePass] = useState("");
   const [gatePass2, setGatePass2] = useState("");
@@ -135,25 +137,25 @@ export default function TemaPageBase({ copy, pagePath }) {
   const [gateErr, setGateErr] = useState("");
   const [gateLoading, setGateLoading] = useState(false);
   const [gateMarketing, setGateMarketing] = useState(true);
-  const [magicLinkSent, setMagicLinkSent] = useState(false);
 
   const [justLoggedIn, setJustLoggedIn] = useState(false);
   const [postAuthToast, setPostAuthToast] = useState("");
+  const [slowLoading, setSlowLoading] = useState(false);
 
+  const [flowMode, setFlowMode] = useState(null);
+  const [renderMode, setRenderMode] = useState("none");
+  const [selectedReport, setSelectedReport] = useState("");
+  const [showReportChooser, setShowReportChooser] = useState(false);
+  const [showLockedChapters, setShowLockedChapters] = useState(false);
+  const [choiceLoading, setChoiceLoading] = useState(false);
+  const [choiceLoadingReport, setChoiceLoadingReport] = useState("");
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [autoOpenGateAfterPreview, setAutoOpenGateAfterPreview] = useState(false);
+const [showPremiumResumeLoading, setShowPremiumResumeLoading] = useState(false);
   const countryOptions = useMemo(() => getCountryOptions(copy.lang), [copy.lang]);
 
   const isLoggedIn = !!getToken() && userRole !== "guest";
-  const hasCredits = isLoggedIn && userCredits > 0;
-  const hasTrial =
-    typeof guestTrialLeft === "number"
-      ? guestTrialLeft > 0
-      : Number(guestTrialLeft || 0) > 0;
-
-  const premiumLoaded = uiState === UI.PREMIUM_READY;
-  const loading = uiState === UI.BASE_LOADING || uiState === UI.PREMIUM_LOADING;
-  const showReportChooser = uiState === UI.CHOOSER_OPEN;
-  const showLockedChapters = uiState === UI.PAYWALL_OPEN;
-  const hasReading = !!interpretazione;
+  const isPremium = premiumLoaded;
 
   const sectionLabels = {
     psicologia_profonda: copy.sections.psicologia_profonda,
@@ -166,11 +168,12 @@ export default function TemaPageBase({ copy, pagePath }) {
   };
 
   const capitoliArray = normalizeCapitoli(contenuto?.capitoli);
+  const hasReading = !!interpretazione;
 
   let readingTextForDyana = interpretazione || "";
 
   if (contenuto) {
-    if (premiumLoaded && capitoliArray.length > 0) {
+    if (isPremium && capitoliArray.length > 0) {
       const extraParts = [];
       capitoliArray.forEach((cap, idx) => {
         const titolo = cap.titolo || `${copy.premium.chapter} ${idx + 1}`;
@@ -181,7 +184,7 @@ export default function TemaPageBase({ copy, pagePath }) {
         readingTextForDyana +=
           (readingTextForDyana ? "\n\n" : "") + extraParts.join("\n\n");
       }
-    } else if (premiumLoaded) {
+    } else if (isPremium) {
       const extraParts = [];
       Object.entries(sectionLabels).forEach(([key, label]) => {
         const text = contenuto?.[key];
@@ -193,127 +196,6 @@ export default function TemaPageBase({ copy, pagePath }) {
       }
     }
   }
-
-  const refreshUserFromToken = useCallback(() => {
-    const token = getToken();
-    if (!token) {
-      setUserRole("guest");
-      setUserIdForDyana("guest_tema");
-      return { role: "guest", sub: "guest_tema" };
-    }
-    const payload = decodeJwtPayload(token);
-    const role = payload?.role || "free";
-    const sub = payload?.sub || "guest_tema";
-    setUserRole(role);
-    setUserIdForDyana(sub);
-    return { role, sub };
-  }, []);
-
-  const refreshCreditsUI = useCallback(async () => {
-    try {
-      const token = await getAnyAuthTokenAsync();
-      if (!token) {
-        return { role: "guest", remaining: 0, trialAvailable: guestTrialLeft };
-      }
-
-      const state = await fetchCreditsState(token);
-
-      const role = state?.role || state?.cs_role || null;
-      const remaining =
-        typeof state?.remaining_credits === "number"
-          ? state.remaining_credits
-          : typeof state?.cs_remaining_credits === "number"
-          ? state.cs_remaining_credits
-          : 0;
-
-      const rawTrialAvailable =
-        state?.trial_available ?? state?.cs_trial_available ?? null;
-
-      const trialAvailable =
-        rawTrialAvailable == null ? null : Number(rawTrialAvailable);
-
-      if (role) setUserRole(role);
-      setUserCredits(typeof remaining === "number" ? remaining : 0);
-
-      if (trialAvailable != null && !Number.isNaN(trialAvailable)) {
-        setGuestTrialLeft(trialAvailable);
-      }
-
-      return {
-        role: role || "guest",
-        remaining: typeof remaining === "number" ? remaining : 0,
-        trialAvailable,
-      };
-    } catch (e) {
-      console.warn("[TEMA] refreshCreditsUI failed:", e?.message || e);
-      return null;
-    }
-  }, [guestTrialLeft]);
-
-  const broadcastTemaSync = useCallback(
-    (type) => {
-      const payload = {
-        type,
-        ts: Date.now(),
-        path: pagePath,
-      };
-
-      try {
-        localStorage.setItem(TEMA_SYNC_KEY, JSON.stringify(payload));
-      } catch {}
-
-      try {
-        window.dispatchEvent(new CustomEvent("dyana:tema-sync", { detail: payload }));
-      } catch {}
-
-      try {
-        const bc = new BroadcastChannel(TEMA_SYNC_CHANNEL);
-        bc.postMessage(payload);
-        bc.close();
-      } catch {}
-    },
-    [pagePath]
-  );
-
-  const persistResume = useCallback(
-    ({
-      nextUiState,
-      nextSelectedReport,
-      nextInterpretazione,
-      nextContenuto,
-      nextRisultato,
-      nextTemaVis,
-      nextBilling,
-      nextReadingId,
-      nextReadingPayload,
-      nextKbTags,
-      restartIntent = null,
-      nextDiyanaOpen = false,
-    }) => {
-      setResumeTarget({ path: pagePath });
-      setResumeState({
-        type: "tema",
-        form: {
-          ...form,
-          ora: normalizeOraValue(form?.ora),
-        },
-        oraIgnota,
-        interpretazione: nextInterpretazione || "",
-        contenuto: nextContenuto || null,
-        risultato: nextRisultato || null,
-        temaVis: nextTemaVis || null,
-        billing: nextBilling || null,
-        readingId: nextReadingId || "",
-        readingPayload: nextReadingPayload || null,
-        kbTags: Array.isArray(nextKbTags) ? nextKbTags : [],
-        selectedReport: nextSelectedReport || "",
-        uiState: nextUiState || UI.IDLE,
-        restartIntent: restartIntent || null,
-        diyanaOpen: !!nextDiyanaOpen,
-      });
-    },
-    [form, oraIgnota, pagePath]
-  );
 
   const restoreFromResume = useCallback((resume) => {
     if (!resume || resume.type !== "tema") return;
@@ -340,193 +222,300 @@ export default function TemaPageBase({ copy, pagePath }) {
     setReadingId(resume.readingId || "");
     setReadingPayload(resume.readingPayload || null);
     setKbTags(Array.isArray(resume.kbTags) ? resume.kbTags : []);
+    setFlowMode(resume.flowMode || null);
+    setRenderMode(resume.renderMode || "none");
+    setShowReportChooser(!!resume.showReportChooser);
+    setShowLockedChapters(!!resume.showLockedChapters);
     setSelectedReport(resume.selectedReport || "");
-setDiyanaOpen(false);
-    const restoredState = resume.uiState || UI.IDLE;
-    setUiState(restoredState);
-setEmailGateOpen((resume.uiState || UI.IDLE) === UI.GATE_OPEN);(false);  
-}, []);
+    setPremiumLoaded(resume.step === "premium_ready");
+  }, []);
 
-  const resetReadingState = useCallback(() => {
-    setErrore("");
-    setInterpretazione("");
-    setContenuto(null);
-    setRisultato(null);
-    setBilling(null);
-    setTemaVis(null);
-    setReadingId("");
-    setReadingPayload(null);
-    setKbTags([]);
-    setSelectedReport("");
-    setDiyanaOpen(false);
+  const refreshUserFromToken = useCallback(() => {
+    const token = getToken();
+    if (!token) {
+      setUserRole("guest");
+      setUserIdForDyana("guest_tema");
+      return;
+    }
+    const payload = decodeJwtPayload(token);
+    setUserRole(payload?.role || "free");
+    setUserIdForDyana(payload?.sub || "guest_tema");
+  }, []);
+
+  const refreshCreditsUI = useCallback(async () => {
+    try {
+      const token = await getAnyAuthTokenAsync();
+      if (!token) return;
+
+      const state = await fetchCreditsState(token);
+
+      const role = state?.role || state?.cs_role || null;
+      const remaining =
+        typeof state?.remaining_credits === "number"
+          ? state.remaining_credits
+          : typeof state?.cs_remaining_credits === "number"
+          ? state.cs_remaining_credits
+          : null;
+
+      const rawTrialAvailable =
+        state?.trial_available ?? state?.cs_trial_available ?? null;
+
+      const trialAvailable =
+        rawTrialAvailable == null ? null : Number(rawTrialAvailable);
+
+      if (role) setUserRole(role);
+      if (remaining != null) setUserCredits(remaining);
+      if (trialAvailable != null && !Number.isNaN(trialAvailable)) {
+        setGuestTrialLeft(trialAvailable);
+      }
+    } catch (e) {
+      console.warn("[TEMA] refreshCreditsUI failed:", e?.message || e);
+    }
+  }, []);
+  
+  const broadcastTemaSync = useCallback((type) => {
+  const payload = {
+    type,
+    ts: Date.now(),
+    path: pagePath,
+  };
+
+  try {
+    localStorage.setItem(TEMA_SYNC_KEY, JSON.stringify(payload));
+  } catch {}
+
+  try {
+    window.dispatchEvent(
+      new CustomEvent("dyana:tema-sync", { detail: payload })
+    );
+  } catch {}
+
+  try {
+    const bc = new BroadcastChannel(TEMA_SYNC_CHANNEL);
+    bc.postMessage(payload);
+    bc.close();
+  } catch {}
+}, [pagePath]);
+useEffect(() => {
+  if (typeof window === "undefined") return;
+
+  const syncFromResume = () => {
+    const resume = getResumeState();
+    if (!resume || resume.type !== "tema") return;
+
+    restoreFromResume(resume);
+
+    if (resume.step === "premium_autostart_in_progress") {
+      setLoading(true);
+      setEmailGateOpen(false);
+      setShowReportChooser(false);
+      setShowLockedChapters(false);
+    }
+
+    if (resume.step === "premium_ready") {
+      restoreFromResume(resume);
+      setLoading(false);
+      setPremiumLoaded(true);
+      setRenderMode("premium_full");
+      setEmailGateOpen(false);
+      setShowReportChooser(false);
+      setShowLockedChapters(false);
+    }
+
+    if (resume.step === "premium_autostart_failed") {
+      setLoading(false);
+    }
+  };
+
+  const storageHandler = (e) => {
+    if (e?.key === TEMA_SYNC_KEY) syncFromResume();
+  };
+
+  const localHandler = () => {
+    syncFromResume();
+  };
+
+  const focusHandler = () => {
+    syncFromResume();
+  };
+
+  const visibilityHandler = () => {
+    if (document.visibilityState === "visible") syncFromResume();
+  };
+
+  window.addEventListener("storage", storageHandler);
+  window.addEventListener("dyana:tema-sync", localHandler);
+  window.addEventListener("focus", focusHandler);
+  document.addEventListener("visibilitychange", visibilityHandler);
+
+  let bc = null;
+  try {
+    bc = new BroadcastChannel(TEMA_SYNC_CHANNEL);
+    bc.onmessage = () => syncFromResume();
+  } catch {}
+
+  syncFromResume();
+
+  return () => {
+    window.removeEventListener("storage", storageHandler);
+    window.removeEventListener("dyana:tema-sync", localHandler);
+    window.removeEventListener("focus", focusHandler);
+    document.removeEventListener("visibilitychange", visibilityHandler);
+    try {
+      if (bc) bc.close();
+    } catch {}
+  };
+}, [restoreFromResume]);
+
+  useEffect(() => {
+    refreshUserFromToken();
+
+    (async () => {
+      await ensureGuestToken();
+      await refreshCreditsUI();
+    })();
+  }, [refreshUserFromToken, refreshCreditsUI]);
+
+  useEffect(() => {
+    const resume = getResumeState();
+    if (!resume || resume.type !== "tema") return;
+    restoreFromResume(resume);
+  }, [restoreFromResume]);
+useEffect(() => {
+  try {
+    const resume = getResumeState();
+    setShowPremiumResumeLoading(
+      !!(
+        !premiumLoaded &&
+        resume?.type === "tema" &&
+        resume?.step === "premium_autostart_in_progress"
+      )
+    );
+  } catch {
+    setShowPremiumResumeLoading(false);
+  }
+}, [premiumLoaded, loading, renderMode, flowMode, readingPayload, contenuto]);
+useEffect(() => {
+  let cancelled = false;
+
+  async function resumeAfterTemaSinglePayment() {
+    if (premiumLoaded) return;
+
+    let marker = null;
+    try {
+      marker = JSON.parse(localStorage.getItem("dyana_tema_post_payment") || "null");
+    } catch {
+      marker = null;
+    }
+
+    if (!marker || marker.source !== "tema_single") return;
+
+    console.log("[TEMA][POST-PAYMENT] marker trovato", marker);
+
+    await refreshCreditsUI();
+
+    if (cancelled) return;
+
+    const token = getToken();
+    const payload = decodeJwtPayload(token);
+    const isLoggedUser = !!token && (payload?.role || "guest") !== "guest";
+
+    if (!isLoggedUser) {
+      console.warn("[TEMA][POST-PAYMENT] utente non loggato, skip");
+      return;
+    }
+
+    const resume = getResumeState();
+    if (!resume || resume.type !== "tema") {
+      console.warn("[TEMA][POST-PAYMENT] resume tema assente, skip");
+      return;
+    }
+
+    const reportToOpen = resume.selectedReport || "base";
+
+    try {
+      localStorage.removeItem("dyana_tema_post_payment");
+    } catch {}
+
+    restoreFromResume(resume);
+    setFlowMode("logged_with_credits");
+    setShowReportChooser(false);
+    setShowLockedChapters(false);
     setEmailGateOpen(false);
-    setGateErr("");
-    setGateMsg("");
-    setMagicLinkSent(false);
-    setUiState(UI.IDLE);
-  }, []);
+    setNoCredits(false);
+    setErrore("");
 
-  const extractTemaSnapshot = useCallback((data) => {
-    const content =
-      data?.result?.content ??
-      data?.tema_ai?.content ??
-      data?.tema_ai ??
-      data?.content ??
-      null;
+    console.log("[TEMA][POST-PAYMENT] lancio premium", {
+      reportToOpen,
+      resume,
+    });
 
-    const resultWrapper = data?.result || null;
-    const billingSnapshot = data?.billing || null;
+    await generaPremiumFull(reportToOpen, {
+      formOverride: {
+        ...(resume.form || {}),
+        ora: normalizeOraValue((resume.form || {}).ora),
+      },
+      oraIgnotaOverride:
+        typeof resume.oraIgnota === "boolean" ? resume.oraIgnota : false,
+    });
+  }
 
-    const chartBase64 =
-      data?.chart_png_base64 || data?.tema_vis?.chart_png_base64 || null;
-    const graficoJson = data?.tema_vis?.grafico || null;
-    const metaVis =
-      (data?.tema_vis && data.tema_vis.meta) || data?.tema_meta || null;
-    const pianetiVis = data?.tema_vis?.pianeti || [];
-    const aspettiVis = data?.tema_vis?.aspetti || [];
+  resumeAfterTemaSinglePayment();
 
-    const temaVisSnapshot =
-      chartBase64 ||
-      graficoJson ||
-      metaVis ||
-      pianetiVis.length > 0 ||
-      aspettiVis.length > 0
-        ? {
-            chart_png_base64: chartBase64,
-            grafico: graficoJson,
-            meta: metaVis,
-            pianeti: pianetiVis,
-            aspetti: aspettiVis,
-          }
-        : null;
+  return () => {
+    cancelled = true;
+  };
+}, [
+  premiumLoaded,
+  refreshCreditsUI,
+  restoreFromResume,
+]);
 
-    const profiloGenerale = (content?.profilo_generale || "").trim();
+  function handleLogout() {
+    clearToken();
+    setUserRole("guest");
+    setUserCredits(0);
+    setUserIdForDyana("guest_tema");
+    setGuestTrialLeft(null);
+    resetReadingState();
 
-    const meta = data?.payload_ai?.meta ?? content?.meta ?? {};
-    const readingIdFromBackend =
-      meta.reading_id || meta.id || `tema_${Date.now()}`;
-    const kbTagsSnapshot = meta.kb_tags || meta.kb || ["tema_natale"];
+    (async () => {
+      await ensureGuestToken();
+      await refreshCreditsUI();
+      setLoading(false);
+      setGateLoading(false);
+    })();
+  }
+async function callTema({
+  tier,
+  reportType = null,
+  formOverride = null,
+  oraIgnotaOverride = null,
+}) {
+  const effectiveForm = formOverride || form;
+  const effectiveOraIgnota =
+    typeof oraIgnotaOverride === "boolean" ? oraIgnotaOverride : oraIgnota;
 
-    return {
-      content,
-      resultWrapper,
-      billingSnapshot,
-      temaVisSnapshot,
-      profiloGenerale,
-      readingIdFromBackend,
-      kbTagsSnapshot,
-    };
-  }, []);
+  const oraEffettiva = effectiveOraIgnota
+    ? null
+    : normalizeOraValue(effectiveForm?.ora || "");
 
-  const applyTemaResponse = useCallback(
-    (data) => {
-      const {
-        content,
-        resultWrapper,
-        billingSnapshot,
-        temaVisSnapshot,
-        profiloGenerale,
-        readingIdFromBackend,
-        kbTagsSnapshot,
-      } = extractTemaSnapshot(data);
+  const effectiveReportType = (reportType || "base").toLowerCase();
 
-      setRisultato(resultWrapper);
-      setBilling(billingSnapshot);
-      setTemaVis(temaVisSnapshot);
-      setContenuto(content);
-      setReadingId(readingIdFromBackend);
-      setReadingPayload(data);
-      setKbTags(kbTagsSnapshot);
-
-      if (billingSnapshot) {
-        const remaining = billingSnapshot.remaining_credits;
-        if (typeof remaining === "number") {
-          setUserCredits(remaining);
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(
-              new CustomEvent("dyana-credits-updated", {
-                detail: {
-                  feature: "tema_ai",
-                  remaining_credits: remaining,
-                  billing_mode: billingSnapshot.mode,
-                },
-              })
-            );
-            window.dispatchEvent(
-              new CustomEvent("dyana:refresh-credits", {
-                detail: {
-                  feature: "tema_ai",
-                  remaining_credits: remaining,
-                  billing_mode: billingSnapshot.mode,
-                },
-              })
-            );
-          }
-        }
-      }
-
-      if (resultWrapper?.error) {
-        setInterpretazione("");
-        setErrore(
-          `${copy.errors.aiPrefix}: ${resultWrapper.error}` +
-            (resultWrapper.parse_error ? ` — ${resultWrapper.parse_error}` : "")
-        );
-        return {
-          ok: false,
-          content,
-          resultWrapper,
-          billingSnapshot,
-          temaVisSnapshot,
-          readingIdFromBackend,
-          kbTagsSnapshot,
-          profiloGenerale: "",
-        };
-      }
-
-      setInterpretazione(profiloGenerale || copy.messages.interpretationUnavailable);
-
-      return {
-        ok: true,
-        content,
-        resultWrapper,
-        billingSnapshot,
-        temaVisSnapshot,
-        readingIdFromBackend,
-        kbTagsSnapshot,
-        profiloGenerale:
-          profiloGenerale || copy.messages.interpretationUnavailable,
-      };
-    },
-    [copy.errors.aiPrefix, copy.messages.interpretationUnavailable, extractTemaSnapshot]
-  );
-
-  async function callTema({
+  const payload = {
+    citta: effectiveForm?.citta || "",
+    data: effectiveForm?.data || "",
+    ora: oraEffettiva,
+    country_code: effectiveForm?.country || null,
+    nome: effectiveForm?.nome || null,
     tier,
-    reportType = null,
-    formOverride = null,
-    oraIgnotaOverride = null,
-  }) {
-    const effectiveForm = formOverride || form;
-    const effectiveOraIgnota =
-      typeof oraIgnotaOverride === "boolean" ? oraIgnotaOverride : oraIgnota;
+    lang: copy.lang,
+    ora_ignota: effectiveOraIgnota,
+    report_type: effectiveReportType,
+  };
 
-    const oraEffettiva = effectiveOraIgnota
-      ? null
-      : normalizeOraValue(effectiveForm?.ora || "");
+  console.log("[TEMA][PAYLOAD FINAL]", payload);
 
-    const effectiveReportType = (reportType || "base").toLowerCase();
-
-    const payload = {
-      citta: effectiveForm?.citta || "",
-      data: effectiveForm?.data || "",
-      ora: oraEffettiva,
-      country_code: effectiveForm?.country || null,
-      nome: effectiveForm?.nome || null,
-      tier,
-      lang: copy.lang,
-      ora_ignota: effectiveOraIgnota,
-      report_type: effectiveReportType,
-    };
 
     let token = await getAnyAuthTokenAsync();
     if (!token && ASTROBOT_JWT_TEMA) token = ASTROBOT_JWT_TEMA;
@@ -555,477 +544,617 @@ setEmailGateOpen((resume.uiState || UI.IDLE) === UI.GATE_OPEN);(false);
     return { res, data };
   }
 
-  const openPaywall = useCallback(
-    ({ reportKey, resumeOverride = null, restartIntent = "after_payment" }) => {
-      const nextReport = reportKey || selectedReport || "base";
+  function persistResume({
+    nextFlowMode,
+    nextRenderMode,
+    nextShowReportChooser,
+    nextShowLockedChapters,
+    nextSelectedReport,
+    data,
+    content,
+    profiloGenerale,
+  }) {
+    const chartBase64 =
+      data?.chart_png_base64 || data?.tema_vis?.chart_png_base64 || null;
+    const graficoJson = data?.tema_vis?.grafico || null;
+    const metaVis =
+      (data?.tema_vis && data.tema_vis.meta) || data?.tema_meta || null;
+    const pianetiVis = data?.tema_vis?.pianeti || [];
+    const aspettiVis = data?.tema_vis?.aspetti || [];
 
-      setSelectedReport(nextReport);
-      setUiState(UI.PAYWALL_OPEN);
-      setEmailGateOpen(false);
+    const temaVisSnapshot =
+      chartBase64 ||
+      graficoJson ||
+      metaVis ||
+      pianetiVis.length > 0 ||
+      aspettiVis.length > 0
+        ? {
+            chart_png_base64: chartBase64,
+            grafico: graficoJson,
+            meta: metaVis,
+            pianeti: pianetiVis,
+            aspetti: aspettiVis,
+          }
+        : null;
 
-      const resumeBase = resumeOverride || {
-        interpretazione,
-        contenuto,
-        risultato,
-        temaVis,
-        billing,
-        readingId,
-        readingPayload,
-        kbTags,
-      };
+    const billingSnapshot = data?.billing || null;
+    const meta = data?.payload_ai?.meta ?? content?.meta ?? {};
+    const readingIdFromBackend =
+      meta.reading_id || meta.id || `tema_${Date.now()}`;
+    const kbTagsSnapshot = meta.kb_tags || meta.kb || ["tema_natale"];
 
-      persistResume({
-        nextUiState: UI.PAYWALL_OPEN,
-        nextSelectedReport: nextReport,
-        nextInterpretazione: resumeBase.interpretazione,
-        nextContenuto: resumeBase.contenuto,
-        nextRisultato: resumeBase.risultato,
-        nextTemaVis: resumeBase.temaVis,
-        nextBilling: resumeBase.billing,
-        nextReadingId: resumeBase.readingId,
-        nextReadingPayload: resumeBase.readingPayload,
-        nextKbTags: resumeBase.kbTags,
-        restartIntent,
-        nextDiyanaOpen: false,
+    setResumeTarget({ path: pagePath });
+    setResumeState({
+      type: "tema",
+      step: "free_ready",
+      form: {
+        ...form,
+        ora: normalizeOraValue(form?.ora),
+      },
+      oraIgnota,
+      interpretazione:
+        profiloGenerale || copy.messages.interpretationUnavailable,
+      contenuto: content,
+      risultato: data?.result || null,
+      temaVis: temaVisSnapshot,
+      billing: billingSnapshot,
+      readingId: readingIdFromBackend,
+      readingPayload: data,
+      kbTags: kbTagsSnapshot,
+      flowMode: nextFlowMode,
+      renderMode: nextRenderMode,
+      showReportChooser: nextShowReportChooser,
+      showLockedChapters: nextShowLockedChapters,
+      selectedReport: nextSelectedReport,
+    });
+  }
+
+  function applyTemaResponse(data) {
+    setRisultato(data);
+
+    if (data?.billing) {
+      setBilling(data.billing);
+      const remaining = data.billing.remaining_credits;
+      if (typeof remaining === "number") {
+        setUserCredits(remaining);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("dyana-credits-updated", {
+              detail: {
+                feature: "tema_ai",
+                remaining_credits: remaining,
+                billing_mode: data.billing.mode,
+              },
+            })
+          );
+          window.dispatchEvent(
+            new CustomEvent("dyana:refresh-credits", {
+              detail: {
+                feature: "tema_ai",
+                remaining_credits: remaining,
+                billing_mode: data.billing.mode,
+              },
+            })
+          );
+        }
+      }
+    } else {
+      setBilling(null);
+    }
+
+    const chartBase64 =
+      data?.chart_png_base64 || data?.tema_vis?.chart_png_base64 || null;
+    const graficoJson = data?.tema_vis?.grafico || null;
+    const metaVis =
+      (data?.tema_vis && data.tema_vis.meta) || data?.tema_meta || null;
+    const pianetiVis = data?.tema_vis?.pianeti || [];
+    const aspettiVis = data?.tema_vis?.aspetti || [];
+
+    if (
+      chartBase64 ||
+      graficoJson ||
+      metaVis ||
+      pianetiVis.length > 0 ||
+      aspettiVis.length > 0
+    ) {
+      setTemaVis({
+        chart_png_base64: chartBase64,
+        grafico: graficoJson,
+        meta: metaVis,
+        pianeti: pianetiVis,
+        aspetti: aspettiVis,
       });
-    },
-    [
-      billing,
-      contenuto,
-      interpretazione,
-      kbTags,
-      persistResume,
-      readingId,
-      readingPayload,
-      risultato,
-      selectedReport,
-      temaVis,
-    ]
-  );
+    } else {
+      setTemaVis(null);
+    }
 
-  const generaFreeStrong = useCallback(
-    async ({ chosenReport = "base" }) => {
-      setErrore("");
-      setDiyanaOpen(false);
-      setEmailGateOpen(false);
-      setUiState(UI.BASE_LOADING);
+    setRisultato(data?.result || null);
 
-      try {
-        const { res, data } = await callTema({
-          tier: "free",
-          reportType: "base",
-        });
+    const content =
+      data?.result?.content ??
+      data?.tema_ai?.content ??
+      data?.tema_ai ??
+      data?.content ??
+      null;
 
-        if (!res.ok) {
-          const msg =
-            (data && (data.error || data.detail || data.message)) ||
-            copy.errors.generationGeneric;
-          setErrore(typeof msg === "string" ? msg : copy.errors.generationGeneric);
-          setUiState(UI.IDLE);
-          return;
-        }
+    setContenuto(content);
 
-        const applied = applyTemaResponse(data);
-        if (!applied.ok) {
-          setUiState(UI.IDLE);
-          return;
-        }
+    const resultWrapper = data?.result || null;
+    if (resultWrapper?.error) {
+      setInterpretazione("");
+      setErrore(
+        `${copy.errors.aiPrefix}: ${resultWrapper.error}` +
+          (resultWrapper.parse_error ? ` — ${resultWrapper.parse_error}` : "")
+      );
+      setReadingPayload(data);
+      return;
+    }
 
-        setSelectedReport(chosenReport || "base");
+    const profiloGenerale = (content?.profilo_generale || "").trim();
+    setInterpretazione(
+      profiloGenerale || copy.messages.interpretationUnavailable
+    );
+
+    const meta = data?.payload_ai?.meta ?? content?.meta ?? {};
+    const readingIdFromBackend =
+      meta.reading_id || meta.id || `tema_${Date.now()}`;
+
+    setReadingId(readingIdFromBackend);
+    setReadingPayload(data);
+    setKbTags(meta.kb_tags || meta.kb || ["tema_natale"]);
+  }
+
+  async function generaPremiumPreview() {
+    await generaFreeStrong("guest_first");
+  }
+
+  function resetReadingState() {
+    setInterpretazione("");
+    setContenuto(null);
+    setRisultato(null);
+    setBilling(null);
+    setTemaVis(null);
+    setReadingId("");
+    setReadingPayload(null);
+    setKbTags([]);
+    setPremiumLoaded(false);
+    setRenderMode("none");
+    setShowReportChooser(false);
+    setShowLockedChapters(false);
+    setSelectedReport("");
+    setDiyanaOpen(false);
+    setEmailGateOpen(false);
+    setGateErr("");
+    setGateMsg("");
+    setMagicLinkSent(false);
+    setAutoOpenGateAfterPreview(false);
+    premiumAutostartRef.current = false;
+  }
+
+  function resolveFlowMode() {
+    const isLogged = !!getToken() && userRole !== "guest";
+
+    if (isLogged && userCredits > 0) return "logged_with_credits";
+    if (isLogged && userCredits <= 0) return "logged_no_credits";
+
+    const trialLeftNum =
+      typeof guestTrialLeft === "number"
+        ? guestTrialLeft
+        : Number(guestTrialLeft);
+
+    if (!Number.isNaN(trialLeftNum) && trialLeftNum > 0) {
+      return "guest_first";
+    }
+
+    return "guest_return";
+  }
+
+  async function generaFreeStrong(nextFlowMode) {
+    console.log("[TEMA] generaFreeStrong", { nextFlowMode });
+    setLoading(true);
+    setErrore("");
+    setNoCredits(false);
+    resetReadingState();
+
+    if (nextFlowMode === "guest_first") {
+      setSelectedReport("base");
+    }
+
+    try {
+      const { res, data } = await callTema({
+        tier: "free",
+        reportType: "base",
+      });
+
+      if (!res.ok) {
+        const msg =
+          (data && (data.error || data.detail || data.message)) ||
+          copy.errors.generationGeneric;
+        setErrore(typeof msg === "string" ? msg : copy.errors.generationGeneric);
+        return;
+      }
+
+      applyTemaResponse(data);
+
+      const content =
+        data?.result?.content ??
+        data?.tema_ai?.content ??
+        data?.tema_ai ??
+        data?.content ??
+        null;
+
+      const profiloGenerale = (content?.profilo_generale || "").trim();
+
+      if (nextFlowMode === "guest_first") {
+        setFlowMode("guest_first");
+        setRenderMode("free");
+        setShowReportChooser(false);
+        setShowLockedChapters(false);
+        setEmailGateOpen(true);
         setGateMode("magic");
         setGateMsg(copy.messages.previewReady);
         setMagicLinkSent(false);
-        setEmailGateOpen(true);
-        setUiState(UI.GATE_OPEN);
 
         persistResume({
-          nextUiState: UI.GATE_OPEN,
-          nextSelectedReport: chosenReport || "base",
-          nextInterpretazione: applied.profiloGenerale,
-          nextContenuto: applied.content,
-          nextRisultato: applied.resultWrapper,
-          nextTemaVis: applied.temaVisSnapshot,
-          nextBilling: applied.billingSnapshot,
-          nextReadingId: applied.readingIdFromBackend,
-          nextReadingPayload: data,
-          nextKbTags: applied.kbTagsSnapshot,
-          restartIntent: "after_auth",
-          nextDiyanaOpen: false,
+          nextFlowMode: "guest_first",
+          nextRenderMode: "free",
+          nextShowReportChooser: false,
+          nextShowLockedChapters: false,
+          nextSelectedReport: "base",
+          data,
+          content,
+          profiloGenerale,
         });
-
-        await refreshCreditsUI();
-        broadcastTemaSync("free_ready");
-      } catch (e) {
-        console.error("[TEMA][FREE] errore reale:", e);
-        setErrore(copy.errors.serverUnavailable);
-        setUiState(UI.IDLE);
       }
-    },
-    [
-      applyTemaResponse,
-      broadcastTemaSync,
-      copy.errors.generationGeneric,
-      copy.errors.serverUnavailable,
-      copy.messages.previewReady,
-      persistResume,
-      refreshCreditsUI,
-    ]
-  );
 
-  const generaPremiumFull = useCallback(
-    async (
-      reportType,
-      {
-        formOverride = null,
-        oraIgnotaOverride = null,
-        fromResume = false,
-      } = {}
-    ) => {
-      setErrore("");
-      setEmailGateOpen(false);
-      setUiState(UI.PREMIUM_LOADING);
+      if (nextFlowMode === "guest_return") {
+        setFlowMode("guest_return");
+        setRenderMode("free");
+        setShowReportChooser(true);
+        setShowLockedChapters(false);
+
+        persistResume({
+          nextFlowMode: "guest_return",
+          nextRenderMode: "free",
+          nextShowReportChooser: true,
+          nextShowLockedChapters: false,
+          nextSelectedReport: "",
+          data,
+          content,
+          profiloGenerale,
+        });
+      }
+
+      if (nextFlowMode === "logged_no_credits") {
+        setFlowMode("logged_no_credits");
+        setRenderMode("free");
+        setShowReportChooser(true);
+        setShowLockedChapters(false);
+
+        persistResume({
+          nextFlowMode: "logged_no_credits",
+          nextRenderMode: "free",
+          nextShowReportChooser: true,
+          nextShowLockedChapters: false,
+          nextSelectedReport: "",
+          data,
+          content,
+          profiloGenerale,
+        });
+      }
+
+      await refreshCreditsUI();
+    } catch (e) {
+      console.error("[TEMA][FREE] errore reale:", e);
+      setErrore(copy.errors.serverUnavailable);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleStartReading() {
+    const mode = resolveFlowMode();
+    console.log("[TEMA] handleStartReading", {
+      mode,
+      guestTrialLeft,
+      userRole,
+      userCredits,
+      hasToken: !!getToken(),
+    });
+
+    setFlowMode(mode);
+    setErrore("");
+    setNoCredits(false);
+    setSelectedReport("");
+    setShowReportChooser(false);
+    setShowLockedChapters(false);
+
+    if (mode === "guest_first") {
+      await generaFreeStrong("guest_first");
+      return;
+    }
+
+    if (mode === "guest_return") {
+      await generaFreeStrong("guest_return");
+      return;
+    }
+
+    if (mode === "logged_no_credits") {
+      await generaFreeStrong("logged_no_credits");
+      return;
+    }
+
+    if (mode === "logged_with_credits") {
+      resetReadingState();
+      setFlowMode("logged_with_credits");
+      setRenderMode("none");
+      setShowReportChooser(true);
+      return;
+    }
+  }
+
+async function generaPremiumFull(reportType, options = {}) {
+
+    console.log("[TEMA][PREMIUM FULL] start", { reportType });
+
+    setLoading(true);
+    setChoiceLoading(true);
+    setChoiceLoadingReport(reportType || "");
+    setErrore("");
+    setNoCredits(false);
+
+    try {
+const { res, data } = await callTema({
+  tier: "premium",
+  reportType,
+  formOverride: options.formOverride || null,
+  oraIgnotaOverride:
+    typeof options.oraIgnotaOverride === "boolean"
+      ? options.oraIgnotaOverride
+      : null,
+});
+
+      console.log("[TEMA][PREMIUM FULL] response", {
+        ok: res.ok,
+        status: res.status,
+        data,
+      });
+
+      if (!res.ok) {
+        const errorCode =
+          data?.error_code || data?.code || data?.error || data?.detail;
+        const isCreditsError =
+          res.status === 402 ||
+          res.status === 403 ||
+          (typeof errorCode === "string" &&
+            errorCode.toLowerCase().includes("credit"));
+
+        const msg =
+          (data && (data.error || data.detail || data.message)) ||
+          copy.errors.generationGeneric;
+
+        if (isCreditsError) {
+          setNoCredits(true);
+          setErrore(copy.errors.premiumNeedsCredits);
+          await refreshCreditsUI();
+          return;
+        }
+
+        setErrore(typeof msg === "string" ? msg : copy.errors.generationGeneric);
+        return;
+      }
+
+applyTemaResponse(data);
+setPremiumLoaded(true);
+setRenderMode("premium_full");
+setShowReportChooser(false);
+setShowLockedChapters(false);
+premiumAutostartRef.current = false;
+broadcastTemaSync("premium_ready");
 
       try {
-        const { res, data } = await callTema({
-          tier: "premium",
-          reportType: reportType || "base",
-          formOverride,
-          oraIgnotaOverride,
+        const currentResume = getResumeState();
+
+        const premiumContent =
+          data?.result?.content ??
+          data?.tema_ai?.content ??
+          data?.tema_ai ??
+          data?.content ??
+          null;
+
+        const premiumProfiloGenerale = (premiumContent?.profilo_generale || "").trim();
+
+        const chartBase64 =
+          data?.chart_png_base64 || data?.tema_vis?.chart_png_base64 || null;
+        const graficoJson = data?.tema_vis?.grafico || null;
+        const metaVis =
+          (data?.tema_vis && data.tema_vis.meta) || data?.tema_meta || null;
+        const pianetiVis = data?.tema_vis?.pianeti || [];
+        const aspettiVis = data?.tema_vis?.aspetti || [];
+
+        const temaVisSnapshot =
+          chartBase64 ||
+          graficoJson ||
+          metaVis ||
+          pianetiVis.length > 0 ||
+          aspettiVis.length > 0
+            ? {
+                chart_png_base64: chartBase64,
+                grafico: graficoJson,
+                meta: metaVis,
+                pianeti: pianetiVis,
+                aspetti: aspettiVis,
+              }
+            : null;
+
+        const billingSnapshot = data?.billing || null;
+        const meta = data?.payload_ai?.meta ?? premiumContent?.meta ?? {};
+        const readingIdFromBackend =
+          meta.reading_id || meta.id || `tema_${Date.now()}`;
+        const kbTagsSnapshot = meta.kb_tags || meta.kb || ["tema_natale"];
+
+        setResumeTarget({ path: pagePath });
+        setResumeState({
+          ...(currentResume || {}),
+          type: "tema",
+          step: "premium_ready",
+          form: {
+            ...(options.formOverride || form),
+            ora: normalizeOraValue((options.formOverride || form)?.ora),
+          },
+          oraIgnota:
+            typeof options.oraIgnotaOverride === "boolean"
+              ? options.oraIgnotaOverride
+              : oraIgnota,
+          interpretazione:
+            premiumProfiloGenerale || copy.messages.interpretationUnavailable,
+          contenuto: premiumContent,
+          risultato: data?.result || null,
+          temaVis: temaVisSnapshot,
+          billing: billingSnapshot,
+          readingId: readingIdFromBackend,
+          readingPayload: data,
+          kbTags: kbTagsSnapshot,
+          flowMode: "logged_with_credits",
+          renderMode: "premium_full",
+          showReportChooser: false,
+          showLockedChapters: false,
+          selectedReport: reportType || "base",
         });
+      } catch {}
 
-        if (!res.ok) {
-          const errorCode =
-            data?.error_code || data?.code || data?.error || data?.detail;
+      enqueueConversionEvent("tema_completed", {
+        feature: "tema",
+        tier: "premium",
+        report_type: reportType,
+        lang: copy.lang,
+      });
 
-          const isCreditsError =
-            res.status === 402 ||
-            res.status === 403 ||
-            (typeof errorCode === "string" &&
-              errorCode.toLowerCase().includes("credit"));
+      await refreshCreditsUI();
+    } catch (e) {
+      console.error("[TEMA][PREMIUM] errore reale:", e);
 
-          const msg =
-            (data && (data.error || data.detail || data.message)) ||
-            copy.errors.generationGeneric;
+      premiumAutostartRef.current = false;
 
-          if (isCreditsError) {
-            await refreshCreditsUI();
-            openPaywall({
-              reportKey: reportType || selectedReport || "base",
-              restartIntent: "after_payment",
-            });
-            return;
-          }
-
-          setErrore(typeof msg === "string" ? msg : copy.errors.generationGeneric);
-          setUiState(fromResume && interpretazione ? UI.FREE_READY : UI.IDLE);
-          return;
+      try {
+        const currentResume = getResumeState();
+        if (currentResume?.type === "tema") {
+          setResumeTarget({ path: pagePath });
+          setResumeState({
+            ...currentResume,
+            step: "premium_autostart_failed",
+          });
         }
+      } catch {}
+broadcastTemaSync("premium_failed");
+      setErrore(copy.errors.serverUnavailable);
+    } finally {
+      setChoiceLoading(false);
+      setChoiceLoadingReport("");
+      setLoading(false);
+    }
+  }
 
-        const applied = applyTemaResponse(data);
-        if (!applied.ok) {
-          setUiState(fromResume && interpretazione ? UI.FREE_READY : UI.IDLE);
-          return;
-        }
+  const startPremiumBaseFromResume = useCallback(async (resume) => {
+    if (!resume || resume.type !== "tema") return;
+    if (premiumAutostartRef.current) return;
 
-        setSelectedReport(reportType || "base");
-        setDiyanaOpen(true);
-        setUiState(UI.PREMIUM_READY);
+    console.log("[TEMA][AUTOSTART] resume", resume);
 
-        persistResume({
-          nextUiState: UI.PREMIUM_READY,
-          nextSelectedReport: reportType || "base",
-          nextInterpretazione: applied.profiloGenerale,
-          nextContenuto: applied.content,
-          nextRisultato: applied.resultWrapper,
-          nextTemaVis: applied.temaVisSnapshot,
-          nextBilling: applied.billingSnapshot,
-          nextReadingId: applied.readingIdFromBackend,
-          nextReadingPayload: data,
-          nextKbTags: applied.kbTagsSnapshot,
-          restartIntent: null,
-          nextDiyanaOpen: true,
-        });
+    premiumAutostartRef.current = true;
 
-        enqueueConversionEvent("tema_completed", {
-          feature: "tema",
-          tier: "premium",
-          report_type: reportType || "base",
-          lang: copy.lang,
-        });
+    try {
+      restoreFromResume(resume);
 
-        await refreshCreditsUI();
-        broadcastTemaSync("premium_ready");
-      } catch (e) {
-        console.error("[TEMA][PREMIUM] errore reale:", e);
-        setErrore(copy.errors.serverUnavailable);
-        setUiState(fromResume && interpretazione ? UI.FREE_READY : UI.IDLE);
-      }
-    },
-    [
-      applyTemaResponse,
-      broadcastTemaSync,
-      copy.errors.generationGeneric,
-      copy.errors.serverUnavailable,
-      copy.lang,
-      interpretazione,
-      openPaywall,
-      persistResume,
-      refreshCreditsUI,
-      selectedReport,
-    ]
-  );
-
-  const runPostAuthFlow = useCallback(
-    async ({ showToast = true } = {}) => {
-      refreshUserFromToken();
-      const credits = await refreshCreditsUI();
-
+      setFlowMode("logged_with_credits");
+      setRenderMode("free");
+      setPremiumLoaded(false);
+      setShowReportChooser(false);
+      setShowLockedChapters(false);
+      setSelectedReport("base");
       setEmailGateOpen(false);
       setGateErr("");
       setGateMsg("");
       setMagicLinkSent(false);
-      setDiyanaOpen(false);
+      setLoading(true);
 
-      const resume = getResumeState();
-      if (!resume || resume.type !== "tema") return;
-
-      const effectiveCredits =
-        typeof credits?.remaining === "number" ? credits.remaining : userCredits;
-      const reportToOpen = resume.selectedReport || "base";
-
-    restoreFromResume({
-      ...resume,
-      uiState: effectiveCredits > 0 ? UI.PREMIUM_LOADING : UI.PAYWALL_OPEN,
-      diyanaOpen: false,
-    });
-
-    setEmailGateOpen(false);
-    setGateErr("");
-    setGateMsg("");
-    setMagicLinkSent(false);
-    setDiyanaOpen(false);
-    setUiState(effectiveCredits > 0 ? UI.PREMIUM_LOADING : UI.PAYWALL_OPEN);
-
-      if (resume.restartIntent === "after_auth") {
-        if (effectiveCredits > 0) {
-                 setEmailGateOpen(false);
-        setGateErr("");
-        setGateMsg("");
-        setMagicLinkSent(false);
-        setDiyanaOpen(false);
-        setUiState(UI.PREMIUM_LOADING);
-
-        persistResume({
-          nextUiState: UI.PREMIUM_LOADING,
-          nextSelectedReport: reportToOpen,
-          nextInterpretazione: resume.interpretazione || "",
-          nextContenuto: resume.contenuto || null,
-          nextRisultato: resume.risultato || null,
-          nextTemaVis: resume.temaVis || null,
-          nextBilling: resume.billing || null,
-          nextReadingId: resume.readingId || "",
-          nextReadingPayload: resume.readingPayload || null,
-          nextKbTags: Array.isArray(resume.kbTags) ? resume.kbTags : [],
-          restartIntent: "after_auth",
-          nextDiyanaOpen: false,
-        });
-
-        await generaPremiumFull(reportToOpen, {
-          formOverride: {
-            ...(resume.form || form),
-            ora: normalizeOraValue((resume.form || form)?.ora),
-          },
-          oraIgnotaOverride:
-            typeof resume.oraIgnota === "boolean" ? resume.oraIgnota : oraIgnota,
-          fromResume: true,
-        });
-        return;
-        }
-
-        setUiState(UI.PAYWALL_OPEN);
-        openPaywall({
-          reportKey: reportToOpen,
-          resumeOverride: {
-            interpretazione: resume.interpretazione || "",
-            contenuto: resume.contenuto || null,
-            risultato: resume.risultato || null,
-            temaVis: resume.temaVis || null,
-            billing: resume.billing || null,
-            readingId: resume.readingId || "",
-            readingPayload: resume.readingPayload || null,
-            kbTags: Array.isArray(resume.kbTags) ? resume.kbTags : [],
-          },
-          restartIntent: "after_payment",
-        });
-        return;
-      }
-
-      if (showToast) {
-        setJustLoggedIn(true);
-        setPostAuthToast(copy.messages.postLoginToast);
-        setTimeout(() => setJustLoggedIn(false), 6000);
-      }
-    },
-    [
-      copy.messages.postLoginToast,
-      form,
-      generaPremiumFull,
-      openPaywall,
-      oraIgnota,
-      refreshCreditsUI,
-      refreshUserFromToken,
-      restoreFromResume,
-      userCredits,
-    ]
-  );
-
-  const runPostPaymentFlow = useCallback(async () => {
-      const resume = getResumeState();
-    if (!resume || resume.type !== "tema") return;
-
-    const credits = await refreshCreditsUI();
-    const effectiveCredits =
-      typeof credits?.remaining === "number" ? credits.remaining : userCredits;
-
-    restoreFromResume({
-      ...resume,
-      uiState: effectiveCredits > 0 ? UI.PREMIUM_LOADING : UI.PAYWALL_OPEN,
-      diyanaOpen: false,
-    });
-
-    setEmailGateOpen(false);
-    setGateErr("");
-    setGateMsg("");
-    setMagicLinkSent(false);
-    setDiyanaOpen(false);
-    setUiState(effectiveCredits > 0 ? UI.PREMIUM_LOADING : UI.PAYWALL_OPEN);
-    if (resume.restartIntent !== "after_payment") return;
-
-    if (effectiveCredits <= 0) {
-      setUiState(UI.PAYWALL_OPEN);
-      openPaywall({
-        reportKey: resume.selectedReport || "base",
-        resumeOverride: {
-          interpretazione: resume.interpretazione || "",
-          contenuto: resume.contenuto || null,
-          risultato: resume.risultato || null,
-          temaVis: resume.temaVis || null,
-          billing: resume.billing || null,
-          readingId: resume.readingId || "",
-          readingPayload: resume.readingPayload || null,
-          kbTags: Array.isArray(resume.kbTags) ? resume.kbTags : [],
+      setResumeTarget({ path: pagePath });
+      setResumeState({
+        ...resume,
+        step: "premium_autostart_in_progress",
+        flowMode: "logged_with_credits",
+        renderMode: "free",
+        showReportChooser: false,
+        showLockedChapters: false,
+        selectedReport: "base",
+        form: {
+          ...(resume.form || {}),
+          ora: normalizeOraValue((resume.form || {}).ora),
         },
-        restartIntent: "after_payment",
       });
-      return;
-    }
-    setEmailGateOpen(false);
-    setGateErr("");
-    setGateMsg("");
-    setMagicLinkSent(false);
-    setDiyanaOpen(false);
-    setUiState(UI.PREMIUM_LOADING);
 
-    persistResume({
-      nextUiState: UI.PREMIUM_LOADING,
-      nextSelectedReport: resume.selectedReport || "base",
-      nextInterpretazione: resume.interpretazione || "",
-      nextContenuto: resume.contenuto || null,
-      nextRisultato: resume.risultato || null,
-      nextTemaVis: resume.temaVis || null,
-      nextBilling: resume.billing || null,
-      nextReadingId: resume.readingId || "",
-      nextReadingPayload: resume.readingPayload || null,
-      nextKbTags: Array.isArray(resume.kbTags) ? resume.kbTags : [],
-      restartIntent: "after_payment",
-      nextDiyanaOpen: false,
-    });
+const normalizedResumeForm = {
+  ...(resume.form || {}),
+  ora: normalizeOraValue((resume.form || {}).ora),
+};
 
-    await generaPremiumFull(resume.selectedReport || "base", {
-      formOverride: {
-        ...(resume.form || form),
-        ora: normalizeOraValue((resume.form || form)?.ora),
-      },
-      oraIgnotaOverride:
-        typeof resume.oraIgnota === "boolean" ? resume.oraIgnota : oraIgnota,
-      fromResume: true,
-    });
-    await generaPremiumFull(resume.selectedReport || "base", {
-      formOverride: {
-        ...(resume.form || form),
-        ora: normalizeOraValue((resume.form || form)?.ora),
-      },
-      oraIgnotaOverride:
-        typeof resume.oraIgnota === "boolean" ? resume.oraIgnota : oraIgnota,
-      fromResume: true,
-    });
-  }, [
-    form,
-    generaPremiumFull,
-    openPaywall,
-    oraIgnota,
-    refreshCreditsUI,
-    restoreFromResume,
-    userCredits,
-  ]);
+if (!normalizedResumeForm.data || !normalizedResumeForm.citta) {
+  console.error("[TEMA][AUTOSTART] missing resume form fields", normalizedResumeForm);
+  premiumAutostartRef.current = false;
+  setErrore(
+    copy.lang === "it"
+      ? "Impossibile riprendere il premium: dati nascita mancanti nel resume."
+      : "Unable to resume premium: missing birth data in resume."
+  );
+  return;
+}
 
-  useEffect(() => {
-    refreshUserFromToken();
+console.log("[TEMA][AUTOSTART] launching premium base", normalizedResumeForm);
 
-    (async () => {
-      await ensureGuestToken();
-      await refreshCreditsUI();
-    })();
-  }, [refreshCreditsUI, refreshUserFromToken]);
+broadcastTemaSync("premium_autostart_started");
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+await generaPremiumFull("base", {
 
-    const syncFromResume = () => {
-      const resume = getResumeState();
-      if (!resume || resume.type !== "tema") return;
-      restoreFromResume(resume);
-    };
+  formOverride: normalizedResumeForm,
+  oraIgnotaOverride:
+    typeof resume.oraIgnota === "boolean" ? resume.oraIgnota : false,
+});
+    } catch (e) {
+      console.error("[TEMA][AUTOSTART] failed:", e);
 
-    const storageHandler = (e) => {
-      if (e?.key === TEMA_SYNC_KEY) syncFromResume();
-    };
+      premiumAutostartRef.current = false;
 
-    const localHandler = () => {
-      syncFromResume();
-    };
-
-    const focusHandler = () => {
-      syncFromResume();
-    };
-
-    const visibilityHandler = () => {
-      if (document.visibilityState === "visible") syncFromResume();
-    };
-
-    window.addEventListener("storage", storageHandler);
-    window.addEventListener("dyana:tema-sync", localHandler);
-    window.addEventListener("focus", focusHandler);
-    document.addEventListener("visibilitychange", visibilityHandler);
-
-    let bc = null;
-    try {
-      bc = new BroadcastChannel(TEMA_SYNC_CHANNEL);
-      bc.onmessage = () => syncFromResume();
-    } catch {}
-
-    syncFromResume();
-
-    return () => {
-      window.removeEventListener("storage", storageHandler);
-      window.removeEventListener("dyana:tema-sync", localHandler);
-      window.removeEventListener("focus", focusHandler);
-      document.removeEventListener("visibilitychange", visibilityHandler);
       try {
-        if (bc) bc.close();
+        setResumeTarget({ path: pagePath });
+        setResumeState({
+          ...resume,
+          step: "premium_autostart_failed",
+        });
       } catch {}
-    };
-  }, [restoreFromResume]);
+    }
+  }, [pagePath, restoreFromResume]);
+
+  useEffect(() => {
+    const resume = getResumeState();
+    if (!resume) return;
+
+    const token = getToken();
+    const payload = decodeJwtPayload(token);
+    const isLoggedUser = !!token && (payload?.role || "guest") !== "guest";
+
+    if (!isLoggedUser) return;
+    if (premiumLoaded) return;
+
+    const shouldResumeGuestFirstPremium =
+      resume.type === "tema" &&
+      resume.flowMode === "guest_first" &&
+      resume.renderMode === "free" &&
+      (resume.step === "free_ready" || resume.step === "premium_autostart_failed");
+
+    if (!shouldResumeGuestFirstPremium) return;
+
+    startPremiumBaseFromResume(resume);
+  }, [pagePath, premiumLoaded, startPremiumBaseFromResume]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1035,7 +1164,33 @@ setEmailGateOpen((resume.uiState || UI.IDLE) === UI.GATE_OPEN);(false);
         localStorage.removeItem(AUTH_DONE_KEY);
       } catch {}
 
-      await runPostAuthFlow({ showToast: true });
+      refreshUserFromToken();
+      await refreshCreditsUI();
+
+      setEmailGateOpen(false);
+      setGateErr("");
+      setGateMsg("");
+      setMagicLinkSent(false);
+
+      try {
+        const currentResume = getResumeState();
+
+        if (
+          currentResume?.type === "tema" &&
+          currentResume?.flowMode === "guest_first"
+        ) {
+          await startPremiumBaseFromResume(currentResume);
+          return;
+        }
+      } catch {}
+
+      setJustLoggedIn(true);
+      setPostAuthToast(copy.messages.postLoginToast);
+      setTimeout(() => setJustLoggedIn(false), 6000);
+
+      try {
+        localStorage.removeItem(POST_LOGIN_ACTION_KEY);
+      } catch {}
     };
 
     const storageHandler = (e) => {
@@ -1069,249 +1224,72 @@ setEmailGateOpen((resume.uiState || UI.IDLE) === UI.GATE_OPEN);(false);
         if (bc) bc.close();
       } catch {}
     };
-  }, [runPostAuthFlow]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function resumeAfterTemaSinglePayment() {
-      let marker = null;
-      try {
-        marker = JSON.parse(localStorage.getItem("dyana_tema_post_payment") || "null");
-      } catch {
-        marker = null;
-      }
-
-      if (!marker || marker.source !== "tema_single") return;
-      if (cancelled) return;
-
-      try {
-        localStorage.removeItem("dyana_tema_post_payment");
-      } catch {}
-
-      await runPostPaymentFlow();
-    }
-
-    resumeAfterTemaSinglePayment();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [runPostPaymentFlow]);
-function handleLogout() {
-  clearToken();
-
-  setUserRole("guest");
-  setUserCredits(0);
-  setUserIdForDyana("guest_tema");
-  setGuestTrialLeft(null);
-
-  setErrore("");
-  setInterpretazione("");
-  setContenuto(null);
-  setRisultato(null);
-  setBilling(null);
-  setTemaVis(null);
-  setReadingId("");
-  setReadingPayload(null);
-  setKbTags([]);
-  setSelectedReport("");
-  setDiyanaOpen(false);
-  setEmailGateOpen(false);
-  setGateErr("");
-  setGateMsg("");
-  setMagicLinkSent(false);
-  setUiState(UI.IDLE);
-
+  }, [
+    refreshUserFromToken,
+    refreshCreditsUI,
+    copy.messages.postLoginToast,
+    startPremiumBaseFromResume,
+  ]);
+async function handleBuyTemaSingle() {
   try {
-    const resume = getResumeState();
-    if (resume?.type === "tema") {
-      setResumeTarget({ path: pagePath });
-      setResumeState({
-        ...resume,
-        uiState: UI.IDLE,
-        interpretazione: "",
-        contenuto: null,
-        risultato: null,
-        temaVis: null,
-        billing: null,
-        readingId: "",
-        readingPayload: null,
-        kbTags: [],
-        selectedReport: "",
-        restartIntent: null,
-        diyanaOpen: false,
-      });
-    }
-  } catch {}
+    const currentToken = getToken();
 
-  broadcastTemaSync("reset");
-
-  (async () => {
-    await ensureGuestToken();
-    await refreshCreditsUI();
-  })();
-}
-  async function handleStartReading() {
-    setErrore("");
-    setGateErr("");
-    setGateMsg("");
-    setMagicLinkSent(false);
-    setEmailGateOpen(false);
-    setDiyanaOpen(false);
-	setUiState(UI.BASE_LOADING);
-    setInterpretazione("");
-    setContenuto(null);
-    setRisultato(null);
-    setTemaVis(null);
-    setBilling(null);
-    setReadingId("");
-    setReadingPayload(null);
-    setKbTags([]);
-    setSelectedReport("");
-
-    try {
-      const resume = getResumeState();
-      if (resume?.type === "tema") {
-        setResumeTarget({ path: pagePath });
-        setResumeState({
-          ...resume,
-          uiState: UI.IDLE,
-          interpretazione: "",
-          contenuto: null,
-          risultato: null,
-          temaVis: null,
-          billing: null,
-          readingId: "",
-          readingPayload: null,
-          kbTags: [],
-          selectedReport: "",
-          restartIntent: null,
-          diyanaOpen: false,
-        });
-      }
-    } catch {}
-
-    broadcastTemaSync("reset");
-    const token = getToken();
-    const payload = decodeJwtPayload(token);
-    const logged = !!token && (payload?.role || "guest") !== "guest";
-
-    if (!logged && hasTrial) {
-      await generaFreeStrong({ chosenReport: "base" });
-      return;
+    if (!currentToken) {
+      throw new Error("Login richiesto");
     }
 
-    setSelectedReport("");
-    setUiState(UI.CHOOSER_OPEN);
+    const payload = decodeJwtPayload(currentToken);
+    const userId = payload?.sub;
 
-    persistResume({
-      nextUiState: UI.CHOOSER_OPEN,
-      nextSelectedReport: "",
-      nextInterpretazione: interpretazione,
-      nextContenuto: contenuto,
-      nextRisultato: risultato,
-      nextTemaVis: temaVis,
-      nextBilling: billing,
-      nextReadingId: readingId,
-      nextReadingPayload: readingPayload,
-      nextKbTags: kbTags,
-      restartIntent: null,
-      nextDiyanaOpen: false,
+    if (!userId) {
+      throw new Error("Token non valido");
+    }
+
+    if (!TEMA_SINGLE_PRICE_ID) {
+      throw new Error("Prezzo Tema non configurato");
+    }
+
+    const successUrl = `${window.location.origin}${pagePath}/success?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${window.location.origin}${pagePath}`;
+
+    const res = await fetch(`${AUTH_BASE}/billing/create-checkout-session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${currentToken}`,
+      },
+      body: JSON.stringify({
+        price_id: TEMA_SINGLE_PRICE_ID,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        user_id: userId,
+        pack_id: "tema_single",
+      }),
     });
-  }
 
-  async function handleChooserContinue() {
-    const reportKey = selectedReport || "base";
+    const data = await res.json().catch(() => ({}));
 
-    if (!isLoggedIn) {
-      await generaFreeStrong({ chosenReport: reportKey });
+    if (!res.ok) {
+      throw new Error(data.detail || "Errore creazione checkout");
+    }
+
+    if (!data.checkout_url) {
+      throw new Error("Checkout URL mancante");
+    }
+
+    const url = data.checkout_url;
+
+    if (Capacitor.isNativePlatform()) {
+      await Browser.open({ url });
       return;
     }
 
-    if (hasCredits) {
-      await generaPremiumFull(reportKey);
-      return;
-    }
-
-    openPaywall({ reportKey, restartIntent: "after_payment" });
+    window.location.href = url;
+  } catch (err) {
+    console.error("[TEMA] Errore acquisto tema single:", err);
+    alert(err.message || "Errore acquisto");
   }
-
-  async function handleBuyTemaSingle() {
-    try {
-      const currentToken = getToken();
-
-      if (!currentToken) {
-        throw new Error("Login richiesto");
-      }
-
-      const payload = decodeJwtPayload(currentToken);
-      const userId = payload?.sub;
-
-      if (!userId) {
-        throw new Error("Token non valido");
-      }
-
-      if (!TEMA_SINGLE_PRICE_ID) {
-        throw new Error("Prezzo Tema non configurato");
-      }
-
-      persistResume({
-        nextUiState: UI.PAYWALL_OPEN,
-        nextSelectedReport: selectedReport || "base",
-        nextInterpretazione: interpretazione,
-        nextContenuto: contenuto,
-        nextRisultato: risultato,
-        nextTemaVis: temaVis,
-        nextBilling: billing,
-        nextReadingId: readingId,
-        nextReadingPayload: readingPayload,
-        nextKbTags: kbTags,
-        restartIntent: "after_payment",
-        nextDiyanaOpen: false,
-      });
-
-      const successUrl = `${window.location.origin}${pagePath}/success?session_id={CHECKOUT_SESSION_ID}`;
-      const cancelUrl = `${window.location.origin}${pagePath}`;
-
-      const res = await fetch(`${AUTH_BASE}/billing/create-checkout-session`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${currentToken}`,
-        },
-        body: JSON.stringify({
-          price_id: TEMA_SINGLE_PRICE_ID,
-          success_url: successUrl,
-          cancel_url: cancelUrl,
-          user_id: userId,
-          pack_id: "tema_single",
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        throw new Error(data.detail || "Errore creazione checkout");
-      }
-
-      if (!data.checkout_url) {
-        throw new Error("Checkout URL mancante");
-      }
-
-      const url = data.checkout_url;
-
-      if (Capacitor.isNativePlatform()) {
-        await Browser.open({ url });
-        return;
-      }
-
-      window.location.href = url;
-    } catch (err) {
-      console.error("[TEMA] Errore acquisto tema single:", err);
-      alert(err.message || "Errore acquisto");
-    }
-  }
+}
 
   function openEmailGate(mode = "magic", message = "") {
     setGateErr("");
@@ -1320,22 +1298,6 @@ function handleLogout() {
     setGateMode(mode);
     setGateMsg(message || copy.messages.emailToContinue);
     setEmailGateOpen(true);
-    setUiState(UI.GATE_OPEN);
-
-    persistResume({
-      nextUiState: UI.GATE_OPEN,
-      nextSelectedReport: selectedReport || "base",
-      nextInterpretazione: interpretazione,
-      nextContenuto: contenuto,
-      nextRisultato: risultato,
-      nextTemaVis: temaVis,
-      nextBilling: billing,
-      nextReadingId: readingId,
-      nextReadingPayload: readingPayload,
-      nextKbTags: kbTags,
-      restartIntent: "after_auth",
-      nextDiyanaOpen: false,
-    });
   }
 
   async function submitInlineAuth(e) {
@@ -1363,27 +1325,11 @@ function handleLogout() {
           : "https://dyana.app/auth/callback";
 
       if (gateMode === "magic") {
-        persistResume({
-          nextUiState: UI.GATE_OPEN,
-          nextSelectedReport: selectedReport || "base",
-          nextInterpretazione: interpretazione,
-          nextContenuto: contenuto,
-          nextRisultato: risultato,
-          nextTemaVis: temaVis,
-          nextBilling: billing,
-          nextReadingId: readingId,
-          nextReadingPayload: readingPayload,
-          nextKbTags: kbTags,
-          restartIntent: "after_auth",
-          nextDiyanaOpen: false,
-        });
-
         await sendAuthMagicLink(email, redirectUrl);
         setMagicLinkSent(true);
         setGateMsg(copy.messages.linkSent);
         return;
       }
-
       if (gateMode === "login") {
         if (!gatePass) {
           setGateErr(copy.errors.passwordRequired);
@@ -1391,7 +1337,47 @@ function handleLogout() {
         }
 
         await loginWithCredentials(email, gatePass);
-        await runPostAuthFlow({ showToast: false });
+
+        try {
+          localStorage.removeItem(POST_LOGIN_ACTION_KEY);
+        } catch {}
+
+        refreshUserFromToken();
+        await refreshCreditsUI();
+
+        setEmailGateOpen(false);
+        setGateErr("");
+        setGateMsg("");
+
+        try {
+          const currentResume = getResumeState();
+
+          if (
+            currentResume?.type === "tema" &&
+            currentResume?.flowMode === "guest_first"
+          ) {
+            await startPremiumBaseFromResume(currentResume);
+            return;
+          }
+
+          if (currentResume?.type === "tema") {
+            restoreFromResume(currentResume);
+            setFlowMode("logged_no_credits");
+            setRenderMode("free");
+            setShowReportChooser(true);
+            setShowLockedChapters(false);
+
+            setResumeTarget({ path: pagePath });
+            setResumeState({
+              ...currentResume,
+              flowMode: "logged_no_credits",
+              renderMode: "free",
+              showReportChooser: true,
+              showLockedChapters: false,
+            });
+          }
+        } catch {}
+
         return;
       }
 
@@ -1408,6 +1394,10 @@ function handleLogout() {
 
         await registerWithEmail(email, gatePass);
         await loginWithCredentials(email, gatePass);
+
+        try {
+          localStorage.removeItem(POST_LOGIN_ACTION_KEY);
+        } catch {}
 
         try {
           const userToken = getToken();
@@ -1431,7 +1421,42 @@ function handleLogout() {
           );
         }
 
-        await runPostAuthFlow({ showToast: false });
+        refreshUserFromToken();
+        await refreshCreditsUI();
+
+        setEmailGateOpen(false);
+        setGateErr("");
+        setGateMsg("");
+
+        try {
+          const currentResume = getResumeState();
+
+          if (
+            currentResume?.type === "tema" &&
+            currentResume?.flowMode === "guest_first"
+          ) {
+            await startPremiumBaseFromResume(currentResume);
+            return;
+          }
+
+          if (currentResume?.type === "tema") {
+            restoreFromResume(currentResume);
+            setFlowMode("logged_no_credits");
+            setRenderMode("free");
+            setShowReportChooser(true);
+            setShowLockedChapters(false);
+
+            setResumeTarget({ path: pagePath });
+            setResumeState({
+              ...currentResume,
+              flowMode: "logged_no_credits",
+              renderMode: "free",
+              showReportChooser: true,
+              showLockedChapters: false,
+            });
+          }
+        } catch {}
+
         return;
       }
 
@@ -1442,63 +1467,104 @@ function handleLogout() {
       setGateLoading(false);
     }
   }
+function reopenTemaChooser(reportKey) {
+  const resume = getResumeState();
 
-  function reopenTemaChooser(reportKey) {
-    setSelectedReport(reportKey || "");
-    setDiyanaOpen(false);
-    setUiState(UI.CHOOSER_OPEN);
+  if (resume?.type === "tema") {
+    restoreFromResume(resume);
+  }
 
-    persistResume({
-      nextUiState: UI.CHOOSER_OPEN,
-      nextSelectedReport: reportKey || "",
-      nextInterpretazione: interpretazione,
-      nextContenuto: contenuto,
-      nextRisultato: risultato,
-      nextTemaVis: temaVis,
-      nextBilling: billing,
-      nextReadingId: readingId,
-      nextReadingPayload: readingPayload,
-      nextKbTags: kbTags,
-      restartIntent: null,
-      nextDiyanaOpen: false,
+  setFlowMode("logged_with_credits");
+  setPremiumLoaded(false);
+  setRenderMode("premium_full");
+  setShowLockedChapters(false);
+  setShowReportChooser(true);
+  setSelectedReport(reportKey);
+
+  try {
+    setResumeTarget({ path: pagePath });
+    setResumeState({
+      ...(resume || {}),
+      type: "tema",
+      step: "premium_ready",
+      flowMode: "logged_with_credits",
+      renderMode: "premium_full",
+      showReportChooser: true,
+      showLockedChapters: false,
+      selectedReport: reportKey,
     });
+  } catch {}
+}
+const hasSavedResume =
+  !!readingPayload ||
+  !!interpretazione ||
+  !!contenuto ||
+  !!temaVis; 
+
+function handleResumeCta() {
+  if (userRole === "guest") return;
+
+  if (userCredits > 0) {
+    setFlowMode("logged_with_credits");
+    setShowLockedChapters(false);
+    setShowReportChooser(true);
+    return;
   }
 
-  function handleStartNewFromSaved() {
-    resetReadingState();
+  setFlowMode("logged_no_credits");
+  setShowLockedChapters(true);
+  setShowReportChooser(false);
+}
 
-    try {
-      const resume = getResumeState();
-      if (resume?.type === "tema") {
-        setResumeTarget({ path: pagePath });
-        setResumeState({
-          ...resume,
-          uiState: UI.IDLE,
-          interpretazione: "",
-          contenuto: null,
-          risultato: null,
-          temaVis: null,
-          billing: null,
-          readingId: "",
-          readingPayload: null,
-          kbTags: [],
-          selectedReport: "",
-          restartIntent: null,
-          diyanaOpen: false,
-        });
-      }
-    } catch {}
+function handleStartNewFromSaved() {
+  setErrore("");
+  setNoCredits(false);
+  setInterpretazione("");
+  setContenuto(null);
+  setRisultato(null);
+  setTemaVis(null);
+  setBilling(null);
+  setReadingId("");
+  setReadingPayload(null);
+  setKbTags([]);
+  setPremiumLoaded(false);
+  setRenderMode("none");
+  setShowReportChooser(false);
+  setShowLockedChapters(false);
+  setSelectedReport("");
+  setDiyanaOpen(false);
+  setEmailGateOpen(false);
+  setGateErr("");
+  setGateMsg("");
+  setMagicLinkSent(false);
+  premiumAutostartRef.current = false;
 
-    broadcastTemaSync("reset");
-  }
+  try {
+    const resume = getResumeState();
+    if (resume?.type === "tema") {
+      setResumeTarget({ path: pagePath });
+      setResumeState({
+        ...resume,
+        step: "idle",
+        interpretazione: "",
+        contenuto: null,
+        risultato: null,
+        temaVis: null,
+        billing: null,
+        readingId: "",
+        readingPayload: null,
+        kbTags: [],
+        renderMode: "none",
+        showReportChooser: false,
+        showLockedChapters: false,
+        selectedReport: "",
+      });
+    }
+  } catch {}
+}
 
- const resumeSnapshot =
-    typeof window !== "undefined" ? getResumeState() : null;
-
-  const isRestartingAfterAuthOrPayment =
-    resumeSnapshot?.type === "tema" &&
-    (resumeSnapshot?.restartIntent === "after_auth" ||
-      resumeSnapshot?.restartIntent === "after_payment");
+  
+  
   const typebotUrl = useMemo(() => {
     const baseUrl = `https://typebot.co/${TYPEBOT_DYANA_ID}`;
     try {
@@ -1533,7 +1599,6 @@ function handleLogout() {
         credits={userCredits}
         onLogout={handleLogout}
       />
-
       {justLoggedIn && (
         <section className="section" style={{ paddingTop: 12, paddingBottom: 0 }}>
           <div
@@ -1585,7 +1650,7 @@ function handleLogout() {
           </p>
         </header>
 
-        {uiState === UI.PREMIUM_LOADING && (
+        {showPremiumResumeLoading && (
           <section className="section">
             <div
               className="card"
@@ -1596,12 +1661,12 @@ function handleLogout() {
                 background: "rgba(187,154,99,0.08)",
               }}
             >
-<h4 className="card-subtitle" style={{ marginBottom: 6 }}>
-  {copy.messages.premiumResumeLoadingTopText}
-</h4>
-<p className="card-text" style={{ opacity: 0.92 }}>
-  {copy.messages.premiumResumeLoadingTopText}
-</p>
+              <h4 className="card-subtitle" style={{ marginBottom: 6 }}>
+                {copy.messages.premiumResumeLoadingTopTitle}
+              </h4>
+              <p className="card-text" style={{ opacity: 0.92 }}>
+                {copy.messages.premiumResumeLoadingTopText}
+              </p>
             </div>
           </section>
         )}
@@ -1712,21 +1777,83 @@ function handleLogout() {
               <button
                 onClick={handleStartReading}
                 className="btn btn-primary"
-                disabled={loading || gateLoading}
+                disabled={loading || choiceLoading}
                 style={{ marginTop: "14px" }}
               >
-                {loading ? copy.cta.generating : copy.cta.startReading}
+                {loading && !choiceLoading ? copy.cta.generating : copy.cta.startReading}
               </button>
 
-              {errore && (
-                <p className="card-text" style={{ color: "#ff9a9a" }}>
-                  {errore}
-                </p>
-              )}
+              {errore &&
+                (noCredits ? (
+                  <div className="card-text" style={{ color: "#ffdf9a" }}>
+                    {isLoggedIn ? (
+                      <>
+                        <p>{copy.messages.noCreditsTitle}</p>
+                        <p style={{ marginTop: 8 }}>
+                          <Link href="/crediti" className="link">
+                            {copy.cta.openCredits}
+                          </Link>
+                        </p>
+                        <p style={{ marginTop: 8, fontSize: "0.8rem", opacity: 0.8 }}>
+                          {copy.messages.detailsPrefix} {errore}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p>{copy.messages.firstReadingDone}</p>
+                        <p style={{ marginTop: 8, fontSize: "0.9rem", opacity: 0.9 }}>
+                          {copy.messages.signupOrLogin}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <p className="card-text" style={{ color: "#ff9a9a" }}>
+                    {errore}
+                  </p>
+                ))}
             </div>
           </div>
         </section>
+{isLoggedIn && hasSavedResume && !premiumLoaded && (
+			<section className="section">
+            <div
+              className="card"
+              style={{
+                maxWidth: "850px",
+                margin: "0 auto",
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: "rgba(255,255,255,0.03)",
+              }}
+            >
+              <h4 className="card-subtitle" style={{ marginBottom: 6 }}>
+                {copy.messages.savedReadingTitle}
+              </h4>
 
+              <p className="card-text" style={{ opacity: 0.9 }}>
+                {copy.messages.savedReadingText}
+              </p>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleResumeCta}
+                >
+                  {copy.messages.savedReadingContinue}
+                </button>
+
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={handleStartNewFromSaved}
+                >
+                  {copy.messages.savedReadingNew}
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
         {risultato?.input?.ora_ignota && (
           <section className="section">
             <div
@@ -1896,7 +2023,7 @@ function handleLogout() {
                 {interpretazione}
               </p>
 
-              {!premiumLoaded && capitoliArray.length > 0 && (
+              {renderMode === "free" && capitoliArray.length > 0 && (
                 <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 12 }}>
                   {capitoliArray.map((cap, idx) => (
                     <div
@@ -1923,58 +2050,65 @@ function handleLogout() {
                 </div>
               )}
 
-              {!premiumLoaded && !isLoggedIn && emailGateOpen && uiState === UI.GATE_OPEN && (
-                <div
-                  style={{
-                    marginTop: 18,
-                    padding: "14px 16px",
-                    borderRadius: "12px",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    background: "rgba(255,255,255,0.03)",
-                  }}
-                >
-                  <p
-                    className="card-text"
+              {renderMode === "free" &&
+                !premiumLoaded &&
+                flowMode === "guest_first" &&
+                !isLoggedIn && (
+                  <div
                     style={{
-                      fontSize: "0.92rem",
-                      opacity: 0.92,
-                      margin: 0,
+                      marginTop: 18,
+                      padding: "14px 16px",
+                      borderRadius: "12px",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      background: "rgba(255,255,255,0.03)",
                     }}
                   >
-                    {copy.messages.previewReady}
-                  </p>
-                </div>
-              )}
+                    <p
+                      className="card-text"
+                      style={{
+                        fontSize: "0.92rem",
+                        opacity: 0.92,
+                        margin: 0,
+                      }}
+                    >
+                      {copy.messages.previewReady}
+                    </p>
+                  </div>
+                )}
 
-              {!premiumLoaded && isLoggedIn && !hasCredits && uiState === UI.PAYWALL_OPEN && (
-                <div
-                  style={{
-                    marginTop: 18,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <span
-                    className="card-text"
+              {renderMode === "free" &&
+                !premiumLoaded &&
+                isLoggedIn &&
+                flowMode === "logged_no_credits" && (
+                  <div
                     style={{
-                      fontSize: "0.8rem",
-                      opacity: 0.85,
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      padding: "6px 10px",
-                      borderRadius: 999,
-                      whiteSpace: "nowrap",
+                      marginTop: 18,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      flexWrap: "wrap",
                     }}
                   >
-                    {copy.messages.premiumCost}
-                  </span>
-                </div>
-              )}
+                    <span
+                      className="card-text"
+                      style={{
+                        fontSize: "0.8rem",
+                        opacity: 0.85,
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {copy.messages.premiumCost}
+                    </span>
+                  </div>
+                )}
             </div>
           </section>
         )}
-        {uiState === UI.PREMIUM_LOADING && (
+
+        {showPremiumResumeLoading && (
           <section className="section">
             <div
               className="card"
@@ -1985,22 +2119,20 @@ function handleLogout() {
                 background: "rgba(187,154,99,0.08)",
               }}
             >
-<h4 className="card-subtitle" style={{ marginBottom: 6 }}>
-  {copy.messages.premiumResumeLoadingBottomText}
-</h4>
-<p className="card-text" style={{ opacity: 0.92 }}>
-  {copy.messages.premiumResumeLoadingBottomText}
-</p>
+              <p className="card-text" style={{ opacity: 0.92 }}>
+                {copy.messages.premiumResumeLoadingBottomText}
+              </p>
             </div>
           </section>
         )}
-        {showReportChooser && uiState === UI.CHOOSER_OPEN && (
+
+        {showReportChooser && !premiumLoaded && (
           <section className="section">
             <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
               <h3 className="card-title">{copy.reports.title}</h3>
 
               <p className="card-text" style={{ opacity: 0.9, marginBottom: 16 }}>
-                {hasCredits
+                {flowMode === "logged_with_credits"
                   ? copy.reports.loggedWithCreditsSubtitle
                   : copy.reports.subtitle}
               </p>
@@ -2064,11 +2196,35 @@ function handleLogout() {
                   type="button"
                   className="btn btn-primary"
                   style={{ marginTop: 18 }}
-                  disabled={loading}
-                  onClick={handleChooserContinue}
+                  disabled={choiceLoading}
+                  onClick={async () => {
+                    if (flowMode === "logged_with_credits") {
+                      await generaPremiumFull(selectedReport);
+                      return;
+                    }
+
+                    setShowReportChooser(false);
+                    setShowLockedChapters(true);
+
+                    if (typeof contenuto !== "undefined") {
+                      const content = contenuto;
+                      const profiloGenerale = (content?.profilo_generale || "").trim();
+
+                      persistResume({
+                        nextFlowMode: flowMode,
+                        nextRenderMode: renderMode,
+                        nextShowReportChooser: false,
+                        nextShowLockedChapters: true,
+                        nextSelectedReport: selectedReport,
+                        data: readingPayload || {},
+                        content,
+                        profiloGenerale,
+                      });
+                    }
+                  }}
                 >
-                  {loading
-                    ? copy.cta.preparingPremium || copy.cta.generating
+                  {choiceLoading && choiceLoadingReport === selectedReport
+                    ? (copy.cta.preparingPremium || copy.cta.generating)
                     : copy.cta.continue}
                 </button>
               )}
@@ -2076,7 +2232,7 @@ function handleLogout() {
           </section>
         )}
 
-        {showLockedChapters && !premiumLoaded && uiState === UI.PAYWALL_OPEN && (
+        {showLockedChapters && !premiumLoaded && (
           <section className="section">
             <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
               <h3 className="card-title">{copy.locked.title}</h3>
@@ -2126,43 +2282,64 @@ function handleLogout() {
                   background: "rgba(0,0,0,0.28)",
                 }}
               >
-                <h4 style={{ marginBottom: 8 }}>{copy.locked.noCreditsTitle}</h4>
-                <p className="card-text" style={{ opacity: 0.9 }}>
-                  {copy.messages.lockedNoCredits}
-                </p>
+                {flowMode === "guest_return" ? (
+                  <>
+                    <h4 style={{ marginBottom: 8 }}>{copy.locked.guestTitle}</h4>
+                    <p className="card-text" style={{ opacity: 0.9 }}>
+                      {copy.messages.lockedGuestReturn}
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ marginTop: 14 }}
+                      onClick={() =>
+                        openEmailGate("magic", copy.messages.guestContinueWithEmail)
+                      }
+                    >
+                      {copy.gate.continueWithEmail}
+                    </button>
+                  </>
+                ) : (
+<>
+  <h4 style={{ marginBottom: 8 }}>{copy.locked.noCreditsTitle}</h4>
+  <p className="card-text" style={{ opacity: 0.9 }}>
+    {copy.messages.lockedNoCredits}
+  </p>
 
-                <div
-                  style={{
-                    marginTop: 14,
-                    display: "flex",
-                    gap: 10,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={handleBuyTemaSingle}
-                  >
-                    Sblocca il tuo Tema – 2.99€
-                  </button>
+  <div
+    style={{
+      marginTop: 14,
+      display: "flex",
+      gap: 10,
+      flexWrap: "wrap",
+    }}
+  >
+    <button
+      type="button"
+      className="btn btn-primary"
+      onClick={handleBuyTemaSingle}
+    >
+      Sblocca il tuo Tema – 2.99€
+    </button>
 
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => {
-                      window.location.href = "/crediti";
-                    }}
-                  >
-                    {copy.cta.openCredits}
-                  </button>
-                </div>
+    <button
+      type="button"
+      className="btn"
+      onClick={() => {
+        window.location.href = "/crediti";
+      }}
+    >
+      {copy.cta.openCredits}
+    </button>
+  </div>
+</>
+                )}
               </div>
             </div>
           </section>
         )}
 
-        {emailGateOpen && !premiumLoaded && uiState === UI.GATE_OPEN && (
+        {emailGateOpen && !premiumLoaded && (
           <section className="section">
             <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
               <h4 className="card-subtitle" style={{ marginBottom: 6 }}>
@@ -2208,24 +2385,7 @@ function handleLogout() {
                 <button
                   type="button"
                   className="btn"
-                  onClick={() => {
-                    setEmailGateOpen(false);
-                    setUiState(UI.FREE_READY);
-                    persistResume({
-                      nextUiState: UI.FREE_READY,
-                      nextSelectedReport: selectedReport || "base",
-                      nextInterpretazione: interpretazione,
-                      nextContenuto: contenuto,
-                      nextRisultato: risultato,
-                      nextTemaVis: temaVis,
-                      nextBilling: billing,
-                      nextReadingId: readingId,
-                      nextReadingPayload: readingPayload,
-                      nextKbTags: kbTags,
-                      restartIntent: "after_auth",
-                      nextDiyanaOpen: false,
-                    });
-                  }}
+                  onClick={() => setEmailGateOpen(false)}
                   style={{ marginLeft: "auto" }}
                 >
                   {copy.gate.close}
@@ -2315,13 +2475,13 @@ function handleLogout() {
                     )}
                   </>
                 )}
-
+				
                 {gateErr && (
                   <p className="card-text" style={{ color: "#ff9a9a", margin: 0 }}>
                     {gateErr}
                   </p>
                 )}
-
+				
                 <button
                   type="submit"
                   className="btn btn-primary"
@@ -2355,6 +2515,53 @@ function handleLogout() {
                   </p>
                 )}
               </form>
+            </div>
+          </section>
+        )}
+
+        {!premiumLoaded && noCredits && (
+          <section className="section">
+            <div className="card" style={{ maxWidth: "850px", margin: "0 auto" }}>
+              <div
+                style={{
+                  marginTop: 16,
+                  padding: "16px",
+                  borderRadius: "12px",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(0,0,0,0.3)",
+                }}
+              >
+                <h4 style={{ marginBottom: 6 }}>{copy.paywall.title}</h4>
+
+                <p className="card-text" style={{ opacity: 0.9 }}>
+                  {copy.paywall.text}
+                </p>
+
+<div
+  style={{
+    marginTop: 12,
+    display: "flex",
+    gap: 10,
+    flexWrap: "wrap",
+  }}
+>
+  <button
+    className="btn btn-primary"
+    onClick={handleBuyTemaSingle}
+  >
+    Sblocca il tuo Tema – 2.99€
+  </button>
+
+  <button
+    className="btn"
+    onClick={() => {
+      window.location.href = "/crediti";
+    }}
+  >
+    {copy.cta.openCredits}
+  </button>
+</div>
+              </div>
             </div>
           </section>
         )}

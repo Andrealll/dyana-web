@@ -43,6 +43,32 @@ export default function WelcomeClient() {
     } catch {}
   }
 
+  function notifyAuthDone() {
+    const payload = { type: "AUTH_DONE", ts: Date.now() };
+
+    try {
+      localStorage.setItem("dyana_auth_done", String(payload.ts));
+    } catch {}
+
+    try {
+      window.dispatchEvent(
+        new CustomEvent("dyana:auth", { detail: payload })
+      );
+    } catch {}
+
+    try {
+      const bc = new BroadcastChannel("dyana_auth");
+      bc.postMessage(payload);
+      bc.close();
+    } catch {}
+  }
+
+  function continueToResume() {
+    notifyAuthDone();
+    const target = buildResumeUrl("/");
+    router.replace(target);
+  }
+
   useEffect(() => {
     async function load() {
       try {
@@ -55,9 +81,17 @@ export default function WelcomeClient() {
 
         try {
           const st = await fetchCreditsState(token);
-          if (typeof st?.remaining_credits === "number") setCredits(st.remaining_credits);
-          else if (typeof st?.credits === "number") setCredits(st.credits);
+          if (typeof st?.remaining_credits === "number") {
+            setCredits(st.remaining_credits);
+          } else if (typeof st?.credits === "number") {
+            setCredits(st.credits);
+          }
         } catch {}
+
+        if (mode === "back") {
+          continueToResume();
+          return;
+        }
 
         setStatus("ok");
       } catch (e) {
@@ -67,7 +101,7 @@ export default function WelcomeClient() {
     }
 
     load();
-  }, [t]);
+  }, [t, mode, router]);
 
   if (status === "loading") {
     return (
@@ -140,10 +174,7 @@ export default function WelcomeClient() {
         {mode === "back" && (
           <button
             className="btn btn-primary"
-           onClick={() => {
-  const target = buildResumeUrl("/");
-  router.replace(target);
-}}
+            onClick={continueToResume}
           >
             {t("auth.welcome.ctaContinue")}
           </button>
